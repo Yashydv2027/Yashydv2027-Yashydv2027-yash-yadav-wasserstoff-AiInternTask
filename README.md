@@ -39,24 +39,6 @@ Create `.env` in `backend/` with:
 OPENAI_API_KEY=your_key_here
 ```
 
-### 3. Download ArXiv papers
-
-```bash
-python app/services/arxiv_downloader.py
-```
-
-### 4. Extract text using OCR
-
-```bash
-python app/services/text_processor.py
-```
-
-### 5. Create vector store
-
-```bash
-python app/services/vector_store.py
-```
-
 ### 6. Run Streamlit UI
 
 ```bash
