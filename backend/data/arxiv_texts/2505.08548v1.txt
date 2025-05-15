@@ -1,0 +1,1094 @@
+From Seeing to Doing: Bridging Reasoning and
+Decision for Robotic Manipulation
+Yifu Yuan1∗Haiqin Cui1,‡ Yibin Chen1,‡ Zibin Dong1 Fei Ni1 Longxin Kou1
+Jinyi Liu1 Pengyi Li1 Yan Zheng1 Jianye Hao1†
+1College of Intelligence and Computing, Tianjin University
+Abstract
+Achieving generalization in robotic manipulation remains a critical challenge, par-
+ticularly for unseen scenarios and novel tasks. Current Vision-Language-Action
+(VLA) models, while building on top of general Vision-Language Models (VLMs),
+still fall short of achieving robust zero-shot performance due to the scarcity and
+heterogeneity prevalent in embodied datasets. To address these limitations, we
+propose FSD (From Seeing to Doing), a novel vision-language model that generates
+intermediate representations through spatial relationship reasoning, providing fine-
+grained guidance for robotic manipulation. Our approach combines a hierarchical
+data pipeline for training with a self-consistency mechanism that aligns spatial co-
+ordinates with visual signals. Through extensive experiments, we comprehensively
+validated FSD’s capabilities in both “seeing” and “doing”, achieving outstanding
+performance across 8 benchmarks for general spatial reasoning and embodied ref-
+erence abilities, as well as on our proposed more challenging benchmark VABench.
+We also verified zero-shot capabilities in robot manipulation, demonstrating signifi-
+cant performance improvements over baseline methods in both SimplerEnv and
+real robot settings. Experimental results show that FSD achieves 54.1% success
+rate in SimplerEnv and 72% success rate across 8 real-world tasks, outperforming
+the strongest baseline by 30%. More visualizations are available on website.
+1
+Introduction
+A driving force behind robotics research is the pursuit of generalization: creating agents capable
+of versatile action across diverse robotic platforms, extending beyond familiar tasks, objects, and
+environments while adapting to dynamic visual inputs. Current approaches [21, 3] leverage pre-trained
+Vision-Language Models (VLMs) and transform them into Vision-Language-Action Models (VLAs)
+using large-scale embodied datasets. This enables systems to interpret natural language instructions
+and generate robotic manipulation actions [2]. The intention is to capitalize on the generalization
+capabilities of VLMs pre-trained on internet-scale data, with the hope that resulting VLAs will adapt
+to novel scenarios involving unseen objects and tasks. However, empirical evidence [72, 67, 35]
+demonstrates that directly applying the generalization power of VLMs falls short of achieving strong
+zero-shot performance on completely novel tasks.
+We attribute the limited generalization in VLA-based systems to scarcity and heterogeneity of datasets.
+Robotics data remains limited compared to language and vision datasets, preventing similar scaling
+laws [18, 29]. Despite growth in embodied datasets [40], their insufficient coverage and diversity
+prevent robust zero-shot generalization. Additionally, robotic embodiment heterogeneity [54] causes
+significant variation in VLA outputs, making end-to-end supervised learning from vision and language
+to diverse action outputs a potentially unrealistic path toward generalization.
+∗Contact me at yuanyf@tju.edu.cn ‡:Equal contribution
+†Correspondence to: Jianye Hao (jianye.hao@tju.edu.cn)
+Preprint. Under review.
+arXiv:2505.08548v1  [cs.RO]  13 May 2025
+Large Language Model 
+Image 
+Encoder
+A workbench with a 
+green sponge, snack 
+packet, and blue 
+cookies on top
+black robotic
+arm is located 
+top left to the 
+round can 
+labeled BEANS 
+Projection
+balabal
+a
+Put the 
+pot on top 
+of the 
+blue cloth
+Finetuned
+Frozen
+Which object is 
+closer to the 
+camera taking this 
+photo?
+”Books”
+<desc>…</desc>
+<think>…</think>
+<answer>…</answer>
+Visual Aids Generation
+XArm Robot
+SimplerEnv
+Zero-shot Manipulation
+Region Caption
+Spatial Reasoning
+Spatial Graph Description 
+Spatial Affordance Box
+Spatial Affordance Point
+Visual Trace
+Figure 1: Overview of FSD. FSD unlocks visual aids reasoning and generation through Spatial
+Relationship-Focused CoT, demonstrating exceptional generalization capabilities that enable zero-
+shot robot manipulation and achieving remarkable performance across multiple benchmarks.
+We introduce a novel pipeline addressing generalization challenges in robotic manipulation. Our
+approach leverages VLMs’ visual understanding capabilities, augmented with step-by-step reasoning
+to extract unified mid-level structural representations independent of robot embodiment. This
+representation is key to generalizing learning across diverse physical interactions and dynamic
+behaviors. Specifically, this mid-level representation includes spatial affordance boxes/points and
+visual traces, each represented as marked coordinates within visual images. These visual aids
+provide expressive yet compact spatial information that enables effective reasoning and decisions,
+overcoming both scarcity and heterogeneity limitations. We introduce FSD (From Seeing to Doing), a
+model that generates visual intermediate representations through spatial understanding and reasoning
+(Fig. 1). The FSD model comprises three key components: (1) Spatial Relationship-Focused Visual
+Chain-of-Thought (SrCoT), which conducts multi-step reasoning anchored by object coordinates
+and spatial relationships, treating visual aid generation as a reasoning process; (2) A hierarchical
+data pipeline combining large-scale embodied datasets with common sense data, establishing a
+weak-to-strong capability enhancement training process; and (3) A self-consistency mechanism
+that aligns understanding and generation by binding spatial coordinates with specific visual signals.
+We employ supervised fine-tuning of VLMs using annotated spatial COT datasets for visual aids
+generation, then action executors follow spatial affordances and visual traces through simple planning
+methods to complete action execution.
+Our FSD model generalizes effectively to new instructions, and scenes through enhanced reasoning
+abilities. Our contributions include: (1) A novel paradigm bridging VLM reasoning with embod-
+ied decisions via visual aids; (2) The SrCoT method enabling multi-step reasoning for visual aid
+generation and guiding zero-shot manipulation; (3) Our weak-to-strong spatial reasoning and visual
+aids datasets, along with VABench, a manually annotated challenging benchmark for visual aids
+generation; (4) Superior performance across 8 benchmarks in spatial reasoning, free space reference,
+and visual aids generation, with zero-shot deployment achieving 54.1% success in SimplerEnv and
+73% in 8 real-world tasks, outperforming mainstream VLA models by 30%.
+2
+Related Work
+Spatial Understanding and Reasoning with VLMs Spatial understanding and reasoning [32, 48, 8,
+28, 44] require VLMs to infer spatial information beyond 2D RGB images, a capability crucial for
+embodied AI applications such as navigation [48, 12, 22] and manipulation [66]. Recent advances
+include SpatialVLM [5], which explicitly incorporates spatial primitives and coordinate systems to
+2
+enhance geometric reasoning capabilities. Similarly, SpatialRGPT [7] and SpatialBot [4] improve
+spatial capabilities through more precise spatial relationship modeling. FSD specifically targets
+embodied manipulation scenarios by enhancing spatial reasoning capabilities through novel SrCoT
+mechanisms and sophisticated self-consistency alignment techniques.
+Visual Chain-of-thought Reasoning The integration of Chain-of-thought (CoT) [56] and its vari-
+ants [69, 63, 62] has significantly enhanced LLM reasoning abilities through structured step-by-step
+processes. For the multimodal reasoning challenge, researchers have developed various CoT ap-
+proaches [37, 70, 61, 58] that establish appropriate reasoning anchors and extend reasoning pathways.
+Shikra [6] improves referential expression by incorporating specific visual regions into the reasoning
+process, while VoCoT [27] extends visually-grounded reasoning chains. VisualCoT [46] provides a
+comprehensive benchmark validating CoT effectiveness in multi-hop image reasoning tasks. Em-
+bodiedCoT [67] pioneered CoT application in embodied AI by enhancing intermediate reasoning
+through fine-tuning OpenVLA [21]. In contrast, FSD uniquely integrates visual-spatial reasoning
+using spatial relationship graphs as reasoning anchors.
+Visual Aids Empowered Robotic Manipulation Extracting embodiment-agnostic visual aids to
+enhance training efficiency has emerged as a promising paradigm in robotic manipulation. Numerous
+studies [1, 57, 59, 72, 65] have explored robotic policy learning based on visual traces, though most
+remain confined to specific tasks with cross-embodiment applicability. LLaRVA [39] advances this
+field by predicting visual traces to better align visual and action spaces for robot learning, compiling
+an impressive large visual trace dataset, yet struggles to generalize to novel downstream tasks without
+task-specific fine-tuning. Spatial affordance represents another effective visual aid, with several
+works [66, 38, 42, 48, 16, 60, 26] demonstrating its utility in robotic manipulation tasks. Our key
+insight is that the scarcity of embodied data fundamentally limits purely data-driven visual aid
+prediction approaches, impeding zero-shot generalization to unseen scenarios. Therefore, we employ
+a reasoning-driven paradigm to activate general spatial abilities and enhance generalization.
+3
+Bridging Reasoning and Decision through Visual Aids Generation
+To harness VLMs’ visual perception capabilities for cross-domain generalization, we introduce
+FSD (From Seeing to Doing)—a model exhibiting robust spatial reasoning and generation abilities.
+We first establish visual aids through spatial affordances and visual traces, then develop Spatial
+Relationship-Focused CoT (SrCoT), which leverages object-centric coordinates and their spatial
+relationships as reasoning anchors. Supporting this approach requires precise spatial understanding
+and complex instruction-following capabilities to generate coordinate representations. We implement
+a progressive weak-to-strong data construction pipeline across five capability levels, complemented
+by a self-consistency alignment mechanism that enhances understanding and generation abilities.
+3.1
+Definition of Visual Aids
+Put the sushi into the silver pot
+Spatial Affordance
+Bounding Box
+Spatial Affordance
+Points
+Visual Trace
+Figure 2: Diagrams of Visual Aid Types
+As shown in Fig. 2, FSD utilizes three visual aids of
+increasing complexity, all defined within normalized
+image coordinates x = (p, q) ∈[0, 1000]2 ⊂R2:
+Spatial affordance boxes B = [x1, y1, x2, y2] define
+target regions for object placement. For instructions
+like "Put the sushi into the silver pot," the model must
+infer coordinates for unmarked free space—beyond
+standard detector capabilities. Spatial affordance
+points P = {(xi, yi) | i = 1, 2, ..., n} provide more
+precise and flexible placement with reduced redun-
+dancy. Object-centric visual traces τ = {xt | t = 1, 2, ..., T} represent ordered coordinate
+sequences that describe manipulation trajectories, where T denotes the sequence length. These
+traces enable complex instruction execution, cross-embodiment transfer, and collision avoidance. We
+implement these representations in 2D rather than 3D due to limited high-quality 3D data availabil-
+ity [68]. Our object-centric rather than agent-centric visual aids approach effectively circumvents the
+limitations of heterogeneous embodied data while leveraging general visual datasets without robots,
+thus enabling robust generalization to novel scenarios and tasks.
+3
+Task instruction: put the broccoli from the 
+left burner into the silver pot
+How to draw visual trace for the task?
+1.Where is the broccoli? (Start Point)
+2.Which area is in the pot? (End Point)
+3.How to connect the start and end points to form a 
+trace? 
+(A straight line is the simplest.) ×
+4. How to avoid collisions?
+(Pick up the vegetables with a curve.) √
+On
+Left Burner
+Broccoli
+Silver
+Pot
+Knife
+Left of
+Next to
+Behind
+<Description>
+<ref>broccoli</ref><box>…</box> is positioned <pred>left of</pred> 
+<ref>silver … (Spatial Relationship)
+</Description>
+<Reasoning>
+To move the broccoli from the left burner to inside the silver pot, 
+start by identifying the initial position of the broccoli at 
+<point>[[561, 369]]</point>. Lift the broccoli slightly upwards and 
+to the right, moving towards the pot, reaching approximately 
+<point>[[633, 319]]</point>. Continue moving it over the pot at 
+<point>[[761, 304]]</point>. Finally, lower the broccoli into the pot, 
+ending at the target position <box>[[736, 377, 876, 478]]</box> 
+with the final point at <point>[[833, 443]]</point>.
+</Reasoning>
+<Answer>The visual trace for moving the broccoli into the silver pot is 
+<point>[[561, 369], …, [761, 304], …, [833, 443]]</point>. </Answer>
+Figure 3: Inspired by the process of human reasoning, FSD uses a spatial relationship graph as an
+anchor to derive a visual chain-of-thought reasoning process for visual trace generation.
+3.2
+Spatial Relationship-Focused Visual Chain-of-thought
+To enable VLMs to generate spatial visual aids, a direct approach is supervised fine-tuning [39, 66,
+23, 67] using these aids as a new action space or employing generative models [47, 59]. However,
+the heterogeneity and scarcity of embodied datasets limit this method. Directly aligning RGB images
+with coordinate points is challenging and prone to overfitting, hindering generalization. How can we
+stimulate VLMs’ spatial reasoning abilities to guide the generation rather than merely relying on
+extensive demonstrations? Inspired by human cognition (Fig. 3 (Top)), when executing tasks like
+"putting broccoli into a pot," humans first locate relevant objects, then plan movement paths based on
+relative positions while considering feasibility and obstacles. During this process, humans construct
+reasoning chains, repeatedly referencing object positions and establishing spatial relationships.
+Based on these considerations, we introduce Spatial Relationship-Focused Visual Chain-of-thought
+(SrCoT). This approach guides VLMs to generate visual aids through structured reasoning based on
+spatial relationship graphs. SrCoT consists of two essential phases: 1 Description: We generate
+object-centric region captions establishing a task-relevant spatial relationship graph where nodes
+represent objects with their coordinates and edges denote relative relationships (above, below, left,
+right, etc.). 2 Reasoning: Using the spatial relationship graph as anchor points, we determine
+start and end coordinates through object references and free space reasoning, then iteratively derive
+intermediate points with explicit logical connections between steps. Thus, we prescribe a templated
+reasoning path for VLMs, enabling FSD to perform analogical reasoning in the spatial domain. While
+VLMs struggle to directly map future actions to image coordinates, our method leverages known
+object relationships as reference points for multi-hop analysis, simplifying the reasoning process.
+Fig. 3 (Bottom) demonstrates a complete reasoning sequence. This step-by-step SrCoT approach,
+though powerful, fundamentally depends on precise spatial understanding capabilities.
+3.3
+Weak-to-Strong Capability Dataset Construction Pipeline
+The SrCoT mechanism demands enhanced capabilities from VLMs, including precise reference
+grounding, spatial understanding, and complex instruction-following capabilities (directly predicting
+future point trajectories) where mainstream VLMs [34, 30, 44, 8] show limitations. Consequently,
+we designed a weak-to-strong data construction pipeline to progressively develop these abilities.
+FSD encompasses five hierarchical capability levels: 1 Region Grounding enables robots to
+focus on key objects in scenes. Although grounding capabilities have been broadly integrated into
+current VLMs [6, 64], understanding various small objects and complex scenes for embodied tasks is
+still limited; 2 Spatial Relationship understanding establishes prerequisite knowledge for spatial
+reasoning, forming the anchor points for SrCoT; 3 Spatial Reasoning builds upon these foundations
+to perform multi-hop analysis of object positions and relationships; and finally, 4 Spatial Affordance
+Generation and 5 Visual Trace Generation create actionable spatial guidance. Notably, SrCoT
+functions as a general visual-spatial reasoning mechanism applicable beyond visual traces to diverse
+4
+BridgeData
+DROID
+RT-X
+LLM Extractor
+A metal pot is in front of a red sushi, 
+with an orange cloth on its right. A 
+silver round lid and spoon are nearby. 
+A robotic arm is hovering above.
+Objects: metal pot, red sushi, orange 
+cloth, silver round lid, spoon, robotic 
+arm
+Interaction: orange cloth → metal pot
+Template QA
+LLM Query
+Level 1: Region Grounding Caption
+Level 2: Spatial Graph Description
+Level 3: Spatial Reasoning
+Level 4: Spatial Affordance
+Level 5: Visual Trace
+Task Instruction: move the orange cloth on the 
+right side of the metal pot
+Dense Spatial Graph
+right
+behind
+Left 
+behind
+…
+…
+10+ 
+Embodiedments
+5
+Level Capabilities
+940k 
+QAPairs
+Figure 4: FSD screens data from large-scale embodied datasets, generates ground truth spatial
+relationship graph. We finally collected 300K data for 10+ embodiments with 5-level capabilities.
+spatial reasoning tasks. Through hierarchical spatial capability training, we enhance VLMs’ general
+spatial reasoning abilities, extending well beyond just embodied domains.
+Automatic Dataset Construction: We leveraged extensive robot data from BridgeDataV2 [53],
+RT-X [40], and Droid [20] to construct FSD’s training dataset. Inspired by SpatialVLM [5] and Spa-
+tialRGPT [7], our automated data construction pipeline created 300K Supervised Fine-Tuning (SFT)
+data across numerous formats. After filtering demonstrations with unclear instructions, we used
+GPT4o [15] to nominate task-relevant objects while excluding out-of-range or overly complex items.
+We then built around objects using GroundedSam [45] for bounding boxes and segmentation masks
+(Level 1 dataset). For spatial relationship labels, we reconstructed 3D semantic scene graphs using
+Metric3Dv2 [13] for depth estimation, along with WildCamera [73] and PerspectiveFields [17] for
+camera parameters. This enabled 2D-3D mapping and spatial relationship graph construction. (Level
+2 dataset). We only generate relative depth sorting data to infer positional relationships, so the
+accuracy requirement is not high. To improve data quality, in particular, we selected objects with
+a relative depth gap of 20% for subsequent generation. Afterward, we randomly sample spatial
+relationship graphs to construct spatial reasoning QA. We provide image captions, object coordinates,
+and relationships as a context for GPT4o to create complex QAs (Level 3 Dataset).
+A core aspect of the FSD dataset is the visual aids generation. We employ a simple method with
+successful human demonstrations from embodied datasets and infer the process from the results.
+Spatial affordance represents the designated completion area for manipulation tasks. To create spatial
+affordance labels (Level 4 Dataset), we extract the manipulated object’s final position from the
+terminal frame, combine it with reference object positioning, calculate the precise affordance region,
+and re-render this information onto the initial frame. For visual trace generation (Level 5 Dataset),
+we employ a two-stage approach: first applying self-supervised keypoint extraction [14] to identify
+grasp points on manipulated objects, then utilizing Cotracker [19] to capture temporal dynamics from
+human demonstrations, subsequently projecting these trajectories onto the initial frame. Throughout
+this process, we employed strict rule-based filters and continually validated our approach against
+manually annotated test sets, iteratively refining our filtering criteria based on empirical feedback
+to ensure the resulting dataset met our quality requirements. The dataset presentation, data filtering
+process, and prompts used to generate the data are provided in Appendix A.
+3.4
+Self-Consistent Alignment for Spatial Understanding and Generation
+High-quality SFT datasets enable VLMs to generate visual aids [66], yet these models struggle to
+understand the physical meaning of such annotations since coordinate spaces never appeared in
+pretraining data. The alignment between image coordinates and actual spatial positions presents a
+significant challenge. Therefore, we propose a self-consistency mechanism to further align FSD capa-
+bilities in spatial understanding and generation. We frame generation tasks inversely as understanding
+problems: if the forward task requires inferring visual trace τ from an image Xv and task instruction
+Xq, i.e. (Xv, Xq) →τ, we construct the inverse task of predicting possible instructions given an
+image and visual traces (Xv, τ) →Xq. This bidirectional approach helps the model comprehend
+5
+spatial coordinates’ meanings and aligns coordinate space with image-text modalities, unifying visual
+aids as both understanding and generation signals while enhancing FSD spatial reasoning capabilities.
+4
+Training and Action Execution of FSD
+Training: We follow the instruction tuning pipeline proposed by LLaVA-1.5 [33, 34]. As shown in
+Fig. 1, FSD’s architecture comprises an image encoder (CLIP-ViT-L-336px [11]), a linear projector, a
+language tokenizer, and a LLM (Vicuna-13B [71]). The image encoder processes images into tokens.
+These visual tokens are then projected into the same embedding space as language tokens through a
+two-layer linear projector. Only the projector and LLM weights are updated during fine-tuning while
+the vision encoder and tokenizer remain frozen. We built upon ASMv2 [55] as our foundation, which
+already incorporates basic relation conversation and reference grounding capabilities. The training
+process of FSD is divided into two stages: General Spatial Reasoning Enhancement: Using
+data from levels 1-3, we focus on improving the model’s embodied spatial reasoning capabilities.
+Following Yuan et al. [66] and Brohan et al. [3], we discovered that an appropriate data mixture is
+crucial for downstream performance. Joint training with mixed robotic and internet data ensures
+the model retains knowledge acquired during pre-training. Consequently, our instruction tuning
+utilizes a diverse 1.4M sample mixture including general visual question answering (VQA) data. This
+comprehensive training ensures FSD maintains robust general spatial knowledge while developing
+embodied capabilities. Visual Aids Generation and Understanding: Using data from levels 4-5
+with the self-consistency mechanism, we specifically train visual aids generation and understanding
+abilities. FSD predicts a fixed set of 8 points for simplification when generating spatial visual traces.
+Additional training details and the summary of mixture datasets are provided in Appendix B.
+Action Execution: FSD can reason from initial or intermediate task steps, freely selecting needed
+visual aids. When using bounding boxes, we sample the center as the target point; with affordance
+points, we directly sample one point. For visual trace execution, we first generate 2D visual traces
+τ and obtain preliminary depth information from depth cameras. Following the pinhole camera
+model, we employ depth-based back-projection to map these to 3D space, yielding τ 3d = {x3d
+t
+|
+t = 1, 2, ..., T}. Next, based on the spatial position of the first point x1, we query GraspNet’s [9]
+grasp candidates G to match the nearest grasp pose G∗. For relatively fixed scenes, we may also use
+predetermined grasp poses. Subsequently, we optimize the path trajectory using gradient descent-
+based interpolation, generating complete motion trajectories in SE(3) space, enabling the robotic arm
+to follow the 3D visual trajectory. When using only spatial affordance, we utilize CuRobo [49] as the
+motion planner to determine execution trajectories T based on the target position P. More details are
+provided in Appendix C. Unlike methods such as LLARVA [39] and EmbodiedCOT [67] which also
+utilize visual auxiliary aids, FSD transforms prediction tasks into reasoning tasks, better leveraging
+visual-spatial common knowledge without requiring scenario-specific fine-tuning.
+5
+Visual Aids Generation Benchmark
+Few datasets exist for evaluating visual aid generation, Where2Place [66] provides 100 real-world
+images from homes and offices but is limited to direct and simple language instructions. And no
+benchmarks for trajectory prediction. To address this gap, we propose the Visual Aids Generation
+Benchmark (VABench). we manually annotated 300 problems from real-world and simulation
+datasets (OXE [40], BridgeData [53], Droid [20], Libero [31]), requiring models to infer visual aids
+given only natural language instructions similar to everyday human commands. For spatial affor-
+dance (VABench-Point), we measure the proportion of points falling within target regions. For models
+that only output bounding boxes, we sample uniformly within boxes. For visual trace (VABench-
+VisualTrace), we compute MAE and RMSE between ground truth τ = {xt | t = 1, 2, ..., T} and pre-
+dictions ˆτ = {ˆxt | t = 1, 2, ..., ˆT}: MAE = 1
+T
+PT
+t=1 ∥xt −ˆxt∥, RMSE =
+q
+1
+T
+PT
+t=1 ∥xt −ˆxt∥2.
+We interpolate when trajectory lengths differ and normalize coordinates to a 1000×1000 space for
+consistent evaluation. Since multiple valid solutions exist for each instruction, we simulated human
+evaluation standards by establishing detailed assessment criteria and added metrics with MLLM-
+based qualitative scoring (0-10) of visualized trajectories, named GPT Score. We provide detailed
+dataset information and evaluation procedures in Appendix D.
+6
+Figure 5: FSD directly generates visual aids based on task instructions for novel tasks and scenarios.
+1st row: affordance bounding boxes; 2nd row: affordance points; 3rd and 4th rows: visual traces.
+6
+Experiments
+We evaluated FSD across two dimensions: Seeing and Doing. For Seeing, we tested its general spatial
+reasoning and visual aids generation capabilities. For Doing, we conducted zero-shot manipulation
+experiments in both SimplerEnv [25] simulation and real-world xArm robotic platforms to assess its
+practical generalization performance.
+6.1
+Evaluation of Spatial Understanding and Reasoning Capabilities
+Benchmarks and Baselines. General Spatial Reasoning Capabilities: We evaluated general spatial
+reasoning capabilities using five popular benchmarks: CVBench [51], BLINK [10], CRPE [55],
+SAT [44], and EmbSpatial-Bench [8]. These benchmarks encompass 15 subtasks measuring various
+spatial competencies including counting, spatial relationships, distance estimation and so on. We
+included two leading closed-source models: GPT-4o [15] and GPT-4V as performance reference. Sub-
+sequently, we conducted comparative analyses against other open-source spatial enhanced MLLMs,
+including LLaVA-1.5 [33], SAT-Dynamic [44], RoboPoint [66], and ASMv2 [55], all with 13B
+parameters. Object and Free Region Reference Capabilities: Following Yuan et al. [66], we assessed
+embodied spatial capabilities using the RoboRefIt [36] and Where2Place [66] benchmarks. We com-
+pared mainstream closed-source models and MLLM for enhancing spatial abilities (SpatialBot [4],
+SpaceLLaVA [5], and RoboBrain [16]). We used the proportion of predicted points within specified
+objects/regions as the accuracy metric. For models without point output support, we asked models
+to output bounding boxes of target objects/free space regions, then sampled evenly within these
+bounding boxes. Spatial Affordance and Visual Trace Capabilities: We utilized our VABench to
+evaluate the capabilities. We found very few models with this capability for Visual Trace prediction,
+so we trained an end-to-end prediction baseline model using a pre-trained DINOv2 [41] encoder
+coupled with a multi-layer transformer [52] architecture to predict visual trajectories, trained on the
+same visual trajectory data, named DINOv2 Predictor. We conducted this comparison to demonstrate
+the advantages of our reasoning-based FSD approach. More detailed descriptions of benchmarks and
+baselines are provided in Appendix E.
+FSD exhibits superior general spatial reasoning capabilities. As shown in Table 1, FSD achieves
+a top ranking of 1.3 across 18 subtasks from 5 spatial benchmarks, surpassing other 13B VLMs and
+competing with GPT-4o. FSD demonstrates particular strengths in 3D depth perception (88.0%), 3D
+distance estimation (86.7%), and spatial relationship (78.3%). This confirms the effectiveness of our
+data mixing strategy and capability construction in enhancing spatial reasoning abilities. We believe
+stronger spatial foundational capabilities enable enhanced embodied perception.
+7
+Table 1: Performance comparison on 5 spatial reasoning benchmarks. Bold and underlined values
+show best and second-best performance among open-source models.
+CVBench
+CRPE
+SAT
+BLINK
+EmbSpatial
+Rank
+Count
+2DRel
+3DDep
+3DDis
+Avg.
+Exist.
+Subj.
+Pred.
+Obj.
+Avg.
+Val
+Real
+Count
+MV
+RelDepth
+SpRel
+Avg.
+Test
+Closed-source models
+GPT-4V
+62.4
+71.1
+79.8
+68.3
+70.4
+90.6
+76.7
+65.1
+68.5
+75.2
+44.8
+50.7
+60.8
+55.6
+59.7
+72.7
+62.2
+36.1
+-
+GPT-4o
+65.9
+85.5
+87.8
+78.2
+79.4
+93.3
+81.9
+71.8
+73.6
+80.2
+49.4
+57.5
+49.2
+60.2
+74.2
+69.2
+63.2
+49.1
+-
+Open-source models
+LLaVA-1.5-13B
+58.2
+46.6
+53.0
+47.8
+51.4
+88.7
+57.4
+54.2
+55.2
+63.9
+51.4
+41.6
+45.0
+41.4
+53.2
+69.9
+52.4
+35.1
+4.8
+SAT-Dynamic-13B
+61.5
+89.7
+80.7
+73.0
+76.2
+87.5
+60.6
+57.6
+65.2
+67.7
+87.7
+54.9
+35.8
+44.4
+73.4
+66.4
+55.0
+51.3
+2.8
+RoboPoint-13B
+56.5
+77.2
+81.5
+57.7
+68.2
+93.2
+66.3
+62.4
+70.9
+73.2
+53.3
+46.6
+48.3
+44.4
+62.1
+65.7
+55.1
+51.4
+2.8
+ASMv2-13B
+58.9
+68.9
+68.9
+68.9
+66.4
+92.1
+69.2
+59.0
+65.3
+71.4
+63.9
+46.7
+59.2
+44.4
+56.5
+65.0
+56.3
+57.4
+3.1
+FSD-13B
+62.4
+86.5
+88.0
+86.7
+80.9
+94.0
+75.2
+65.1
+70.4
+76.2
+73.2
+63.3
+60.0
+46.6
+70.2
+78.3
+63.8
+63.3
+1.3
+Table 2: Performance comparison on object/free space reference benchmarks. The best results are
+highlighted in bold.
+Benchmark
+GPT-4o
+SpaceLLaVA
+LLaVA-NeXT-34B
+SpatialBot-3B
+ASMv2-13B
+RoboBrain-7B
+RoboPoint-13B
+FSD-13B
+RoboRefIt
+15.3
+21.3
+19.9
+23.6
+48.4
+10.1
+49.8
+56.7
+Where2Place
+29.1
+11.8
+15.0
+15.0
+22.0
+16.6
+46.0
+45.8
+FSD excels in object reference and free space localization. The results in Table 2 demonstrate
+FSD’s ability to accurately identify objects and free spaces from language instructions. For object
+reference (RoboRefIt), FSD achieves 56.7% accuracy, surpassing both GPT-4o (15.3%) and specialist
+models like RoboPoint (49.8%) by significant margins. On the more challenging free space reference
+task (Where2Place), FSD performs competitively with RoboPoint (45.8% vs. 46.0%) while substan-
+tially outperforming other models. This improvement stems from enhanced spatial understanding
+through our SrCoT mechanism. See Appendix F for more visualizations.
+Table 3: Performance comparison on VABench. The best results are highlighted in bold.
+(a) VABench-Point
+Model
+Accuracy ↑
+GPT4o
+9.30
+ASMv2
+10.07
+RoboPoint
+19.09
+FSD
+61.82
+w/o SrCoT
+26.21
+w/o Alignment
+55.92
+(b) VABench-VisualTrace
+Model
+RMSE↓
+MAE↓
+GPT Score↑
+DINOv2 Predictor
+128.32
+117.49
+2.17
+FSD
+78.26
+63.44
+5.49
+w/o SrCoT
+99.53
+80.06
+4.00
+w/o Alignment
+80.48
+66.80
+5.45
+Table 4: SimplerEnv Evaluation on WidowX Robot The results of baselines are derived from [43]. ZS:
+zero-shot, FT: fine-tuning using BridgeData. Each task is tested 24 episodes.
+Model
+Spoon→Towel
+Carrot→Plate
+Green→Yellow
+Eggplant→Basket
+Avg.
+Grasp
+Succ.
+Grasp
+Succ.
+Grasp
+Succ.
+Grasp
+Succ.
+RT-1-X [40]
+16.7%
+0%
+20.8%
+4.2%
+8.3%
+0%
+0.0%
+0%
+1.1%
+Octo-S [50]
+77.8%
+47.2%
+27.8%
+9.7%
+40.3%
+4.2%
+87.5%
+56.9%
+30.0%
+OpenVLA [21]
+4.1%
+0%
+33.3%
+0%
+12.5%
+0%
+8.3%
+4.1%
+1.0%
+RoboVLM (ZS) [24]
+37.5%
+20.8%
+33.3%
+25.0%
+8.3%
+8.3%
+0.0%
+0%
+13.5%
+RoboVLM (FT) [24]
+54.2%
+29.2%
+25.0%
+25.0%
+45.8%
+12.5%
+58.3%
+58.3%
+31.3%
+SpatialVLA (ZS) [43]
+25.0%
+20.8%
+41.7%
+20.8%
+58.3%
+25.0%
+79.2%
+70.8%
+34.4%
+SpatialVLA (FT) [43]
+20.8%
+16.7%
+29.2%
+25.0%
+62.5%
+29.2%
+100%
+100%
+42.7%
+FSD
+58.3%
+41.6%
+58.3%
+50.0%
+91.6%
+33.3%
+37.5%
+37.5%
+54.1%
+FSD demonstrates breakthrough performance in visual aid generation. As shown in Table
+Table 3b, FSD significantly outperforms all baseline methods in generating precise spatial affordances
+and visual traces. For VABench-Point, FSD achieves 61.82% accuracy—three times higher than
+RoboPoint (19.09%), while for VABench-VisualTrace, FSD demonstrates significantly lower error
+rates and better GPT Score compared to the DINOv2 Predictor. Ablation studies confirm the critical
+contributions of both SrCoT and self-consistency alignment, validating our reasoning-based approach
+where step-by-step spatial analysis enables more accurate predictions than purely data-driven methods.
+We provide detailed comparisons with RoboBrain [16] in Appendix I.
+Visualization of visual aids generated by FSD We present examples of generation in Fig. 5. FSD is
+able to adapt to diverse scenes, perspectives, and tasks, and the three types of visual traces generated
+can well match the task instructions. We also presented the reasoning process of FSD in Fig. 6, where
+the CoT provides clear guidance for the results. More visualizations are in Appendix F.
+8
+The image shows a <ref>green plate</ref><box>[[264, 
+324, 504, 516]]</box> …… The carrot<box>[[553, 506, 
+751, 844]]</box> is currently <pred>right</pred> of the 
+green plate.
+You are currently a robot performing robotic manipulation 
+tasks. The task instruction is: put carrot on plate. Use 2D 
+points to mark the manipulated object-centric waypoints to 
+guide the robot to successfully complete the task.
+Description:
+The start by identifying the current 
+position of the carrot at <point>[[680, 
+708]]</point>.
+Reasoning Step 1:
+First, lift the carrot slightly upwards 
+to <point>[[663, 663]]</point> to clear 
+any obstacles. 
+Reasoning Step 2:
+…
+Finally, place the carrot on the plate at 
+<point>[[390, 416]]</point>, within the final 
+bounding box <box>[[208, 437, 440, 521]]</box>.
+Reasoning Step n:
+The visual trace for placing the orange carrot on the green 
+plate is <point>[[680, 708], [663, 663], [607, 560], [547, 
+491], [482, 432], [416, 365], [390, 396], [390, 416]]</point>.
+Answer:
+Instruction:
+Figure 6: Example of the FSD Reasoning Process FSD performs point-by-point reasoning and
+localization, ultimately generating a feasible visual trace.
+Pick up strawberry
+Place egg in green pot
+Remove egg from plate
+Fold this towel from 
+right to left
+Move cucumber 
+between pot and bowl 
+Move strawberry left 
+of brown basket
+Pick up sponge and 
+place it outside plate
+Move egg near pot
+Figure 7: Real-world robotic manipulation tasks performed by an xArm 6 robot (left) and performance
+comparison of FSD against baseline models GPT-4o and RoboPoint (right).
+6.2
+Evaluate the Decision Capability
+SimplerEnv Simulation SimplerEnv [25] is a simulation environment specifically designed for
+evaluating real-world robotic manipulation. It provides a standardized platform, emphasizing repro-
+ducibility with real-world scenarios. We utilized FSD to generate visual traces and perform zero-shot
+deployment on the WidowX robotic arm. We compared its performance against state-of-the-art gen-
+eral manipulation VLA, including Octo [50], OpenVLA [21], RoboVLM [24] and SpatialVLA [43].
+The results are presented in Table 4. FSD surpasses the baseline in most tasks without FT with a 54.1%
+success rate, demonstrating the strong generalization ability of FSD. Notably, FSD achieves the best
+average performance, even outperforming VLA models that even outperforming specially fine-tuned
+VLA models. This superior generalization capability demonstrates that visual aids representations
+provide better zero-shot transfer compared to direct action prediction approaches, bridging the gap
+between perception and control more effectively.
+Real World Robot Evaluation As shown in Fig. 7, we conducted zero-shot tests with FSD on an
+xArm 6 robot across 8 tabletop manipulation tasks. The setup included an Intel RealSense L515
+LiDAR camera. To test the capabilities of different visual aids, we used visual trace for the sponge and
+folding tasks, while affordance points were used for other tasks. We compared against RoboPoint and
+GPT-4o baselines, which were limited to predicting only start/end points rather than full trajectories.
+Robopoint often makes incorrect predictions in tasks involving spatial understanding. Under zero-shot
+conditions, FSD achieved 72% success rate, outperforming the strongest baseline by more than 30%.
+Notably, FSD successfully completed complex tasks with visual trace generation, e.g. cloth folding,
+which was beyond baseline capabilities. Full results are presented in Fig. 7 and we refer to Appendix
+G for detailed setup and more visualizations.
+7
+Conclusion
+In this paper, we introduced FSD (From Seeing to Doing), bridging visual reasoning and robotic ma-
+nipulation through intermediate spatial representations. Our approach addresses the challenges of data
+scarcity and embodiment heterogeneity through three key innovations: Spatial Relationship-Focused
+Visual Chain-of-Thought for multi-step reasoning; A hierarchical weak-to-strong data pipeline; and
+A self-consistency mechanism aligning spatial coordinates with visual signals. Experiments demon-
+strate FSD’s superior performance across multiple spatial reasoning visual aid generation benchmarks.
+9
+In zero-shot robotic deployment, FSD achieved 72% success rate across diverse tasks, outperforming
+baselines by 30%. Limitations include reliance on 2D rather than 3D trajectory generation and
+constraints from available training data quality. Future works are detailed in Appendix J.
+References
+[1] Homanga Bharadhwaj, Roozbeh Mottaghi, Abhinav Gupta, and Shubham Tulsiani. Track2act:
+Predicting point tracks from internet videos enables generalizable robot manipulation. arXiv
+preprint arXiv:2405.01527, 2024.
+[2] Kevin Black, Noah Brown, Danny Driess, Adnan Esmail, Michael Equi, Chelsea Finn, Niccolo
+Fusai, Lachy Groom, Karol Hausman, Brian Ichter, et al. π0: A vision-language-action flow
+model for general robot control. arXiv preprint arXiv:2410.24164, 2024.
+[3] Anthony Brohan, Noah Brown, Justice Carbajal, Yevgen Chebotar, Xi Chen, Krzysztof Choro-
+manski, Tianli Ding, Danny Driess, Avinava Dubey, Chelsea Finn, et al. Rt-2: Vision-language-
+action models transfer web knowledge to robotic control. arXiv preprint arXiv:2307.15818,
+2023.
+[4] Wenxiao Cai, Iaroslav Ponomarenko, Jianhao Yuan, Xiaoqi Li, Wankou Yang, Hao Dong, and
+Bo Zhao. Spatialbot: Precise spatial understanding with vision language models. arXiv preprint
+arXiv:2406.13642, 2024.
+[5] Boyuan Chen, Zhuo Xu, Sean Kirmani, Brain Ichter, Dorsa Sadigh, Leonidas Guibas, and Fei
+Xia. Spatialvlm: Endowing vision-language models with spatial reasoning capabilities. In
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages
+14455–14465, 2024.
+[6] Keqin Chen, Zhao Zhang, Weili Zeng, Richong Zhang, Feng Zhu, and Rui Zhao. Shikra:
+Unleashing multimodal llm’s referential dialogue magic. arXiv preprint arXiv:2306.15195,
+2023.
+[7] An-Chieh Cheng, Hongxu Yin, Yang Fu, Qiushan Guo, Ruihan Yang, Jan Kautz, Xiaolong
+Wang, and Sifei Liu. Spatialrgpt: Grounded spatial reasoning in vision language model. arXiv
+preprint arXiv:2406.01584, 2024.
+[8] Mengfei Du, Binhao Wu, Zejun Li, Xuanjing Huang, and Zhongyu Wei. Embspatial-bench:
+Benchmarking spatial understanding for embodied tasks with large vision-language models.
+arXiv preprint arXiv:2406.05756, 2024.
+[9] Hao-Shu Fang, Chenxi Wang, Minghao Gou, and Cewu Lu. Graspnet-1billion: A large-
+scale benchmark for general object grasping. In Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, pages 11444–11453, 2020.
+[10] Xingyu Fu, Yushi Hu, Bangzheng Li, Yu Feng, Haoyu Wang, Xudong Lin, Dan Roth, Noah A
+Smith, Wei-Chiu Ma, and Ranjay Krishna. Blink: Multimodal large language models can see
+but not perceive. In European Conference on Computer Vision, pages 148–166. Springer, 2024.
+[11] Peng Gao, Shijie Geng, Renrui Zhang, Teli Ma, Rongyao Fang, Yongfeng Zhang, Hongsheng Li,
+and Yu Qiao. Clip-adapter: Better vision-language models with feature adapters. International
+Journal of Computer Vision, 132(2):581–595, 2024.
+[12] Yining Hong, Haoyu Zhen, Peihao Chen, Shuhong Zheng, Yilun Du, Zhenfang Chen, and
+Chuang Gan. 3d-llm: Injecting the 3d world into large language models. Advances in Neural
+Information Processing Systems, 36:20482–20494, 2023.
+[13] Mu Hu, Wei Yin, Chi Zhang, Zhipeng Cai, Xiaoxiao Long, Hao Chen, Kaixuan Wang,
+Gang Yu, Chunhua Shen, and Shaojie Shen. Metric3d v2: A versatile monocular geomet-
+ric foundation model for zero-shot metric depth and surface normal estimation. arXiv preprint
+arXiv:2404.15506, 2024.
+[14] Wenlong Huang, Chen Wang, Yunzhu Li, Ruohan Zhang, and Li Fei-Fei. Rekep: Spatio-
+temporal reasoning of relational keypoint constraints for robotic manipulation. arXiv preprint
+arXiv:2409.01652, 2024.
+10
+[15] Aaron Hurst, Adam Lerer, Adam P Goucher, Adam Perelman, Aditya Ramesh, Aidan Clark,
+AJ Ostrow, Akila Welihinda, Alan Hayes, Alec Radford, et al. Gpt-4o system card. arXiv
+preprint arXiv:2410.21276, 2024.
+[16] Yuheng Ji, Huajie Tan, Jiayu Shi, Xiaoshuai Hao, Yuan Zhang, Hengyuan Zhang, Pengwei
+Wang, Mengdi Zhao, Yao Mu, Pengju An, Xinda Xue, Qinghang Su, Huaihai Lyu, Xiaolong
+Zheng, Jiaming Liu, Zhongyuan Wang, and Shanghang Zhang. Robobrain: A unified brain
+model for robotic manipulation from abstract to concrete. arXiv preprint arXiv:2502.21257,
+2025.
+[17] Linyi Jin, Jianming Zhang, Yannick Hold-Geoffroy, Oliver Wang, Kevin Blackburn-Matzen,
+Matthew Sticha, and David F Fouhey. Perspective fields for single image camera calibration. In
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition, pages
+17307–17316, 2023.
+[18] Jared Kaplan, Sam McCandlish, Tom Henighan, Tom B Brown, Benjamin Chess, Rewon Child,
+Scott Gray, Alec Radford, Jeffrey Wu, and Dario Amodei. Scaling laws for neural language
+models. arXiv preprint arXiv:2001.08361, 2020.
+[19] Nikita Karaev, Iurii Makarov, Jianyuan Wang, Natalia Neverova, Andrea Vedaldi, and Christian
+Rupprecht. Cotracker3: Simpler and better point tracking by pseudo-labelling real videos. arXiv
+preprint arXiv:2410.11831, 2024.
+[20] Alexander Khazatsky, Karl Pertsch, Suraj Nair, Ashwin Balakrishna, Sudeep Dasari, Siddharth
+Karamcheti, Soroush Nasiriany, Mohan Kumar Srirama, Lawrence Yunliang Chen, Kirsty
+Ellis, et al. Droid: A large-scale in-the-wild robot manipulation dataset.
+arXiv preprint
+arXiv:2403.12945, 2024.
+[21] Moo Jin Kim, Karl Pertsch, Siddharth Karamcheti, Ted Xiao, Ashwin Balakrishna, Suraj Nair,
+Rafael Rafailov, Ethan Foster, Grace Lam, Pannag Sanketi, et al. Openvla: An open-source
+vision-language-action model. arXiv preprint arXiv:2406.09246, 2024.
+[22] Chengzu Li, Caiqi Zhang, Han Zhou, Nigel Collier, Anna Korhonen, and Ivan Vuli´c. Topviewrs:
+Vision-language models as top-view spatial reasoners. arXiv preprint arXiv:2406.02537, 2024.
+[23] Xiang Li, Cristina Mata, Jongwoo Park, Kumara Kahatapitiya, Yoo Sung Jang, Jinghuan Shang,
+Kanchana Ranasinghe, Ryan Burgert, Mu Cai, Yong Jae Lee, et al. Llara: Supercharging robot
+learning data for vision-language policy. arXiv preprint arXiv:2406.20095, 2024.
+[24] Xinghang Li, Peiyan Li, Minghuan Liu, Dong Wang, Jirong Liu, Bingyi Kang, Xiao Ma, Tao
+Kong, Hanbo Zhang, and Huaping Liu. Towards generalist robot policies: What matters in
+building vision-language-action models. arXiv preprint arXiv:2412.14058, 2024.
+[25] Xuanlin Li, Kyle Hsu, Jiayuan Gu, Karl Pertsch, Oier Mees, Homer Rich Walke, Chuyuan Fu,
+Ishikaa Lunawat, Isabel Sieh, Sean Kirmani, et al. Evaluating real-world robot manipulation
+policies in simulation. arXiv preprint arXiv:2405.05941, 2024.
+[26] Yi Li, Yuquan Deng, Jesse Zhang, Joel Jang, Marius Memmel, Raymond Yu, Caelan Reed
+Garrett, Fabio Ramos, Dieter Fox, Anqi Li, et al. Hamster: Hierarchical action models for
+open-world robot manipulation. arXiv preprint arXiv:2502.05485, 2025.
+[27] Zejun Li, Ruipu Luo, Jiwen Zhang, Minghui Qiu, and Zhongyu Wei. Vocot: Unleashing visually
+grounded multi-step reasoning in large multi-modal models. arXiv preprint arXiv:2405.16919,
+2024.
+[28] Yuan-Hong Liao, Rafid Mahmood, Sanja Fidler, and David Acuna. Reasoning paths with
+reference objects elicit quantitative spatial reasoning in large vision-language models. arXiv
+preprint arXiv:2409.09788, 2024.
+[29] Fanqi Lin, Yingdong Hu, Pingyue Sheng, Chuan Wen, Jiacheng You, and Yang Gao. Data
+scaling laws in imitation learning for robotic manipulation. arXiv preprint arXiv:2410.18647,
+2024.
+11
+[30] Ji Lin, Hongxu Yin, Wei Ping, Pavlo Molchanov, Mohammad Shoeybi, and Song Han. Vila:
+On pre-training for visual language models. In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition, pages 26689–26699, 2024.
+[31] Bo Liu, Yifeng Zhu, Chongkai Gao, Yihao Feng, Qiang Liu, Yuke Zhu, and Peter Stone. Libero:
+Benchmarking knowledge transfer for lifelong robot learning. Advances in Neural Information
+Processing Systems, 36:44776–44791, 2023.
+[32] Fangyu Liu, Guy Emerson, and Nigel Collier. Visual spatial reasoning. Transactions of the
+Association for Computational Linguistics, 11:635–651, 2023.
+[33] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee. Improved baselines with visual
+instruction tuning. arXiv preprint arXiv:2310.03744, 2023.
+[34] Haotian Liu, Chunyuan Li, Qingyang Wu, and Yong Jae Lee.
+Visual instruction tuning.
+Advances in neural information processing systems, 36, 2024.
+[35] Songming Liu, Lingxuan Wu, Bangguo Li, Hengkai Tan, Huayu Chen, Zhengyi Wang, Ke Xu,
+Hang Su, and Jun Zhu. Rdt-1b: a diffusion foundation model for bimanual manipulation. arXiv
+preprint arXiv:2410.07864, 2024.
+[36] Yuhao Lu, Yixuan Fan, Beixing Deng, Fangfu Liu, Yali Li, and Shengjin Wang. Vl-grasp: a
+6-dof interactive grasp policy for language-oriented objects in cluttered indoor scenes. In 2023
+IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS), pages 976–983.
+IEEE, 2023.
+[37] Chancharik Mitra, Brandon Huang, Trevor Darrell, and Roei Herzig. Compositional chain-of-
+thought prompting for large multimodal models. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 14420–14431, 2024.
+[38] Kaichun Mo, Leonidas J Guibas, Mustafa Mukadam, Abhinav Gupta, and Shubham Tulsiani.
+Where2act: From pixels to actions for articulated 3d objects. In Proceedings of the IEEE/CVF
+International Conference on Computer Vision, pages 6813–6823, 2021.
+[39] Dantong Niu, Yuvan Sharma, Giscard Biamby, Jerome Quenum, Yutong Bai, Baifeng Shi,
+Trevor Darrell, and Roei Herzig. Llarva: Vision-action instruction tuning enhances robot
+learning. arXiv preprint arXiv:2406.11815, 2024.
+[40] Jake O’Neill, Abraham Arthurs, Fábio Avila Belbute-Peres, Julian Balaguer, Sarah Bechtle,
+Gemma Bidoia, Kyle Burden, Erwin Chang, Sheila Chen, Todor Davchev, et al. Open x-
+embodiment: Robotic learning datasets and rt-x models. arXiv preprint arXiv:2310.08864,
+2023.
+[41] Maxime Oquab, Timothée Darcet, Théo Moutakanni, Huy Vo, Marc Szafraniec, Vasil Khalidov,
+Pierre Fernandez, Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, et al. Dinov2: Learning
+robust visual features without supervision. arXiv preprint arXiv:2304.07193, 2023.
+[42] Zengyi Qin, Kuan Fang, Yuke Zhu, Li Fei-Fei, and Silvio Savarese. Keto: Learning keypoint
+representations for tool manipulation. In 2020 IEEE International Conference on Robotics and
+Automation (ICRA), pages 7278–7285. IEEE, 2020.
+[43] Delin Qu, Haoming Song, Qizhi Chen, Yuanqi Yao, Xinyi Ye, Yan Ding, Zhigang Wang,
+JiaYuan Gu, Bin Zhao, Dong Wang, et al. Spatialvla: Exploring spatial representations for
+visual-language-action model. arXiv preprint arXiv:2501.15830, 2025.
+[44] Arijit Ray, Jiafei Duan, Reuben Tan, Dina Bashkirova, Rose Hendrix, Kiana Ehsani, Aniruddha
+Kembhavi, Bryan A Plummer, Ranjay Krishna, Kuo-Hao Zeng, et al. Sat: Spatial aptitude
+training for multimodal language models. arXiv preprint arXiv:2412.07755, 2024.
+[45] Tianhe Ren, Shilong Liu, Ailing Zeng, Jing Lin, Kunchang Li, He Cao, Jiayu Chen, Xinyu
+Huang, Yukang Chen, Feng Yan, et al. Grounded sam: Assembling open-world models for
+diverse visual tasks. arXiv preprint arXiv:2401.14159, 2024.
+12
+[46] Hao Shao, Shengju Qian, Han Xiao, Guanglu Song, Zhuofan Zong, Letian Wang, Yu Liu, and
+Hongsheng Li. Visual cot: Advancing multi-modal language models with a comprehensive
+dataset and benchmark for chain-of-thought reasoning. In The Thirty-eight Conference on
+Neural Information Processing Systems Datasets and Benchmarks Track, 2024.
+[47] Mohit Shridhar, Yat Long Lo, and Stephen James. Generative image as action models. arXiv
+preprint arXiv:2407.07875, 2024.
+[48] Chan Hee Song, Valts Blukis, Jonathan Tremblay, Stephen Tyree, Yu Su, and Stan Birchfield.
+Robospatial: Teaching spatial understanding to 2d and 3d vision-language models for robotics.
+arXiv preprint arXiv:2411.16537, 2024.
+[49] Balakumar Sundaralingam, Siva Kumar Sastry Hari, Adam Fishman, Caelan Garrett, Karl
+Van Wyk, Valts Blukis, Alexander Millane, Helen Oleynikova, Ankur Handa, Fabio Ramos,
+et al. Curobo: Parallelized collision-free robot motion generation. In 2023 IEEE International
+Conference on Robotics and Automation (ICRA), pages 8112–8119. IEEE, 2023.
+[50] Octo Team, RT-X Team, Anthony Brohan, Noah Brown, Lauren Chen, Michael Cheng,
+Krzysztof Choromanski, Eamonn Cullina, Gabe Dalal, Chelsea Fu, Florian Golemo, et al.
+Octo: An open-source generalist robot policy. arXiv preprint arXiv:2403.10164, 2024.
+[51] Shengbang Tong, Ellis Brown, Penghao Wu, Sanghyun Woo, Manoj Middepogu, Sai Charitha
+Akula, Jihan Yang, Shusheng Yang, Adithya Iyer, Xichen Pan, Austin Wang, Rob Fergus, Yann
+LeCun, and Saining Xie. Cambrian-1: A fully open, vision-centric exploration of multimodal
+llms, 2024.
+[52] Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N Gomez,
+Łukasz Kaiser, and Illia Polosukhin. Attention is all you need. Advances in neural information
+processing systems, 30, 2017.
+[53] Homer Rich Walke, Kevin Black, Tony Z Zhao, Quan Vuong, Chongyi Zheng, Philippe Hansen-
+Estruch, Andre Wang He, Vivek Myers, Moo Jin Kim, Max Du, et al. Bridgedata v2: A dataset
+for robot learning at scale. In Conference on Robot Learning, pages 1723–1736. PMLR, 2023.
+[54] Lirui Wang, Xinlei Chen, Jialiang Zhao, and Kaiming He. Scaling proprioceptive-visual learning
+with heterogeneous pre-trained transformers. arXiv preprint arXiv:2409.20537, 2024.
+[55] Weiyun Wang, Yiming Ren, Haowen Luo, Tiantong Li, Chenxiang Yan, Zhe Chen, Wenhai
+Wang, Qingyun Li, Lewei Lu, Xizhou Zhu, et al. The all-seeing project v2: Towards general
+relation comprehension of the open world. In European Conference on Computer Vision, pages
+471–490. Springer, 2025.
+[56] Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le,
+Denny Zhou, et al. Chain-of-thought prompting elicits reasoning in large language models.
+Advances in neural information processing systems, 35:24824–24837, 2022.
+[57] Chuan Wen, Xingyu Lin, John So, Kai Chen, Qi Dou, Yang Gao, and Pieter Abbeel. Any-point
+trajectory modeling for policy learning. arXiv preprint arXiv:2401.00025, 2023.
+[58] Yixuan Wu, Yizhou Wang, Shixiang Tang, Wenhao Wu, Tong He, Wanli Ouyang, Philip Torr,
+and Jian Wu. Dettoolchain: A new prompting paradigm to unleash detection ability of mllm. In
+European Conference on Computer Vision, pages 164–182. Springer, 2025.
+[59] Mengda Xu, Zhenjia Xu, Yinghao Xu, Cheng Chi, Gordon Wetzstein, Manuela Veloso, and Shu-
+ran Song. Flow as the cross-domain manipulation interface. arXiv preprint arXiv:2407.15208,
+2024.
+[60] Jianwei Yang, Reuben Tan, Qianhui Wu, Ruijie Zheng, Baolin Peng, Yongyuan Liang, Yu Gu,
+Mu Cai, Seonghyeon Ye, Joel Jang, et al. Magma: A foundation model for multimodal ai agents.
+arXiv preprint arXiv:2502.13130, 2025.
+[61] Fanglong Yao, Changyuan Tian, Jintao Liu, Zequn Zhang, Qing Liu, Li Jin, Shuchao Li, Xiaoyu
+Li, and Xian Sun. Thinking like an expert: Multimodal hypergraph-of-thought (hot) reasoning
+to boost foundation modals. arXiv preprint arXiv:2308.06207, 2023.
+13
+[62] Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Tom Griffiths, Yuan Cao, and Karthik
+Narasimhan.
+Tree of thoughts: Deliberate problem solving with large language models.
+Advances in Neural Information Processing Systems, 36, 2024.
+[63] Yao Yao, Zuchao Li, and Hai Zhao. Beyond chain-of-thought, effective graph-of-thought
+reasoning in language models. arXiv preprint arXiv:2305.16582, 2023.
+[64] Haoxuan You, Haotian Zhang, Zhe Gan, Xianzhi Du, Bowen Zhang, Zirui Wang, Liangliang
+Cao, Shih-Fu Chang, and Yinfei Yang. Ferret: Refer and ground anything anywhere at any
+granularity. arXiv preprint arXiv:2310.07704, 2023.
+[65] Chengbo Yuan, Chuan Wen, Tong Zhang, and Yang Gao. General flow as foundation affordance
+for scalable robot learning. arXiv preprint arXiv:2401.11439, 2024.
+[66] Wentao Yuan, Jiafei Duan, Valts Blukis, Wilbert Pumacay, Ranjay Krishna, Adithyavairavan
+Murali, Arsalan Mousavian, and Dieter Fox. Robopoint: A vision-language model for spatial
+affordance prediction for robotics. arXiv preprint arXiv:2406.10721, 2024.
+[67] Michał Zawalski, William Chen, Karl Pertsch, Oier Mees, Chelsea Finn, and Sergey Levine.
+Robotic control via embodied chain-of-thought reasoning. arXiv preprint arXiv:2407.08693,
+2024.
+[68] Tianle Zhang, Dongjiang Li, Yihang Li, Zecui Zeng, Lin Zhao, Lei Sun, Yue Chen, Xuelong
+Wei, Yibing Zhan, Lusong Li, et al. Empowering embodied manipulation: A bimanual-mobile
+robot manipulation dataset for household tasks. arXiv preprint arXiv:2405.18860, 2024.
+[69] Zhuosheng Zhang, Aston Zhang, Mu Li, and Alex Smola. Automatic chain of thought prompting
+in large language models. arXiv preprint arXiv:2210.03493, 2022.
+[70] Ge Zheng, Bin Yang, Jiajin Tang, Hong-Yu Zhou, and Sibei Yang. Ddcot: Duty-distinct
+chain-of-thought prompting for multimodal reasoning in language models. Advances in Neural
+Information Processing Systems, 36:5168–5191, 2023.
+[71] Lianmin Zheng, Wei-Lin Chiang, Ying Sheng, Siyuan Zhuang, Zhanghao Wu, Yonghao Zhuang,
+Zi Lin, Zhuohan Li, Dacheng Li, Eric Xing, et al. Judging llm-as-a-judge with mt-bench and
+chatbot arena. Advances in Neural Information Processing Systems, 36:46595–46623, 2023.
+[72] Ruijie Zheng, Yongyuan Liang, Shuaiyi Huang, Jianfeng Gao, Hal Daumé III, Andrey Kolobov,
+Furong Huang, and Jianwei Yang. Tracevla: Visual trace prompting enhances spatial-temporal
+awareness for generalist robotic policies. arXiv preprint arXiv:2412.10345, 2024.
+[73] Shengjie Zhu, Abhinav Kumar, Masa Hu, and Xiaoming Liu. Tame a wild camera: in-the-wild
+monocular camera calibration. Advances in Neural Information Processing Systems, 36, 2024.
+14

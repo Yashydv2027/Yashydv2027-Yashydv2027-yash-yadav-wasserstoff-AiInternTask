@@ -1,0 +1,1830 @@
+Calibration and Uncertainty for multiRater Volume
+Assessment in multiorgan Segmentation (CURVAS)
+challenge results
+Meritxell Riera-Mar´ın??,??, Sikha O K??, J´ulia Rodr´ıguez-Comas??,
+Matthias Stefan May??,??, Zhaohong Pan??,??, Xiang Zhou??, Xiaokun
+Liang??, Franciskus Xaverius Erick??, Andrea Prenner??, C´edric H´emon??,
+Valentin Boussot??, Jean-Louis Dillenseger??, Jean-Claude Nunes??, Abdul
+Qayyum??, Moona Mazher??, Steven A Niederer??, Kaisar Kushibar??,
+Carlos Mart´ın-Isla??, Petia Radeva??, Karim Lekadir??,??, Theodore
+Barfoot??, Luis C. Garcia Peraza Herrera??, Ben Glocker??, Tom
+Vercauteren??, Lucas Gago??, Justin Englemann??, Joy-Marie Kleiss??,
+Anton Aubanell??,??, Andreu Antolin??, Javier Garc´ıa-L´opez??, Miguel A.
+Gonz´alez Ballester??,??, Adri´an Galdr´an??
+aSycai Technologies SL, Scientific and Technical Department, Barcelona, Spain
+bBCN Medtech, Universitat Pompeu Fabra, Barcelona, Spain
+cUniversit¨atsklinikum Erlangen, Department of Radiology, Uniklinikum Erlangen,
+Erlangen, Germany
+dUniversity Hospital Erlangen, Imaging Science Institute, Erlangen, Germany
+eHospital de Sant Pau i la Santa Creu, Diagnostic Imaging Department, Barcelona,
+Spain
+fInstitut de Recerca Sant Pau - Centre CERCA, Advanced Medical Imaging, Artificial
+Intelligence, and Imaging-Guided Therapy Research Group, Barcelona, Spain
+gHospital Universitari Vall d’Hebron, Department of Radiology, Institut de Diagn`ostic
+per la Imatge (IDI), Barcelona, Spain
+hTECNALIA, Basque Research and Technology Alliance (BRTA), Bizcaia, Spain
+iShenzhen Institute of Advanced Technology, Chinese Academy of Sciences, Shenzhen,
+China
+jUniversity of Chinese Academy of Sciences, Beijing, China
+kFriedrich-Alexander-Universit¨at Erlangen-N¨urnberg (FAU), Erlangen, Germany
+lNational Heart and Lung Institute, Faculty of Medicine, Imperial College London,
+London, United Kingdom
+mCentre for Medical Image Computing, Department of Computer Science, University
+College London, London, United Kingdom
+nBarcelona Artificial Intelligence in Medicine Lab (BCN-AIM), Facultat de
+Matem`atiques i Inform`atica, Universitat de Barcelona, Barcelona, Spain
+oIBA, Facultat de Matem`atiques i Inform`atica, and Institute of Neuroscience,
+Universitat de Barcelona, Barcelona, Spain
+pKing’s College London (KCL), London, United Kingdom
+qUniversitat de Barcelona (UB), Barcelona, Spain
+Preprint submitted to Elsevier
+May 14, 2025
+arXiv:2505.08685v1  [cs.CV]  13 May 2025
+rUniversity of Edinburgh, Edinburgh, United Kingdom
+sUniversit´e de Rennes 1, CLCC Eug`ene Marquis, and INSERM UMR 1099 LTSI,
+Rennes, France
+tInstituci´o Catalana de Recerca i Estudis Avan¸cats (ICREA), Barcelona, Spain
+Abstract
+Deep learning (DL) has become the dominant approach for medical image
+segmentation, yet ensuring the reliability and clinical applicability of these
+models requires addressing key challenges such as annotation variability, cal-
+ibration, and uncertainty estimation. This is why we created the Calibration
+and Uncertainty for multiRater Volume Assessment in multiorgan Segmen-
+tation (CURVAS), which highlights the critical role of multiple annotators in
+establishing a more comprehensive ground truth, emphasizing that segmen-
+tation is inherently subjective and that leveraging inter-annotator variability
+is essential for robust model evaluation.
+Seven teams participated in the
+challenge, submitting a variety of DL models evaluated using metrics such as
+Dice Similarity Coefficient (DSC), Expected Calibration Error (ECE), and
+Continuous Ranked Probability Score (CRPS). By incorporating consensus
+and dissensus ground truth, we assess how DL models handle uncertainty
+and whether their confidence estimates align with true segmentation per-
+formance. Our findings reinforce the importance of well-calibrated models,
+as better calibration is strongly correlated with the quality of the results.
+Furthermore, we demonstrate that segmentation models trained on diverse
+datasets and enriched with pre-trained knowledge exhibit greater robust-
+ness, particularly in cases deviating from standard anatomical structures.
+Notably, the best-performing models achieved high DSC and well-calibrated
+uncertainty estimates. This work underscores the need for multi-annotator
+ground truth, thorough calibration assessments, and uncertainty-aware eval-
+uations to develop trustworthy and clinically reliable DL-based medical image
+segmentation models.
+Key words:
+Multiple expert annotations, Multi-class image segmentation,
+abdominal CT, Calibration, Uncertainty
+2
+1. Introduction
+Precise image segmentation is a central topic of current medical image
+analysis and its accurate assessment is crucial for early diagnosis, person-
+alized treatment planning, and outcome prediction. Machine learning and
+artificial intelligence (AI) have advanced the analysis of complex imaging
+data, but reliable, public datasets and performance benchmarks remain es-
+sential for developing and validating deep learning (DL) models. A key chal-
+lenge in this process is data uncertainty, particularly the impact of annotator
+disagreements on segmentation performance. Even experienced radiologists
+may disagree on anatomical boundaries, particularly in ambiguous regions,
+and precise delineation of such structures is critical. Utilizing multiple an-
+notations from different experts is a natural approach to addressing this
+challenge. By exploiting this information, models can be more robust and
+aware of data samples or image regions containing inherently ambiguous
+information. However, some techniques rely on merging annotations with
+conventional methods such as label smoothing [1, 2, 3], or other methods like
+random label sampling [4], can be counterproductive, disregarding valuable
+information from annotator disagreements [5]. Moreover, while multi-rater
+annotations are sometimes incorporated during training, final evaluation typ-
+ically relies on a single “gold standard,” which may fail to capture the vari-
+ability inherent in multiple expert annotations, resulting in a less thorough
+and potentially skewed assessment. This is problematic when datasets in-
+volve multiple annotators labeling different subsets of images, leading to
+biased evaluations. For example, models trained on one set of annotations
+may be assessed against a different set, reflecting subjective interpretations
+rather than predictive errors.
+In clinical practice, such data can have a
+significant aspect in decision-making [6]. No comprehensive benchmark of
+models leveraging multiple annotations in complex segmentation tasks has
+been conducted so far.
+Modeling multi-rater variability falls within the scope of the area of un-
+certainty quantification and it plays a crucial role in medical image analysis.
+Uncertainty reflects the degree of confidence in model predictions, arising
+from data variability, noise, and annotator disagreements. Accurate uncer-
+tainty estimates identify regions of low confidence, highlighting areas where
+clinicians should exercise caution. For example, Ng et al. [7] employed uncer-
+tainty quantification for cardiac MRI segmentation quality control, using it
+for out-of-distribution detection or DeVries et al. [8] introduced a model in-
+3
+tegrating images, predicted segmentations, and uncertainty maps to estimate
+DSC scores and flag cases for expert review. Incorporating uncertainty into
+model evaluation enhances robustness and segmentation quality assessment
+[9] as well as aids clinical decision-making. While much of the research in
+computational medical image analysis has traditionally focused on predictive
+performance, recent years have seen a growing interest in ensuring models
+provide meaningful uncertainty estimates [10]. A common measure of uncer-
+tainty [11] is the predictive confidence, often calculated using the maximum
+softmax probability, used in the evaluation metrics of this challenge.
+In
+recent years there has been an increasing focus in aligning this predictive
+confidence with accuracy, a concept known as calibration [12, 4]. Calibration
+is essential for clinical trustworthiness, as model reliability must be assessed
+alongside segmentation accuracy to ensure a robust and confidence-aligned
+model. However, calibration is a spectrum rather than a binary state. A
+well-calibrated model provides confidence estimates that reflect true predic-
+tion reliability, but models may be underconfident, assigning low confidence
+to accurate predictions, or overconfident, with confidence exceeding actual
+accuracy. Evaluating miscalibration requires estimating accuracy at differ-
+ent confidence levels, which can be a complex task [13]. Understanding mis-
+calibration patterns can guide model improvement and ensure safe clinical
+application since poor calibration can lead to overconfidence in incorrect pre-
+dictions or underconfidence in correct ones, affecting medical decision-making
+[14]. This issue is further exacerbated by data variability, class imbalances,
+and inter-rater disagreements [15]. Multiple annotation analysis is naturally
+connected to model calibration and it is meaningful to assume that if multiple
+raters diverge in their annotations, then a calibrated model should become
+less confident.
+Despite notable progress in uncertainty and calibration research, these
+aspects are still underrepresented in comprehensive evaluations, often over-
+shadowed by an exclusive focus on predictive accuracy. Critically, the po-
+tential of multi-rater annotations to refine calibration metrics remains un-
+explored. Leveraging such annotations during both training and evaluation
+could offer a more faithful reflection of clinical ambiguity and improve model
+robustness.
+Moving forward, calibration-aware frameworks that explicitly
+incorporate expert disagreement are essential for building more trustworthy
+and generalizable medical imaging models.
+Addressing these obstacles requires rigorous quality control, multi-expert
+annotations, and robust uncertainty quantification methods. To this end, the
+4
+Calibration and Uncertainty for Multi-Rater Volume Assessment Challenge
+(CURVAS) challenge benchmarks algorithm performance on segmentation
+tasks using abdominal computed tomography (CT) scans with multi-expert
+annotations. CURVAS, organized as part of the Medical Image Computing
+and Computer-Assisted Intervention (MICCAI) 2024 conference, provides a
+structured environment for evaluating segmentation algorithms. Participants
+used a publicly available dataset[16] specifically constructed for this compe-
+tition, featuring annotations from three expert radiologists who segmented
+three key abdominal organs: the pancreas, kidneys, and liver. This paper
+aims to provide an objective comparison of algorithms through quantitative
+and qualitative metrics, emphasizing inter-rater variability, calibration, and
+uncertainty quantification, beyond accuracy. Furthermore, CURVAS also as-
+sessed the ability of segmentation models to produce meaningful organ vol-
+ume estimates, a clinically relevant metric, further highlights model strengths
+and limitations. A comprehensive quantitative and qualitative analysis re-
+veals that the most accurate in segmenting are also the best calibrated mod-
+els. However, models trained with pretrained networks or public datasets
+demonstrated greater robustness to distribution shifts, effectively detecting
+out-of-distribution regions. These insights contribute to the development of
+trustworthy AI-assisted medical imaging tools, promoting safer and more
+effective clinical adoption.
+2. The CURVAS Challenge
+2.1. Challenge Organization
+The challenge was hosted in the Grand Challenge platform1 ensuring
+standardized submission formats, secure data handling, and fair comparison
+of competing teams. Participants were invited to train their models from
+May to end of August 2024. Subsequently, they were asked to submit their
+containerized segmentation algorithms to the Grand Challenge website by
+September 7th 2024. Organizers were also permitted to submit containers,
+which were ranked alongside participant submissions but they were ineligible
+for prizes.
+The top three submissions were presented by their respective
+teams during the CURVAS Challenge session on October 10, 2024, at the
+MICCAI Conference. The code from the winning team is referenced in the
+Challenge GitHub repository [17].
+1https://curvas.grand-challenge.org/
+5
+2.2. Challenge dataset
+2.2.1. Dataset Acquisition and Inclusion Criteria
+Data collection was approved by the ethics committee at Universit¨ats-
+klinikum Erlangen Hospital (approval number 23-243-B) in Bavaria, Ger-
+many, and took place between August and October 2023. In compliance with
+ethical standards for publishing medical imaging data, both study-specific
+and broad consent were obtained from all patients, both verbal and written,
+prior to their participation in the study. The data used during the challenge
+was previously pseudonymized by removing patient-specific and personal in-
+formation and coded by the hospital. This pseudonymization process did
+not affect the image quality since no metadata related to parameters of the
+image was affected.
+The challenge cohort included 90 CT images prospectively collected. All
+participants were over 18 years old, with 51 male and 39 female participants,
+aged 37–94 years (mean: 65.7 years). No additional selection criteria were
+applied to ensure a representative sample of a typical patient cohort. Inclu-
+sion criteria required contrast-enhanced CT scans in the portal venous phase,
+thin slice acquisition (0.6–1 mm), and a maximum of 10 cysts with diameters
+under 2.0 cm. CT scans with significant artifacts (e.g., breathing artifacts)
+or incomplete registrations were excluded.
+2.2.2. Data Processing and Annotation Protocol
+To prepare the images to be sent to the radiologists, the first step was
+using Total Segmentator (TS) [18, 19] to produce preliminary annotations.
+Then, these annotations, together with their respective CT, were sent to
+the three radiologists, to both correct the automatic annotations and add
+possible missing organs that TS had not detected. One of the three labeling
+radiologists, an MD PhD candidate, previously defined both the dataset
+cohort and the inclusion criteria, as well as the criteria of what belongs to
+the parenchyma, in order to have common guidelines for all three experts.
+Both the dataset cohort with the inclusion criteria and the guidelines were
+reviewed by another two radiologists, with an experience of 2 and 4 years in
+abdominal CT imaging.
+Each annotation targeted three structures: pancreas, liver and kidneys.
+For the pancreatic organ, it was important the whole pancreas in its course
+was tracked and marked. Neither the splenic vein nor the mesenterial vein
+were included in the segmentation [20]. For the kidney structures, both the
+kidney parenchyma and the renal medulla were included. The renal pelvis
+6
+Figure 1: Age Distribution Across Groups and Dataset Splits. The left chart shows the
+distribution of cases across Groups A, B, and C by age range, while the right chart presents
+the dataset split into training, validation, and test sets. Group B and C cases are more
+frequent in older individuals, aligning with a higher pathology burden. The dataset split
+remains balanced, ensuring representation across age groups and pathological complexity.
+[21] and the ureter as a urinary stasis, which could alter the original volume,
+were excluded. Lastly, the liver was defined as the entire liver tissue including
+all internal structures like vessel systems, tumors, etc. [22]. Thus, the portal
+vein itself and its two main branches were excluded from contouring but
+any branch of the following generations were included. In case of partial
+enclosure -occurring where large vessels as vena cava and portal vein enter
+or leave the liver-, the parts enclosed by liver tissue were included in the
+segmentation, thus forming the convex hull of the liver shape [22].
+Any
+fatty tissue that pulls into the liver was excluded as well as the gallbladder.
+However, wide and especially pathologically widened bile ducts were included
+in the segmentation of the liver.
+2.2.3. Clinical Subgroups and Data Splitting
+Data was separated in three different groups depending on the lesions
+or pathologies they showed. Group A (45 CTs) consists on healthier, less
+complex cases with 2 cysts or less with no contour altering pathologies; Group
+B (22 CTs) on cases with a moderate presence of cysts (3-5 cysts), providing a
+slightly more challenging scenario with with no contour altering pathologies;
+and, Group C (23 CTs) comprises cases with large and more cysts (6-10
+7
+cysts) and pathological conditions (liver metastases, hydro nephrosis, adrenal
+gland metastases, missing kidney), representing the most complex cases for
+evaluation. A visual summary of data distribution is shown Figure 1.
+The training set consisted on 20 CTs from the Group A. This limited
+dataset was intentionally chosen to assess whether the task can be effectively
+learned with a small number of CT scans or by using publicly available,
+multi-annotator datasets. This approach tries to make the participants work
+in a real world environment where data is limited and tries to make the
+submitted methods more robust to shifts, allowing participants to develop
+approaches handling widely accessible data. Additionally, training on one
+dataset while evaluating on another enhances a thorough analysis against
+distribution shifts and other sources of variability. For the validation set,
+only images from Group A (5 CTs) were released, and all the remaining
+dataset was used for the final testing phase (20 CTs of Group A, 17 CTs of
+Group B and 23 CTs of Group C).
+2.2.4. Quality assurance
+In the CURVAS Challenge, a rigorous quality assurance (QA) protocol
+was implemented to ensure the reliability and accuracy of segmentation eval-
+uations. Once the images were annotated following the aforementioned pro-
+tocol, all collected segmentation data underwent thorough integrity verifica-
+tion to confirm the absence of corruption or errors, ensuring that subsequent
+analyses were based on accurate and consistent data. Additionally, to assess
+annotation consistency, the multiple expert annotations per CT scan were an-
+alyzed statistically, focusing on interrater variability to quantify agreement
+among annotators. This process allowed for the identification of potential
+inconsistencies and provided a deeper understanding of the variability in ex-
+pert annotations. Furthermore, visual inspections were conducted to detect
+and correct systematic errors or biases in segmentations, ensuring that the
+annotations were robust across different cases.
+2.3. Assessment method
+2.3.1. Evaluation metrics
+Multiple metrics were used to evaluate and rank performance. To ensure
+a comprehensive assessment, these metrics were classified into three major
+groups, each targeting different aspects of model performance. Quality of
+the Segmentation and Uncertainty Consensus Assessment, Multi-Rater Cali-
+bration, and Volume Assessment. To account for inter-expert variability, we
+8
+defined three distinct regions: the foreground consensus area, which is the
+region that all three clinicians unanimously agreed that the corresponding
+area belongs to the foreground; the background consensus area which is the
+region where all three clinicians consistently identified as background; and
+the dissensus area, which is the region where there was disagreement among
+the annotators regarding whether it belongs to the foreground or background.
+These predefined regions play a crucial role in the evaluation process, ensur-
+ing that model performance is assessed not only in well-defined areas but
+also in regions with uncertainty, where expert opinions diverge.
+Quality of the Segmentation and Uncertainty Consensus Evaluation
+The primary segmentation metric used is the Dice Score (DSC), which
+quantifies spatial overlap between predictions and ground truth. DSC eval-
+uation is restricted to the consensus foreground and background regions for
+three target classes: pancreas, kidney, and liver. Consequently, False Posi-
+tives can only occur in the consensus background area, while False Negatives
+can only occur in the consensus foreground area.
+In addition to segmentation accuracy, we assess uncertainty estimation
+within consensus regions. This analysis is divided into two components: the
+confidence for the consensus background (CB) and the consensus foreground
+(CF) of each organ.
+Subsequently, an overall confidence metric per class
+(Cseg) is calculated by integrating both consensus regions, as follows:
+Cseg = (1 −CB) + CF
+2
+(1)
+For both DSC and uncertainty assessment, each metric is calculated for
+each structure individually.
+Then, to obtain the final metrics, the mean
+across the three organs is computed.
+Multi Rater Calibration
+For the calibration study, we assess the Confidence Expected Calibration
+Error (cECE), as defined in Equation 2:
+cECE =
+M
+X
+m=1
+|Bm|
+M |acc(Bm) −conf(Bm))|,
+(2)
+9
+where Bm is the bin with predictive confidence in voxel m is, acc(Bm) is the
+accuracy of such bin, conf(Bm) is the average of such bin, and M is the
+number of bins.
+To preserve multi-rater variability, cECE is computed separately for each
+prediction against each of the three expert annotations, yielding three distinct
+cECE values per case. To derive a single calibration metric, these three
+values are averaged equally, ensuring that the annotations of each annotator
+are considered in the final assessment.
+Volume Assessment
+For the volume assessment, we incorporate the Continuous Ranked Prob-
+ability Score (CRPS) to evaluate how well the predicted volumetric distri-
+butions align with the ground truth. Unlike other metrics, CRPS provides a
+more clinically relevant measure by considering the full probabilistic distri-
+bution of the predictions. To retain multi-annotator variability, we define a
+Gaussian Probability Distribution Function (PDF) based on the mean and
+standard deviation of the volumes derived from the three expert annotations.
+From this, we compute the corresponding Cumulative Distribution Function
+(CDF).
+The predicted volume is obtained by summing all probabilistic values for
+the corresponding class from the probabilistic output provided by the partic-
+ipant. This approach integrates the model’s uncertainty into the volume es-
+timation. Equation (3) represents the Continuous Ranked Probability Score
+(CRPS), computed as the average squared difference between the cumulative
+distribution and the predicted value.
+CRPS(F, y) =
+Z
+(F(x) −1{x≥y})2dx,
+(3)
+F(x) being the PDF obtained from the ground truths and 1{x≥y} being the
+Heaviside function of the volume calculated from the prediction. For a graph-
+ical representation of this equation see Figure 2.
+For a clearer understanding, Figure 2 illustrated the probabilistic vol-
+ume evaluation process.
+The left panel displays the Gaussian PDF (blue
+line), representing the volume distribution of a structure, computed from
+the mean and standard deviation of the three expert annotations. The red
+line indicates the predicted volume by the model. The right panel presents
+10
+Figure 2: Visual example of a CRPS calculation. Left figure: Gaussian Probability Dis-
+tribution function (PDF) blue line with the predicted volume (red line). Right figure:
+Gaussian Cumulative Distribution function (CDF) (blue line) with the predicted volume
+(red line) and its corresponding Heavyside representation and the CRPS area.
+the corresponding CDF (blue line) derived from the Gaussian PDF, with the
+red line again representing the predicted volume. Additionally, the orange
+line corresponds to a Heaviside function derived from the predicted volume,
+while the gray area quantifies the CRPS computation. A smaller gray area
+signifies a predicted volume closer to the ground truth distribution, indicating
+better performance.
+In conclusion, by using the CRPS, we evaluate the accuracy of the proba-
+bilistic volume prediction in comparison to the ground truth volume’s prob-
+abilistic distribution. The CRPS is a useful metric for assessing how well
+the predicted CDF aligns with the true CDF of the volume, accounting for
+both the prediction’s central tendency and its spread. This approach allows
+us to quantify the difference between the predicted and actual distributions
+over the entire volume range, providing a comprehensive measure of predic-
+tion quality. Minimal CRPS values reflect improved model reliability and
+confidence in the accuracy of the estimated volume distribution.
+2.3.2. Ranking
+Each participating team was ranked according to four evaluation met-
+rics: DSC, Cseg, ECE, and CRPS. There were four separate rankings: two
+in descending order (DSC and Cseg) and two in ascending order (ECE and
+CRPS). The final ranking was determined by combining these four individual
+rankings. For each algorithm, the relative ranks across all metrics were aver-
+aged, producing a composite score. The algorithms were then ranked based
+11
+on their average relative rank, with a lower mean indicating better overall
+performance.
+This approach ensures fairness by placing all metrics on a
+comparable scale, allowing the final ranking to reflect balanced performance
+across all evaluation criteria, without bias towards any specific metric.
+2.3.3. Further analysis
+In addition to evaluating the performance of different algorithms, this
+paper presents a comprehensive analysis of their results.
+First, we study
+the general ranking of the algorithms based on overall performance across
+multiple metrics, providing an aggregated view of their effectiveness.
+In
+addition, we identify the best performing algorithm for each specific metric,
+providing insight into strengths and weaknesses across different evaluation
+criteria. This detailed breakdown allows for a nuanced understanding of how
+each method excels or struggles depending on the metric under consideration.
+Beyond overall rankings, we analyze the variability of performance both
+per algorithm and per metric, highlighting the consistency or instability of
+each method. To further explore these variations, we conduct a qualitative
+analysis of metric distributions at the image level, examining cases where
+algorithms perform particularly well or poorly with a visual example. Ad-
+ditionally, we investigate performance across the different groups (A, B, C),
+revealing trends and discrepancies that may be associated with specific data
+characteristics.
+Finally, we assess correlations between different metrics,
+identifying potential dependencies and redundancies that can refine future
+evaluation protocols. This multi-faceted analysis aims to provide a deeper
+understanding of algorithm behavior, ultimately guiding the development of
+more robust and reliable models.
+Finally, a thorough statistical analysis is conducted to evaluate the stabil-
+ity of the rankings across all the methods. This analysis involves performing
+bootstrap sampling, a technique that allows us to estimate the variability of
+the rankings by repeatedly sampling from the original dataset with replace-
+ment. By evaluating how the rankings fluctuate across multiple bootstrap
+iterations, we can assess the consistency of the methods’ performance. This
+approach helps to determine whether the observed differences in rankings are
+robust or if they are likely due to sampling variability.
+12
+3. Team Methods
+The challenge included seven participating teams from various institu-
+tions. The MedIG team from the Shenzhen Institute of Advanced Technol-
+ogy, Chinese Academy of Sciences, and the University of Chinese Academy of
+Sciences (China); the PrAEcision team from Friedrich-Alexander-Universit¨at
+Erlangen-N¨urnberg (FAU) (Germany); the BreizhSeg team from Univer-
+sit´e de Rennes 1, CLCC Eug`ene Marquis, and INSERM UMR 1099 LTSI
+(France); the DLAI team from Imperial College London and University Col-
+lege London (United Kingdom); the BCNAIM team from Universitat de
+Barcelona and ICREA (Spain); the CAI4CAI team from King’s College
+London (United Kingdom); and the PredictED team from Universitat de
+Barcelona (Spain) and the University of Edinburgh (United Kingdom). Each
+team applied distinct strategies and methodologies, which are further detailed
+in the following subsections.
+3.1. MedIG
+To address variations among labels provided by multiple annotators, the
+STAPLE algorithm [23] was used to generate consensus labels for the pan-
+creas, kidney, liver, and background.
+Applied independently to each or-
+gan and background, this approach produces robust consensus segmentations
+that integrate annotations across all annotators.
+The 3D full-resolution version of nnUNet [19] was selected, a state-of-
+the-art deep learning-based method for medical image segmentation that
+leverages 3D spatial information in CT images.
+The network employs a
+vanilla U-Net architecture with six downsampling steps and a decoding phase
+that integrates skip connections and upsampled feature maps. To meet the
+time constraints of the Grand Challenge platform, MedIG implemented post-
+processing to accelerate probability map handling by setting values below
+1×10−6 to zero, reducing storage demands and optimizing compression. This
+approach minimized I/O operations, ensured efficient data handling, and
+allowed the algorithm to execute swiftly within the platform’s requirements.
+3.2. PrAEcision
+Given the promising results of the nnUNet model [19] for general medical
+imaging segmentation tasks [24] and specifically on multi-rater annotation
+segmentation challenges [25], PrAEcision trained a 3D lowres nnUNet model
+for the CURVAS multirater segmentation challenge to segment the organs
+13
+background, kidney and liver. Further, they sought to determine whether the
+practical training and configuration of nnUNets effectively translate to real-
+world inference challenges, including resource and deployment constraints.
+To encompass the variations in segmentations by different annotators, not
+only the available abdominal CT scans from Uniklinikum Erlangen provided
+on the challenge website were used, but also the publicly available abdominal
+CT datasets were included in the model training process. Specifically, the
+datasets WORD [26], Amos [27], TotalSegmentator (TS) [18], AbdomenCT-
+1K [28] were used.
+Due to the inference time limitations, the 3D lowres model was submitted
+as its inference was faster than both the 3D fullres and 2D nnUNet model and
+any ensemble model. Although the 2D model delivered the best performance
+on the validation set in terms of DSC, the 3D lowres model was chosen to
+meet the inference time constraints.
+3.3. BreizhSeg
+To address the fact that the training dataset is limited, TS [18] was lever-
+aged and incorporated uncertainty quantification using Adaptable Bayesian
+Neural Network (ABNN) [29]. ABNN transforms this deterministic network
+into a Bayesian one by introducing Bayesian Normalization Layers (BNL),
+which replace standard layer normalization. In BNL, uncertainty is modeled
+by sampling the trainable normalization parameters, γ and β, whose values
+are empirically estimated during fine-tuning. Gaussian perturbation (ϵ) is
+applied to γ before training, injecting randomness that enables the model
+to approximate the posterior distribution of the weights. In this approach,
+ϵ is sampled from a reduced centered Gaussian distribution with reduced
+variance. To capture uncertainty, γ and β are obtained by retraining the
+model 20 times for 10 epochs each, while keeping all other weights fixed.
+This fine-tuning strategy focuses exclusively on learning variability in the
+normalization parameters. A five-fold cross-validation was conducted to en-
+sure dataset diversity. For each fold, the model was retrained under four
+distinct annotation settings: three runs using annotations from individual
+physicians and one run using the combined annotations from all three.
+Training adhered to TS’s constraints, optimization scheme, and loss func-
+tion, with an exponentially decaying scheduler for efficient convergence. Class
+weights for target structures varied across epochs to enhance uncertainty esti-
+mation, while weights for 22 additional anatomical labels were fixed, extend-
+ing the model’s segmentation scope. During inference, the Bayesian model
+14
+estimates uncertainty through multiple predictions. Preprocessing includes
+resampling to a consistent voxel size, standardizing orientation, and segment-
+ing images into overlapping 3D patches. Patch-wise predictions are combined
+using a cosine function for spatial coherence, and uncertainty maps are gen-
+erated by averaging prediction scores, producing confidence values between 0
+and 1. Post-processing retains the largest connected volumes in segmentation
+and uncertainty maps, ensuring anatomically meaningful results. Preprocess-
+ing steps are then reversed to return CT images and segmentation maps to
+their original format for evaluation and interpretation.
+3.4. DLAI
+Convolutional Neural Networks (CNNs) and Vision Transformers (ViTs)
+have driven advancements in biomedical image segmentation but struggle
+with capturing long-range dependencies due to locality and computational
+constraints. To overcome these limitations, DLAI proposes xLSTM-UNet,
+a UNet-based deep learning model enhanced with an efficient parallel cross-
+window module. This architecture integrates Vision-LSTM (xLSTM) as its
+backbone, leveraging xLSTM’s ability to capture long-range dependencies
+effectively, as demonstrated in Vision-LSTM applications for NLP and im-
+age classification [30]. By combining xLSTM’s strengths with UNet’s local
+feature extraction, xLSTM-UNet delivers comprehensive image analysis ca-
+pabilities [31].
+To further enhance segmentation performance, a Cross Attention Trans-
+former (CAT) block into the encoder is incorporated. This block uses Window-
+based Multi-head Cross Attention (W-MCA) [32] to compute feature repre-
+sentations by cross-attending between base and searching windows. Updated
+features are processed through a two-layer MLP with GELU activation, and
+LayerNorm (LN) ensures stability. This enables efficient fusion of features
+across image regions, improving segmentation accuracy.
+This model was implemented in PyTorch and trained with the Adam
+optimizer for 500 epochs. The loss function was a combination of Cross-
+Entropy and Dice Loss for optimization and used a sliding window technique
+for inference. Data preprocessing included resampling, z-score normalization,
+and region-focused cropping. Data augmentation strategies included spatial
+transformations (e.g., rotations, scaling, mirroring), intensity adjustments
+(e.g., Gaussian noise, brightness, contrast), gamma corrections, and elastic
+deformations to simulate anatomical variability. These steps ensure robust
+15
+learning and generalization across diverse datasets. For the inference, the
+sliding window technique was used.
+3.5. BCNAIM
+Public abdominal CT datasets provide a valuable resource for pretraining
+3D segmentation networks like UNet3D [33] or SwinUNETR [34], which can
+then be fine-tuned for specific challenges. However, variations in the number
+of annotated organs across datasets complicate their combined use. Liu et al.
+[35] addressed this by proposing a universal model with CLIP-driven condi-
+tioning that dynamically generates segmentation head parameters based on
+the target organs. The model combines visual features from a backbone (e.g.,
+UNet or SwinUNETR) with text embeddings generated from a prompt, “A
+CT of a [CLS],” where [CLS] corresponds to the target organ. This hybrid
+approach facilitates the use of diverse datasets.
+Building on this, the model used pretrained weights provided in the Ab-
+domenAtlas 1.0 repository [36], providing the largest CT dataset to date
+[37, 38, 39, 40]. Given its smaller number of parameters and faster train-
+ing time, the UNet backbone was selected for fine-tuning on the CURVAS
+Challenge dataset. Fine-tuning the entire vision pathway proved more ef-
+fective than tuning only the controller, despite increased training time. To
+handle annotation protocol differences, three models were trained starting
+from AbdomenAtlas-8K weights, and their logits were ensembled and passed
+through a sigmoid function to generate final segmentation masks.
+Preprocessing steps included downsampling CT images to a 1.5 mm3 res-
+olution, intensity clipping to [-175, 250], and cropping to reduce air outside
+the patient. Fine-tuning involved extracting 3D patches (96 × 96 × 96) from
+regions with non-zero ground truth segmentation, and testing used sliding
+window patches with 50% overlap. To optimize inference time, images were
+preprocessed, and an initial segmentation mask was generated with one fine-
+tuned model before cropping the area of interest. This reduced region was
+then processed by all three models to produce the final segmentation mask.
+3.6. CAI4CAI
+The submitted algorithm was trained using the MONAI framework with
+a SegResNet model from scratch, utilizing all 20 training images. The loss
+function combined Dice and Cross-Entropy with an auxiliary soft-binned
+Average Calibration Error loss [41], where soft-binning assigned probabili-
+ties to bins based on their linear distance rather than a hard assignment.
+16
+The loss components were weighted equally. Training employed the Adam
+optimizer with a learning rate of 0.0001, using a WarmupCosineSchedule
+over 200 epochs. Multiple annotations were treated as separate samples, and
+patch-based training was applied with 144 × 144 × 144 patches, with images
+resampled to 2.00mm³ due to memory constraints. Data augmentation was
+minimal, limited to intensity scaling and random affine transformations.
+3.7. PedictED
+The ensemble model consists of two U-Net++ architectures [42], with
+the first using an EfficientNet-B3 [43] encoder and the second employing a
+MobileViTv2 050 encoder [44], both pretrained on ImageNet. Each model
+processed 512x512 single CT slices, replicated across three channels, and pro-
+duces a four-channel softmax output (background plus three organs). During
+inference, predictions from both models were combined through weighted av-
+eraging, with Model 2 receiving greater weight due to its ability to capture
+finer details in the kidney and liver regions.
+For training, focal loss [45] was used to address class imbalance, par-
+ticularly for the pancreas, while AdamW optimizer [46] and OneCycleLR
+scheduling [47] were employed. The model was trained for 100 epochs with a
+batch size of 64, using data augmentation techniques such as rotations, flips,
+shifts, scaling, and brightness/contrast adjustments. Mixed precision train-
+ing is applied to enhance convergence speed and reduce memory usage. A
+content-aware sampling strategy ensures a balanced ratio of empty and non-
+empty slices per batch. During inference, test-time augmentation (TTA) is
+applied by averaging predictions from the original and horizontally flipped
+slice, improving stability and robustness to geometric variations [48].
+17
+Algorithm Annotations Network
+PatchSize*
+DA
+Loss Function
+Optimizer**
+Public Data
+GPU***
+MedIG
+STAPLE
+nnUNet
+3D
+full-res
+with
+ResidualEn-
+coderUNet
+256×160×160
+1.0, 0.96, 0.96
+Default
+3D
+augmentation
+params (mirror
+augmentation
+disabled)
+in
+nnUNet
+CE + DSC
+SGD1
+0.01
+with
+Polynomial
+Decay
+No
+S
+NVIDIA
+GeForce
+RTX 3090
+PrAEcision All
+annota-
+tions
+used
+separately
+nnUNet
+3D
+low-res
+96×160×160
+2.48, 1.61, 1.61
+spatial
+aug-
+mentation
+techniques
+CE + DSC
+SGD1
+0.01
+with
+Polynomial
+Decay
+WORD,
+Amos,
+TS,
+AbdomenCT-1K
+A100 GPU
+BreizhSeg
+TS
+fine-
+tuned
+20
+times
+using
+four expert-
+specific
+training sets
+and
+one
+combined
+set3
+Adaptable
+Bayesian NN
+& TS
+128×128×128
+1.5, 1.5, 1.5
+-
+CE
++
+DSC
+with
+adaptive
+weighting (0.5–1
+for
+targets,
+0.2
+for others)
+AdamW
+0.0001
+with
+Exponential
+Decay
+pretrained TS
+NVIDIA
+RTX A6000
+with
+48GB
+VRAM
+DLAI
+All
+annota-
+tions
+used
+separately
+xLSTM-UNet
+adding
+a
+CAT*
+block
+within
+the
+encoder
+128×128×128
+1, 1, 1
+Spatial
+(rota-
+tions,
+scaling,
+mirroring)
+and
+intensity
+(noise,
+bright-
+ness,
+contrast,
+gamma)
+aug-
+mentations,
+plus
+elastic
+deformations.
+CE + DSC
+Adam
+0.0001
+No
+Tesla A6000
+GPU
+with
+48GB
+BCNAIM
+Model
+per
+annotator
+UNet
+96×96×96
+1.0, 0.96, 0.96
+MONAI
+transforms2
+CE + DSC
+AdamW
+0.00014
+AbdomenAtlas-
+pretrained
+weights
+NVIDIA
+GeForce
+RTX
+4090
+with 24GB
+CAI4CAI
+All
+annota-
+tions
+used
+separately
+MONAI: Seg-
+ResNet
+144×144×144
+2, 2, 2
+Scale
+inten-
+sities
+and
+random
+affine
+transforms
+CE
++
+DSC
++
+Average
+Calibration
+Er-
+ror
+(weighted
+equally)
+Adam
+0.0001
+with
+WarmupCosi-
+neSchedule
+No
+-
+PredictED
+Majority
+Voting
+Ensemble
+of
+two
+models:
+UNet++
+with
+two
+encoders
+(EfficientNet-
+B3
+and
+Mobile-
+vitv2 050)
+512
+×
+512
+(2D)
+-
+Random
+ro-
+tations
+(90),
+flips,
+shift,
+scale,
+rotate,
+brightness and
+contrast
+ad-
+justments
+Focal Loss
+AdamW
+Scheduler:
+OneCycleLR
+ImageNet-
+pretrained
+encoders
+-
+Table 1: Overview of algorithms submitted to the CURVAS Challenge ordered from best to worst.
+* The Spacing is specified below the Patch Size ** The Learning Rate is specified below the Optimizer *** GPU used for training, for inferences all teams had the same
+environments (1) with momentum of 0.99 & weight decay of 0.001 (2) RandCropByPosNegLabel crops fixed-size regions centered on a foreground or background voxel
+(pos=2, neg=1); RandRotate90 applies random 90° rotations (max k=3), and RandShiftIntensity shifts intensity within a 0.10 range. (3) each set followed a five-fold
+cross-validation strategy (4 sets × 5 folds = 20 runs) (4) with the weight decay 1 × 10−5 & Linear warmup from lr = 0.0 to 0.0001 for 100 epochs, then cosine annealing
+decay for the rest of the training
+18
+3.8. Teams’ summary
+Out of the seven teams, three (MedIG, BreizhSeg, PredictED) submitted
+two algorithms, meaning the total number of submissions was ten. The dif-
+ferent teams’ algorithms are summarized in Table 1. All of the submissions
+were based on a UNet architecture, each with its own variations. Two of
+the teams, MedIG and PredictED, incorporated merging techniques for the
+manual annotations provided, while the others opted not to use any merging
+and instead trained on all labels. All participants trained with small 3D
+patches, and during inference, they employed the sliding window technique
+with specific adaptations for each model, except for one, which trained us-
+ing 2D images from entire CT slices. Most of the algorithms utilized data
+augmentation, and the majority combined Dice Loss and Cross Entropy for
+training. However, PredictED used Focal Loss to address class imbalance
+and CAI4CAI used a combination of Dice Loss and Cross Entropy, as other
+teams, but added a calibration loss based on Average Calibration Error.
+Lastly, four teams (PrAEcision, BreizhSeg, BCNAIM, and PredictED) in-
+corporated external knowledge, either through pretrained models or public
+external databases.
+4. Results
+4.1. Quantitative results
+In this section, we analyze how the adopted metrics provide complemen-
+tary insights and supplement each other. Next, we examine the overall results
+of the challenge, and finally, we evaluate these metrics for each group.
+4.1.1. Metrics Analysis
+Figure 3 shows an analysis across participants of the relationship between
+the different considered metrics. We first focus on the diagonal plots, which
+represent the distribution of each metric across all algorithms.
+For DSC
+and Confidence, the distributions are heavily skewed toward the higher end
+(close to 100%), indicating that most predictions exhibit high segmentation
+accuracy and confidence, which is a reasonable outcome considering we are
+working with relatively large and stable anatomical structures. CRPS, on
+the other hand, shows a wider range, with most values clustering below 20
+cm3 and a long tail. Meanwhile, ECE values are relatively low, reflecting
+strong calibration across all algorithms.
+19
+Figure 3: Pairwise comparison of the different metrics across all algorithms. The diagonal
+shows the distributions of each metric, while the off-diagonal plots depict the relationships
+between pairs of metrics. Each color represents a specific algorithm, consistent with the
+color scheme used in the boxplot Figure 4, ensuring direct comparability between the two
+visualizations.
+20
+The off-diagonal subplots in Figure 3 allow us to examine correlations
+between metrics and reveal several trends. A clear positive correlation is ob-
+served between Confidence and DSC, with higher confidence generally cor-
+responding to higher DSC values, although some outliers exist. Similarly,
+lower CRPS values are associated with higher DSC scores. For Confidence
+versus CRPS, a cluster is evident at high confidence and low CRPS values,
+but variability increases at lower confidence levels. Lastly, no strong relation-
+ship is apparent between ECE and DSC, as ECE values remain close to zero
+regardless of DSC. Similarly, Confidence and ECE exhibit only minimal cor-
+relation, with ECE remaining consistently low across the range of Confidence
+values.
+It is important to emphasize that the four considered metrics comple-
+ment each other well, as they are not highly correlated, providing unique
+insights into algorithm performance. The strongest relationship is between
+DSC and Confidence, which aligns with expectations given the anatomically
+consistent structures to segment in this challenge, except for the pancreatic
+parenchyma. For more complex or smaller structures, such as tumors, dis-
+tinguishing between DSC and confidence could prove more valuable. High
+Confidence in both positive and negative segmentations could play a critical
+role in guiding future follow-ups or decisions for intervention.
+4.1.2. Overall Algorithm Performance
+Table 2 presents the aggregated metrics, offering a clear summary of each
+submission’s performance. The results highlight that the top three teams in
+both Confidence and ECE metrics remain consistent, even though for the
+overall calibration of the model, BreizhSeg has the best score. For the DSC
+metric, DLAI slightly outperforms BreizhSeg, but the difference is minimal
+(∼0.12%). Interestingly, in the CRPS metric, BCNAIM achieves a second-
+place ranking. This suggests that while their confidence may be lower in
+consensus areas, their predictions align more closely with the ground truth
+overall, showing high probabilities in positive regions and near-zero proba-
+bilities elsewhere. However, this contrasts with their 6th-place ranking in
+ECE, indicating inconsistencies in calibration despite strong CRPS perfor-
+mance. CAI4CAI and PredictED have the lowest dices. This is likely because
+PredictED used 2D slices for training, limiting its ability to capture fine seg-
+mentation details and spatial information. Additionally, CAI4CAI’s training
+minimized a loss that incorporated both DSC and calibration as the mini-
+mization goal. This is further supported by CAI4CAI’s superior ranking in
+21
+Algorithm
+DSC (%)
+Confidence (%)
+ECE (×10−3)
+CRPS (cm3)
+MedIG
+94.57 (1)
+97.87 (1)
+1.82 (2)
+8.108 (1)
+PrAEcision
+93.29 (2)
+97.18 (2)
+2.22 (3)
+10.438 (3)
+BreizhSeg
+92.60 (4)
+97.17 (3)
+1.61 (1)
+12.326 (4)
+DLAI
+92.72 (3)
+96.23 (4)
+3.90 (4)
+12.625 (5)
+BCNAIM
+90.52 (5)
+95.88 (5)
+6.21 (6)
+9.727 (2)
+CAI4CAI
+84.98 (7)
+92.10 (7)
+4.48 (5)
+12.828 (6)
+PredictED
+85.79 (6)
+92.39 (6)
+6.64 (7)
+25.895 (7)
+Table 2: Comparison of the different teams’ metrics, ordered according to their final rank-
+ing from best to worst. The relative rankings for each metric are indicated in parentheses
+in each columns respectively.
+the ECE metric compared to the other four methods.
+Figure 4 further illustrates these findings, showing that algorithms with
+better overall performance tend to exhibit less variation, reflecting greater
+stability and robustness. For example, in terms of the ECE metric, BreizhSeg
+not only achieves the best calibration but also displays minimal variation.
+The plot reinforces the trends observed in Table 2, emphasizing the relation-
+ship between high performance and stability across metrics.
+4.1.3. Analysis Per Clinical Group
+In our per-group analysis, we would like to ascertain if there are system-
+atic performances between group A (healthier, less complex cases with 2 cysts
+or less with no contour altering pathologies), group B (moderate presence of
+3-5 cysts, providing a slightly more challenging scenario with with no contour
+altering pathologies), and group C (cases with large 6-10 cysts and patholog-
+ical conditions -liver metastases, hydro nephrosis, adrenal gland metastases,
+missing kidney-, representing the most complex cases). See Subsection 2.2.3.
+Table 3 and 4 present the performance metrics for each algorithm across
+the different clinical groups. MedIG consistently achieves the best overall
+performance, except for ECE, where BreizhSeg outperforms all other meth-
+ods in both Group A and Group C. PrAEcision and BreizhSeg remain close
+competitors in most metrics, though MedIG maintains a clear advantage in
+CRPS, indicating superior volume estimation accuracy and a more precise
+calibration in regression, as reflected by more reliable probability estimates.
+The focus of group-wise performance analysis, however, is not just the ab-
+solute performance of each algorithm but the trends observed across groups
+and whether these trends remain consistent for all methods. A clear pattern
+emerges: segmentation quality (measured by DSC) decreases progressively
+22
+Figure 4: Boxplots of the evaluation metrics (DSC, Confidence, ECE, and CRPS) for all
+algorithms. Each box represents the distribution of metric values for a specific algorithm,
+with each color corresponding to a specific algorithm. In this plot the outliers are not
+considered. Teams ranked from best to worst in the final ranking are visualized from left
+to right on the x-axis of each plot.
+23
+Algorithm
+DSC (%)
+Confidence (%)
+A
+B
+C
+A
+B
+C
+MedIG
+96.51
+97.00
+90.55
+98.85
+98.97
+95.97
+PrAEcision 94.67
+95.40
+90.06
+97.77
+98.03
+95.85
+BreizhSeg
+95.42
+96.09
+86.81
+98.26
+97.83
+95.59
+DLAI
+94.88
+96.15
+87.57
+97.17
+97.89
+93.82
+BCNAIM
+93.37
+93.36
+85.34
+96.97
+97.25
+93.62
+CAI4CAI
+87.20
+89.13
+79.07
+93.20
+93.95
+89.37
+PredictED
+85.69
+86.78
+84.93
+92.67
+92.84
+91.73
+Table 3: Group-wise DSC and Confidence for all segmentation algorithms.
+Algorithm
+ECE (×10−3)
+CRPS (cm3)
+A
+B
+C
+A
+B
+C
+MedIG
+1.88
+1.72
+1.86
+7.52
+8.63
+8.12
+PrAEcision 2.00
+2.16
+2.49
+10.00
+12.58
+8.78
+BreizhSeg
+1.19
+1.15
+2.42
+14.56
+13.56
+9.20
+DLAI
+4.82
+2.59
+4.37
+13.56
+14.91
+9.62
+BCNAIM
+5.85
+6.86
+5.89
+9.296
+10.73
+9.14
+CAI4CAI
+6.26
+4.04
+3.36
+14.68
+13.89
+10.20
+PredictED
+5.97
+7.09
+6.78
+28.73
+28.25
+21.18
+Table 4: Group-wise ECE and CRPS for all segmentation algorithms.
+from Group B to Group A, reaching its lowest values in Group C. This aligns
+with previous observations that Group C presents the greatest challenges,
+containing more complex anatomical structures and ambiguous cases. Simi-
+larly, volume estimation errors (CRPS) increase in the same order (Group B
+−→Group A −→Group C) mirroring the trend in DSC values.
+Regarding calibration, BreizhSeg achieves the best ECE values in Groups
+A and B, while MedIG surpasses it in Group C, suggesting that these models
+produce probability estimates that are more aligned with actual segmenta-
+tion correctness. In contrast, DLAI and PredictED exhibit poor calibration,
+likely indicating overconfidence or underconfidence in their predictions. Ex-
+amining confidence values, CAI4CAI and PredictED consistently show the
+lowest confidence scores across all three groups. This aligns with their cali-
+bration performance, where CAI4CAI also exhibits lower values, suggesting
+that these models either lack confidence in their predictions or fail to align
+well with the ground truth segmentations provided by multiple experts.
+Overall, MedIG demonstrates the most stable performance, exhibiting
+only minor variations in metrics across groups. In contrast, BreizhSeg and
+DLAI show greater variability, performing well in Groups A and B but ex-
+24
+periencing a notable drop in Group C, suggesting that their robustness is
+dataset-dependent. PredictED displays the most unstable performance, with
+significant CRPS fluctuations, indicating that it struggles the most with vol-
+ume predictions. This is evident from its high variability across nearly all
+four metrics, as shown in Figure 4.
+As expected, Group C proves to be the most challenging test subset,
+leading to performance declines across all models.
+An interesting obser-
+vation is the strong correlation between ECE and CRPS, suggesting that
+better-calibrated models tend to produce more accurate volume estimations.
+This relationship is expected, given that predicted volumes are derived by
+summing probabilities from the probabilistic segmentation, which also con-
+tributes to the ECE calculation. A particularly intriguing finding is that, for
+both CRPS and DSC, performance was higher on group B than on Group
+A, contradicting the initial assumption that anatomical differences between
+these two groups would impact segmentation difficulty. This suggests that
+these anatomical variations may be less influential than previously thought
+in the segmentation of these organs and, only for Group C, these pathologies
+might have an effect in the final results.
+4.2. Qualitative results
+We focus our qualitative analysis on a specific test case belonging to
+Group C (see Figure 5), where the kidneys showed a relatively anomalous
+shape, as this allows us to gain some insight on the strengths and weaknesses
+of different models.
+Figure 5 presents a comparative analysis of organ segmentation results
+from multiple algorithms of an image belonging to Group C, alongside with its
+consensus and dissensus GT. Overall, the segmentation quality is high across
+all methods, with strong agreement between models and the consensus GT.
+Most algorithms effectively capture the general shape and boundaries of the
+segmented organs, demonstrating their robustness in standard cases.
+The dissensus GT highlights regions where annotators disagreed, often
+reflected in areas of higher uncertainty. These regions indicate anatomically
+challenging structures where segmentation ambiguity is more pronounced,
+likely due to factors such as low contrast, partial volume effects, or anatomical
+variability.
+The uncertainty maps further emphasize these discrepancies,
+particularly in complex structures like the pancreas, where inter-annotator
+variability is inherently higher.
+25
+Figure 5: Qualitative example of the segmentation produced by the different algorithms
+(ordered left to right by overall ranking) fare shown for the three target structures: pan-
+creas (rows 1–2), kidneys (rows 3–4), and liver (rows 5–6). For each structure, the top
+row displays the consensus ground truth (rows 1, 3, 5) and the corresponding binarized
+segmentations, while the bottom row presents the dissensus ground truth (rows 2, 4, 6)
+alongside the probabilistic predictions (uncertainty maps).
+26
+Interestingly, all algorithms fail to segment one of the kidneys, likely due
+to its anomalous appearance. This failure shows that the models have been
+predominantly illustrates how models trained on scarce data without large
+anatomical variability (Group A) tend fo fail to generalize to more complex
+data (Groups B and C). Notably, the only algorithm that managed to seg-
+ment part of this kidney with relatively high confidence is the PrAEcision,
+which is the one trained with more additional public datasets, highlighting
+the importance of diverse training data in handling atypical cases. Addition-
+ally, the BreizhSeg algorithm, which used a pre-trained model, also showed
+a degree of confidence in detecting this kidney anomaly, as reflected in the
+probabilistic prediction. However, PredictED, used a pre-trained ImageNet
+encoder, which may explain a slight confidence in this anomaly although not
+reaching the confidence level of PrAEcision or BreizhSeg. Finally, BCNAIM,
+which was trained on the public AbdomenAtlas-8k dataset, failed to detect
+the anomalous kidney. This is likely because areas with low confidence, simi-
+lar to what was observed with PredictED, appear to have been set to zero due
+to a heavy post-processing strategy, potentially eliminating even subtle indi-
+cations of uncertainty. These observations indicate that exposure to broader
+datasets or pre-trained knowledge may improve segmentation performance
+in cases deviating from standard anatomical presentations.
+Among all models, MedIG and PrAEcision exhibit the closest alignment
+with the consensus GT, showing minimal deviations.
+Conversely, certain
+algorithms display greater inconsistencies, particularly in the dissensus GT
+regions, where segmentation uncertainty is more apparent. Notably, four al-
+gorithms (PrAEcision, DLAI, CAI4CAI, and PredictED) consistently predict
+nonzero values across the entire segmentation map. This behavior directly
+impacts volume estimation and calibration assessment, potentially leading to
+systematic biases in predicted organ sizes.
+The heatmaps within the dissensus GT further illustrate the extent of
+disagreement between models and human annotators. These discrepancies
+are especially pronounced in smaller, less well-defined structures, underscor-
+ing the need for improved uncertainty quantification methods. While most
+models perform well on larger, well-contrasted organs such as the liver, per-
+formance variability increases in more challenging anatomical regions, such
+as the pancreas.
+This analysis underscores the importance of multi-annotator ground truth
+and uncertainty-aware evaluation in medical image segmentation, given the
+inherent subjectivity in manual annotations. Instead, robust segmentation
+27
+models must account for annotation variability and provide reliable confi-
+dence estimates, ensuring clinically meaningful predictions.
+Additionally,
+our findings suggest that incorporating diverse datasets and leveraging pre-
+trained models can enhance robustness, particularly when encountering anoma-
+lous cases that deviate from the expected anatomical norm.
+4.3. Statistical Analysis
+To analyze the statistical dispersion and robustness of algorithm perfor-
+mance, we employed a bootstrapping procedure to estimate the confidence in
+metric means and assess the stability of algorithm rankings. Specifically, we
+performed 500 bootstrap iterations by resampling the test cases with replace-
+ment. For each iteration, the mean metric score per algorithm was computed,
+followed by ranking all algorithms accordingly. From these bootstrap-derived
+rankings, we calculated the mean rank, standard deviation (as a measure of
+rank stability), and median rank (to provide a robust central tendency mea-
+sure) for each algorithm. Additionally, we computed 95% confidence intervals
+for the mean ranks using ±1.96 times the standard deviation, offering a sta-
+tistical indication of ranking reliability. Algorithms were then sorted by their
+mean rank, with lower values indicating better performance.
+Figure 6 presents the ranking stability of different algorithms across four
+evaluation metrics: DSC, Confidence, ECE, and CRPS. The ranking distri-
+bution for each algorithm is visualized using bubble plots, where the size
+of each bubble represents the percentage of bootstrap samples in which the
+algorithm achieved a given rank. Black crosses indicate the median rank,
+and vertical black lines represent the 95% bootstrap confidence intervals,
+highlighting the variability in rankings across different resampled datasets.
+The x-axis ordering of algorithms varies between subplots because rankings
+are computed independently for each metric. Unlike a fixed ordering, the
+x-axis positions are determined by the distribution of rankings and the me-
+dian rank within each metric. Since algorithms do not perform uniformly
+across all metrics, their relative positions shift accordingly. For instance, an
+algorithm that ranks highly in DSC may perform poorly in CRPS, leading
+to a different placement on the x-axis. This variability highlights the impor-
+tance of multi-metric evaluations when assessing algorithm performance, as
+rankings can change significantly depending on the metric considered.
+The rankings exhibit varying degrees of stability across the four metrics.
+For DSC and Confidence, the top-performing algorithm, MediG, consistently
+achieves rank 1 in most bootstrap samples, as indicated by the large bubble
+28
+Figure 6: Ranking stability for each metric of each algorithm. The size of the bubble
+refers to the amount of times percentage-wise the algorithm ended up in this position of
+the ranking after carrying out a bootstrapping process. Black crosses indicate the median
+rank for each algorithm and black lines indicate the 95% bootstrap intervals across samples.
+29
+at this position. In contrast, algorithms such as CAI4CAI and PredictED
+frequently occupy the lower ranks, with relatively small variations in ranking
+distributions, suggesting consistently weaker performance in these metrics.
+The spread of rankings, as observed in the confidence intervals, varies across
+algorithms, indicating that some methods are more stable in their ranking
+placement than others.
+In ECE, the ranking distribution highlights that BreizhSeg and MedIG
+achieve top positions with high frequency, suggesting strong calibration capa-
+bilities. However, an interesting observation is that, for some algorithms, the
+median ranking (black cross) does not align with the largest bubble, indicat-
+ing that although a rank is frequently occupied, variability across bootstrap
+samples influences the final median position, potentially signaling skewed dis-
+tributions in ranking assignments. For instance, DLAI and BCNAIM show a
+noticeable shift between the most frequent rank and the median, suggesting
+occasional fluctuations in ranking.
+For CRPS, MedIG and PrAEcision again demonstrate superior perfor-
+mance, consistently ranking among the top algorithms. However, a similar
+pattern to ECE emerges, where some algorithms have their median ranking
+positioned differently from the most frequently occupied rank. This effect is
+particularly evident for BreizhSeg and BCNAIM, where a broader ranking
+distribution suggests greater sensitivity to bootstrap sampling. Conversely,
+PredictED ranks the lowest with a large bubble at rank 7, indicating fre-
+quent poor performance. The broad confidence intervals for some algorithms
+suggest that performance variations across different bootstrap samples are
+non-negligible.
+The ranking stability analysis offers valuable insights into the robust-
+ness and consistency of different algorithms across multiple evaluation met-
+rics. MedIG emerges as the most stable and consistently high-performing
+algorithm, whereas CAI4CAI and PredictED exhibit lower and more vari-
+able rankings. The variability in bootstrap confidence intervals highlights
+which algorithms maintain stable performance and which are more sensitive
+to dataset variations. Notably, the discrepancies between the most frequent
+rank and the median in ECE and CRPS suggest skewed ranking distributions,
+emphasizing the need to consider both ranking stability and variability. Fur-
+thermore, the differences in x-axis ordering across metrics underscore the
+diverse behavior of algorithms, reinforcing the importance of comprehensive
+multi-metric evaluations for assessing algorithm performance.
+30
+5. Discussion
+This paper presents the results of the CURVAS Challenge at MICCAI
+2024. All submissions were deep learning-based, specifically UNet architec-
+tures, reaffirming DL’s dominance in abdominal medical image segmentation.
+All methods achieved comparable average performance, although a more nu-
+anced analysis revealed hidden trends and different scenarios where some
+methods performed better than others.
+5.1. Best Performing methods
+The top performing teams are the MedIG, PrAEcision and BreizhSeg.
+The three of them are based in nnUnet models but for the inference and
+uncertainty quantification, MedIG and PrAEcision do not explicitly focus
+on uncertainty quantification but rather focus on accuracy and segmenta-
+tion quality. MedIG uses the 3D full-resolution version incorporating post-
+processing to meet storage restrictions and speed up processing. PrAEcision
+uses the 3D low-resolution nnUNet to meet the challenge’s inference time
+constraints since the low-resolution model sacrifices some accuracy but en-
+sures faster processing. BreizhSeg uses a pre-trained Total Segmentator (TS)
+with an Adaptable Bayesian Neural Network (ABNN) to provide uncertainty
+quantification, leveraging Monte Carlo sampling to generate confidence maps
+and improve robustness in the face of limited data. This is a more com-
+putationally intensive approach, requiring multiple predictions to estimate
+uncertainty, which may slow inference but provides valuable uncertainty in-
+formation.
+The three top-ranked strategies also engage in preprocessing steps to stan-
+dardize the data, such as resampling and standardizing voxel size (Breizh-
+Seg) or optimizing input sizes and formats for faster inference (MedIG and
+PrAEcision) but the approaches to handle the variabilities in the annotations
+differ. MedIG uses STAPLE to combine multiple annotations into a single
+consensus segmentation by iterating on sensitivity and specificity estimates;
+PrAEcision incorporates a wider variety of training datasets, which indirectly
+handles the variability by exposing the model to more diverse data from dif-
+ferent sources; and BreizhSeg relies on a Bayesian approach (ABNN) and
+uses TS to handle uncertainty quantification, focusing on the model’s ability
+to estimate uncertainty, which is an advanced approach to handle limited
+training data and generalization, while also helping to deal with annotation
+variability.
+31
+In summary, all three teams show common preference for nnU-Net’s
+proven effectiveness in medical imaging segmentation, but extending it with
+different mechanisms to make it more robust to data scarcity and aware of
+annotation uncertainty as well as employing different strategies to handle an-
+notation variability, training data, model selection, and inference efficiency.
+MedIG focuses on post-processing to optimize nnU-Net, PrAEcision empha-
+sizes fast inference with a low-res nnU-Net and expanded data, and BreizhSeg
+integrates uncertainty quantification through a Bayesian approach to improve
+segmentation with limited data.
+5.2. Clinical applications
+Understanding and analyzing variability is essential in medical imaging,
+where discrepancies in expert annotations or algorithmic outputs can signif-
+icantly impact diagnosis and patient care. Acknowledging this uncertainty
+and incorporating multiple perspectives enhances both the accuracy and re-
+liability of clinical decisions. Several clinical applications could benefit from
+the integration of variability studies, particularly in areas such as radiol-
+ogy, oncology, and pathology. For instance, in radiology, variability studies
+could help refine tumor segmentation techniques, allowing for more accurate
+measurements of tumor size and location, which are critical for treatment
+planning and monitoring. In oncology, understanding variability in imag-
+ing data could improve the assessment of treatment response, as different
+radiologists or automated systems may interpret changes in tumor morphol-
+ogy differently. By quantifying these variations, clinicians could better ac-
+count for uncertainties when making decisions about patient management.
+In pathology, variability studies could be applied to the classification of tis-
+sue samples, ensuring that multiple experts or algorithms arrive at consistent
+results, reducing the risk of misclassification in diagnosing diseases such as
+cancer.
+Furthermore, integrating variability analysis into clinical decision
+support systems could enhance personalized medicine, helping tailor treat-
+ment strategies based on the degree of uncertainty in individual cases. Ulti-
+mately, applying these insights to clinical practice would lead to more robust,
+transparent, and reliable diagnostic processes, providing clinicians with the
+information needed to make better-informed, patient-centered decisions.
+Despite the increasing awareness of this issue, there remains a gap in
+applying these insights to real-world clinical settings. There is a clear need
+to develop practical methods for leveraging variability information in ways
+that enhance the clinical workflow and support clinicians in making more
+32
+informed decisions.
+Additionally, it is essential that the concept of non-
+golden standard ground truths becomes more widely accepted within both
+the technical and medical communities.
+5.3. Lessons learned and limitations
+An important consideration that emerged from this challenge is the choice
+of evaluation metrics used to assess algorithm performance. These metrics
+should be optimized not only for clinical relevance but also for computational
+efficiency, particularly when handling large-scale volumetric images. Further-
+more, incorporating ranking variability into the evaluation framework would
+enable a more nuanced and robust interpretation of algorithm performance,
+ultimately leading to more reliable final rankings.
+One of the main limitations of this challenge lies in the dataset size. While
+we prioritized acquiring multiple expert annotations per CT scan—a critical
+factor for assessing inter-rater uncertainty—this came at the cost of a reduced
+number of total scans. Future editions of the challenge would benefit from
+engaging multiple clinical centers to increase the diversity and variability of
+the dataset. Additionally, more rigorous quality assurance procedures should
+be implemented during the data preparation phase. In the initial version of
+the dataset published on Zenodo, a few instances of corrupted metadata were
+identified. Although these issues were promptly detected and corrected, we
+acknowledge the need for stricter validation to avoid similar occurrences in
+future releases.
+6. Conclusion and future directions
+This study highlights the importance of evaluating medical image segmen-
+tation models beyond traditional accuracy metrics by incorporating multi-
+annotator ground truth, uncertainty estimation, and ranking stability. Our
+findings underscore key challenges in medical image segmentation and pro-
+vide insights into how models can be improved for real-world applications.
+First, there is no single ”gold standard” in medical image segmentation
+due to the inherent subjectivity in manual annotations.
+Multi-annotator
+ground truth is essential for capturing the variability in expert opinions and
+ensuring a more comprehensive evaluation of segmentation performance. Fu-
+ture models should account for this variability rather than relying solely on
+single-label annotations. Second, uncertainty estimation plays a critical role
+33
+in medical image segmentation, particularly in anatomically complex or low-
+contrast regions where inter-annotator disagreement is high. Models that
+incorporate probabilistic outputs or Bayesian approaches demonstrate im-
+proved robustness by providing reliable confidence estimates. This suggests
+that future segmentation frameworks should integrate uncertainty quantifi-
+cation techniques to better inform clinical decision-making. Furthermore,
+model calibration is crucial for ensuring that predicted confidence scores ac-
+curately reflect the true likelihood of correct segmentation. Poorly calibrated
+models may produce overconfident or underconfident predictions, leading to
+misinterpretation of segmentation outputs. Our results indicate that models
+with superior calibration not only provide more reliable confidence estimates
+but also tend to yield more accurate volume estimations, which is essen-
+tial for clinical applications requiring precise organ measurements. Third,
+the choice of training data and pre-trained models significantly impacts seg-
+mentation performance and generalizability. Algorithms trained on diverse
+datasets, particularly those incorporating public data and pre-trained en-
+coders, tend to handle atypical cases more effectively. This highlights the
+importance of dataset diversity and transfer learning in medical imaging ap-
+plications. Finally, multi-metric evaluation is necessary to fully understand
+model performance. While segmentation accuracy (e.g., DSC) remains a pri-
+mary benchmark, other metrics such as calibration, ranking stability, and
+volume estimation accuracy provide deeper insights into model reliability.
+Evaluating models through a comprehensive set of criteria ensures that they
+perform robustly across different anatomical structures and patient popula-
+tions.
+A major challenge for future CURVAS editions will be not only identi-
+fying new clinical applications for concepts such as variability, uncertainty,
+and calibration, but also determining how to effectively communicate these
+aspects to clinicians. Conveying the importance of these elements is essential
+to ensure diagnostic decision-making in a more comprehensive understanding
+of both data and model limitations. This involves moving beyond presenting
+only point predictions to also providing insights into prediction confidence
+and expert disagreement. In parallel, the development of segmentation mod-
+els should prioritize generalizability and the generation of well-calibrated,
+uncertainty-aware predictions.
+To achieve this, future efforts should em-
+phasize the integration of diverse datasets, use of pre-trained models, and
+adoption of advanced calibration techniques—alongside the inclusion of ex-
+pert discrepancies in both training and evaluation pipelines—to build more
+34
+trustworthy and clinically relevant AI systems.
+CRediT authorship contribution statement
+Meritxell Riera-Mar´ın: Conceptualization, Methodology, Software,
+Investigation, Writing - Original Draft, Writing - Review & Editing, Data
+Curation, Formal analysis, Validation. Sikha O K: Conceptualization, Soft-
+ware, Visualization. J´ulia Rodr´ıguez-Comas: Conceptualization, Fund-
+ing acquisition. Matthias Stefan May: Conceptualization, Data Curation,
+Funding acquisition. Joy-Marie Kleiss: Data Curation, Investigation, Re-
+sources. Anton Aubanell: Data Curation. Andreu Antolin: Data Cu-
+ration. Javier Garc´ıa-L´opeza: Supervision, Writing - Review & Editing,
+Funding acquisition. Miguel A. Gonz´alez-Ballester: Supervision, Writ-
+ing - Review & Editing, Funding acquisition. Adri´an Galdr´an: Conceptu-
+alization, Supervision, Writing - Review & Editing, Funding acquisition.
+Zhaohong Pan: Software, Investigation, Writing - Review & Editing.
+Xiang Zhou: Software, Investigation. Xiaokun Liang: Software, Inves-
+tigation. Franciskus Xaverius Erick: Software, Investigation, Writing -
+Review & Editing. Andrea Prenner: Software, Investigation, Writing - Re-
+view & Editing. C´edric H´emon: Software, Investigation, Writing - Review
+& Editing. Valentin Boussot: Software, Investigation, Writing - Review &
+Editing. Jean-Louis Dillensegers: Software, Investigation. Jean-Claude
+Nunes: Software, Investigation. Abdul Qayyum: Software, Investigation,
+Writing - Review & Editing.
+Moona Mazher: Software, Investigation.
+Steven A Niederer: Software, Investigation. Kaisar Kushibar: Soft-
+ware, Investigation, Writing - Review & Editing.
+Carlos Mart´ın-Isla:
+Software, Investigation. Petia Radeva: Software, Investigation. Karim
+Lekadir: Software, Investigation. Theodor Barfoot: Software, Investi-
+gation, Writing - Review & Editing. Luis C. Garcia Peraza Herrera:
+Software, Investigation. Ben Glocker: Software, Investigation. Tom Ver-
+cauteren: Software, Investigation. Lucas Gago: Software, Investigation,
+Writing - Review & Editing. Justin Englemann: Software, Investigation,
+Writing - Review & Editing.
+Code availability
+To support users with the evaluation of the algorithms, we have made the
+evaluation code used in this manuscript publicly available in the Challenge’s
+GitHub repository [17].
+35
+Declaration of Competing Interest
+The authors confirm that they have no known financial or personal con-
+flicts of interest that could have influenced the work presented in this paper.
+Data availability
+All data has been uploaded on Zenodo [16].
+Acknowledgments
+The authors gratefully acknowledge funding from the following sources:
+This work was supported by the Catalan Government through the ”Doc-
+torats Industrials” program, specifically the industrial doctorate AGAUR
+2021-063, in collaboration with Sycai Technologies SL. The challenge is part
+of the Proyectos de Colaboraci´on P´ublico-Privada (CPP2021-008364), funded
+by MCIN/AEI/10.13039/501100011033 and co-financed by the European
+Union through the NextGenerationEU/PRTR initiative. Addiotional fund-
+ing was provided by the ”NUM 2.0” project (FKZ: 01KX2121) and the Eu-
+reka Eurostars-3 joint program (1661 DARE-KPL), co-funded by the Horizon
+Europe Research and Innovation Framework Programme of the European
+Union (FKZ: 347 01QE2249C).
+A.G. is supported by grant RYC2022-037144-I, funded by
+MCIN/AEI/10.13039/501100011033 and co-financed by FSE+.
+The work of Z.P., X.Z. and X.L. is supported by grants from the National
+Key Research and Develop Program of China (2023YFC2411502) and the
+National Natural Science Foundation of China (82202954).
+A.P. and F.E. received support from the High-tech agenda Bavaria and
+HPC resources provided by the Erlangen National High Performance Com-
+puting Center (NHR@FAU) of the Friedrich-Alexander-Universit¨at Erlangen-
+N¨urnberg (FAU) under the NHR project b180dc. NHR@FAU hardware is
+partially funded by the German Research Foundation (DFG) - 440719683.
+Support was also received from the ERC project MIA-NORMAL 101083647
+and DFG KA 5801/2-1, INST 90/1351-1, and 512819079.
+K.K. holds the Juan de la Cierva fellowship with reference number FJC2021-
+047659-I.
+V.B. was supported by the Brittany Region through its Allocations de
+Recherche Doctorale framework and by the French National Research Agency
+36
+as part of the VATSop project (ANR-20-CE19-0015). C.H. was supported
+through a PhD scholarship grant from Elekta AB.
+Supplementary material
+The detailed challenge proposal is available on Zenodo [49].
+References
+[1] C. H. Sudre, B. G. Anson, S. Ingala, C. D. Lane, D. Jimenez, L. Haider,
+T. Varsavsky, R. Tanno, L. Smith, S. Ourselin, R. H. J¨ager, M. J.
+Cardoso, Let’s agree to disagree:
+Learning highly debatable multi-
+rater labelling, in: MICCAI 2019, 2019, pp. 665–673. doi:10.1007/
+978-3-030-32251-9\_73.
+[2] J. Zhang, Y. Zheng, Y. Shi, A soft label method for medical image seg-
+mentation with multirater annotations, Computational Intelligence and
+Neuroscience 2023 (1) (2023) 1883597. doi:10.1155/2023/1883597.
+[3] M. Islam, B. Glocker, Spatially varying label smoothing: Capturing
+uncertainty from expert annotations, in: IPMI, 2021, pp. 677–688. doi:
+10.1007/978-3-030-78191-0\_52.
+[4] M. H. Jensen, D. R. Jørgensen, R. Jalaboi, M. E. Hansen, M. A. Olsen,
+Improving uncertainty estimation in convolutional neural networks using
+inter-rater agreement, in: MICCAI 2019, 2019, pp. 540–548. doi:10.
+1007/978-3-030-32251-9\_59.
+[5] A. Jungo, R. Meier, E. Ermis, M. Blatti-Moreno, E. Herrmann,
+R. Wiest, M. Reyes, On the effect of inter-observer variability for a reli-
+able estimation of uncertainty of medical image segmentation, in: MIC-
+CAI 2018, 2018, pp. 682–690. doi:10.1007/978-3-030-00928-1\_77.
+[6] S. Tuijn, F. Janssens, P. Robben, H. van den Bergh, Reducing interrater
+variability and improving health care: a meta-analytical review, Journal
+of Evaluation in Clinical Practice 18 (4) (2012) 887–895. doi:10.1111/
+j.1365-2753.2011.01705.x.
+37
+[7] M. Ng, F. Guo, L. Biswas, S. E. Petersen, S. K. Piechnik, S. Neubauer,
+G. Wright, Estimating uncertainty in neural networks for cardiac mri
+segmentation: A benchmark study, IEEE Transactions on Biomedical
+Engineering (2022).
+[8] T. DeVries, G. W. Taylor, Leveraging uncertainty estimates for predict-
+ing segmentation quality, arXiv preprint arXiv:1807.00502 (2018).
+[9] M. Abdar, F. Pourpanah, S. Hussain, D. Rezazadegan, L. Liu,
+M. Ghavamzadeh, P. Fieguth, X. Cao, A. Khosravi, U. R. Acharya,
+et al., A review of uncertainty quantification in deep learning: Tech-
+niques, applications and challenges, Information fusion 76 (2021) 243–
+297.
+[10] B. Lambert, F. Forbes, S. Doyle, H. Dehaene, M. Dojat, Trustworthy
+clinical ai solutions: A unified review of uncertainty quantification in
+deep learning models for medical image analysis, Artificial Intelligence
+in Medicine 150 (2024) 102830. doi:10.1016/j.artmed.2024.102830.
+[11] M. Bernhardt, F. D. S. Ribeiro, B. Glocker, Failure detection in medical
+image classification: A reality check and benchmarking testbed, Trans-
+actions on Machine Learning Research (Jun. 2022).
+[12] C. Guo, G. Pleiss, Y. Sun, K. Q. Weinberger, On calibration of modern
+neural networks, in: Proceedings of the 34th International Conference
+on Machine Learning - Volume 70, ICML’17, JMLR.org, Australia, 2017,
+pp. 1321–1330.
+[13] J. Nixon, M. W. Dusenberry, L. Zhang, G. Jerfel, D. Tran, Measuring
+calibration in deep learning, in: Proceedings of the IEEE/CVF CVPR
+Workshops, 2019.
+[14] M. Chua, D. Kim, J. Choi, N. G. Lee, V. Deshpande, J. Schwab, M. H.
+Lev, R. G. Gonzalez, M. S. Gee, S. Do, Tackling prediction uncertainty
+in machine learning for healthcare, Nature Biomedical Engineering 7 (6)
+(2023) 711–718. doi:10.1038/s41551-022-00988-x.
+[15] T. Silva Filho, H. Song, M. Perello-Nieto, R. Santos-Rodriguez, M. Kull,
+P. Flach, Classifier calibration: a survey on how to assess and improve
+predicted class probabilities, Machine Learning 112 (9) (2023) 3211–
+3260. doi:10.1007/s10994-023-06336-7.
+38
+[16] M. Riera-Mar´ın, J. G. L´opez, J. Kleiss, S. O. K, A. Galdr´an, M. May,
+M. A. Gonz´alez-Ballester, J. Rodr´ıguez-Comas, M. Schmidt, C. Hes-
+sman, A. Aubanell, A. Antol´ın, Curvas challenge dataset: Calibration
+and uncertainty for multirater volume assessment in multiorgan segmen-
+tation, accessed: 2024-10-14 (2024). doi:10.5281/zenodo.13767408.
+URL https://zenodo.org/records/13767408
+[17] S. Technologies, Curvas challenge repository, accessed:
+2025-02-05
+(2024).
+URL
+https://github.com/SYCAI-Technologies/
+curvas-challenge/
+[18] J. Wasserthal, H.-C. Breit, M. T. Meyer, M. Pradella, D. Hinck, A. W.
+Sauter, T. Heye, D. Boll, J. Cyriac, S. Yang, M. Bach, M. Segeroth,
+Totalsegmentator: Robust segmentation of 104 anatomic structures in
+ct images, Radiology: Artificial Intelligence (2023). doi:10.1148/ryai.
+230024.
+URL https://pubs.rsna.org/doi/10.1148/ryai.230024
+[19] F. Isensee, P. F. Jaeger, S. A. Kohl, J. Petersen, K. H. Maier-Hein,
+nnu-net: a self-configuring method for deep learning-based biomedical
+image segmentation, Nature Methods 18 (2021) 203–211. doi:10.1038/
+s41592-020-01008-z.
+URL https://doi.org/10.1038/s41592-020-01008-z
+[20] J. B. Westenberger, Automatische gewebesegmentierung der nieren und
+des pankreas im ganzk¨orper-mrt mittels deep learning, Ph.D. thesis,
+Eberhard Karls Universit¨at T¨ubingen (2021).
+URL http://dx.doi.org/10.15496/publikation-63135
+[21] F. X. Brachmann,
+Evaluation einer semi-automatischen segmen-
+tierungsmethode f¨ur die volumetrie des renalen kortex, der medulla
+und des gesamten nierenparenchyms in nativen t1-gewichteten mr-
+bildern, Ph.D. thesis, Medizinischen Fakult¨at der Friedrich-Alexander-
+Universit¨at Erlangen-N¨urnberg (2021).
+URL https://open.fau.de/items/cb6cd403-3178-4884-98c4-5098178658ba
+[22] T. Heimann, B. van Ginneken, M. A. Styner, Y. Arzhaeva, V. Aurich,
+C. Bauer, A. Beck, C. Becker, R. Beichel, G. Bekes, F. Bello, G. Bin-
+nig, H. Bischof, A. Bornik, P. M. Cashman, Y. Chi, A. Cordova, B. M.
+39
+Dawant, M. Fidrich, J. D. Furst, D. Furukawa, L. Grenacher, J. Horneg-
+ger, D. Kainm¨uller, R. I. Kitney, H. Kobatake, H. Lamecker, T. Lange,
+J. Lee, B. Lennon, R. Li, S. Li, H. P. Meinzer, G. Nemeth, D. S. Raicu,
+A. M. Rau, E. M. van Rikxoort, M. Rousson, L. Rusko, K. A. Saddi,
+G. Schmidt, D. Seghers, A. Shimizu, P. Slagmolen, E. Sorantin, G. Soza,
+R. Susomboon, J. M. Waite, A. Wimmer, I. Wolf, Comparison and eval-
+uation of methods for liver segmentation from ct datasets, IEEE Trans-
+actions on Medical Imaging 28 (8) (2009) 1251–1265, epub 2009 Feb 10.
+doi:10.1109/TMI.2009.2013851.
+[23] S. K. Warfield, K. H. Zou, W. M. Wells, Simultaneous truth and perfor-
+mance level estimation (staple): an algorithm for the validation of im-
+age segmentation, IEEE Transactions on Medical Imaging 23 (7) (2004)
+903–921. doi:10.1109/TMI.2004.828354.
+[24] L. Huang, A. Miron, K. Hone, Y. Li, Segmenting medical images: From
+unet to res-unet and nnunet (2024). arXiv:2407.04353.
+URL https://arxiv.org/abs/2407.04353
+[25] H. B. Li, F. Navarro, I. Ezhov, A. Bayat, D. Das, F. Kofler, S. Shit,
+D. Waldmannstetter, J. C. Paetzold, X. Hu, B. Wiestler, L. Zimmer,
+T. Amiranashvili, C. Prabhakar, C. Berger, J. Weidner, M. Alonso-
+Basant, A. Rashid, U. Baid, W. Adel, D. Ali, B. Baheti, Y. Bai, I. Bhatt,
+S. C. Cetindag, W. Chen, L. Cheng, P. Dutand, L. Dular, M. A. Elattar,
+M. Feng, S. Gao, H. Huisman, W. Hu, S. Innani, W. Jiat, D. Karimi,
+H. J. Kuijf, J. T. Kwak, H. L. Le, X. Lia, H. Lin, T. Liu, J. Ma, K. Ma,
+T. Ma, I. Oksuz, R. Holland, A. L. Oliveira, J. B. Pal, X. Pei, M. Qiao,
+A. Saha, R. Selvan, L. Shen, J. L. Silva, Z. Spiclin, S. Talbar, D. Wang,
+W. Wang, X. Wang, Y. Wang, R. Xia, K. Xu, Y. Yan, M. Yergin, S. Yu,
+L. Zeng, Y. Zhang, J. Zhao, Y. Zheng, M. Zukovec, R. Do, A. Becker,
+A. Simpson, E. Konukoglu, A. Jakab, S. Bakas, L. Joskowicz, B. Menze,
+Qubiq: Uncertainty quantification for biomedical image segmentation
+challenge (2024). arXiv:2405.18435.
+URL https://arxiv.org/abs/2405.18435
+[26] X. Luo, W. Liao, J. Xiao, J. Chen, T. Song, X. Zhang, K. Li, D. N.
+Metaxas, G. Wang, S. Zhang, Word: A large scale dataset, benchmark
+and clinical applicable study for abdominal organ segmentation from
+ct image, Medical Image Analysis 82 (2022) 102642. doi:10.1016/j.
+40
+media.2022.102642.
+URL http://dx.doi.org/10.1016/j.media.2022.102642
+[27] Y. Ji, H. Bai, J. Yang, C. Ge, Y. Zhu, R. Zhang, Z. Li, L. Zhang, W. Ma,
+X. Wan, P. Luo, Amos: A large-scale abdominal multi-organ benchmark
+for versatile medical image segmentation (2022). arXiv:2206.08023.
+URL https://arxiv.org/abs/2206.08023
+[28] J. Ma, Y. Zhang, S. Gu, C. Zhu, C. Ge, Y. Zhang, X. An, C. Wang,
+Q. Wang, X. Liu, S. Cao, Q. Zhang, S. Liu, Y. Wang, Y. Li, J. He,
+X. Yang, Abdomenct-1k: Is abdominal organ segmentation a solved
+problem?, IEEE Transactions on Pattern Analysis and Machine Intelli-
+gence 44 (10) (2022) 6695–6714. doi:10.1109/TPAMI.2021.3100536.
+[29] G. Franchi, O. Laurent, M. Legu´ery, A. Bursuc, A. Pilzer, A. Yao, Make
+me a bnn: A simple strategy for estimating bayesian uncertainty from
+pre-trained models (2023). arXiv:2312.15297.
+URL https://arxiv.org/abs/2312.15297
+[30] B. Alkin, M. Beck, K. P¨oppel, S. Hochreiter, J. Brandstetter, Vision-
+lstm: xlstm as generic vision backbone (2024). arXiv:2406.04303.
+URL https://arxiv.org/abs/2406.04303
+[31] T. Chen, C. Ding, L. Zhu, T. Xu, D. Ji, Y. Wang, Y. Zang, Z. Li, xlstm-
+unet can be an effective 2d and 3d medical image segmentation backbone
+with vision-lstm (vil) better than its mamba counterpart (2024). arXiv:
+2407.01530.
+URL https://arxiv.org/abs/2407.01530
+[32] A. Qayyum, I. Razzak, M. Mazher, X. Lu, S. A. Niederer, Un-
+supervised
+unpaired
+multiple
+fusion
+adaptation
+aided
+with
+self-
+attention
+generative
+adversarial
+network
+for
+scar
+tissues
+seg-
+mentation
+framework,
+Information
+Fusion
+106
+(2024)
+102226.
+doi:https://doi.org/10.1016/j.inffus.2024.102226.
+URL
+https://www.sciencedirect.com/science/article/pii/
+S1566253524000046
+[33] ¨O. C¸i¸cek, A. Abdulkadir, S. S. Lienkamp, T. Brox, O. Ronneberger, 3d
+u-net: Learning dense volumetric segmentation from sparse annotation,
+in: S. Ourselin, L. Joskowicz, M. R. Sabuncu, G. Unal, W. Wells (Eds.),
+41
+MICCAI 2016, Springer International Publishing, Cham, 2016, pp. 424–
+432.
+[34] Y. Tang, D. Yang, W. Li, H. R. Roth, B. Landman, D. Xu, V. Nath,
+A. Hatamizadeh, Self-supervised pre-training of swin transformers for 3d
+medical image analysis, in: 2022 IEEE/CVF Conference on Computer
+Vision and Pattern Recognition (CVPR), 2022, pp. 20698–20708. doi:
+10.1109/CVPR52688.2022.02007.
+[35] J. Liu, Y. Zhang, J.-N. Chen, J. Xiao, Y. Lu, B. A. Landman, Y. Yuan,
+A. Yuille, Y. Tang, Z. Zhou, Clip-driven universal model for organ
+segmentation and tumor detection, in: 2023 IEEE/CVF International
+Conference on Computer Vision (ICCV), IEEE, 2023, p. 21095–21107.
+doi:10.1109/iccv51070.2023.01934.
+URL http://dx.doi.org/10.1109/ICCV51070.2023.01934
+[36] Z. Zhou, Abdomenatlas, https://https://github.com/MrGiovanni/
+AbdomenAtlas (2023).
+[37] C. Qu, T. Zhang, H. Qiao, J. Liu, Y. Tang, A. Yuille, Z. Zhou,
+Abdomenatlas-8k: Annotating 8,000 ct volumes for multi-organ seg-
+mentation in three weeks (2023). arXiv:2305.09666.
+URL https://arxiv.org/abs/2305.09666
+[38] W. Li, C. Qu, X. Chen, P. R. Bassi, Y. Shi, Y. Lai, Q. Yu,
+H. Xue, Y. Chen, X. Lin, Y. Tang, Y. Cao, H. Han, Z. Zhang,
+J. Liu, T. Zhang, Y. Ma, J. Wang, G. Zhang, A. Yuille, Z. Zhou,
+Abdomenatlas:
+A
+large-scale,
+detailed-annotated,
+and
+multi-
+center dataset for efficient transfer learning and open algorith-
+mic
+benchmarking,
+Medical
+Image
+Analysis
+97
+(2024)
+103285.
+doi:https://doi.org/10.1016/j.media.2024.103285.
+URL
+https://www.sciencedirect.com/science/article/pii/
+S136184152400210X
+[39] W. Li, A. Yuille, Z. Zhou, How well do supervised 3d models transfer
+to medical imaging tasks?, in: The Twelfth International Conference on
+Learning Representations, 2024.
+URL https://openreview.net/forum?id=AhizIPytk4
+42
+[40] P. R. Bassi, W. Li, Y. Tang, F. Isensee, Z. Wang, J. Chen, Y.-C. Chou,
+Y. Kirchhoff, M. Rokuss, Z. Huang, J. Ye, J. He, T. Wald, C. Ulrich,
+M. Baumgartner, S. Roy, K. H. Maier-Hein, P. Jaeger, Y. Ye, Y. Xie,
+J. Zhang, Z. Chen, Y. Xia, Z. Xing, L. Zhu, Y. Sadegheih, A. Bozorg-
+pour, P. Kumari, R. Azad, D. Merhof, P. Shi, T. Ma, Y. Du, F. Bai,
+T. Huang, B. Zhao, H. Wang, X. Li, H. Gu, H. Dong, J. Yang, M. A.
+Mazurowski, S. Gupta, L. Wu, J. Zhuang, H. Chen, H. Roth, D. Xu,
+M. B. Blaschko, S. Decherchi, A. Cavalli, A. L. Yuille, Z. Zhou, Touch-
+stone benchmark: Are we on the right way for evaluating ai algorithms
+for medical segmentation?, Conference on Neural Information Process-
+ing Systems (2024).
+[41] T. Barfoot, L. C. Garcia Peraza Herrera, B. Glocker, T. Vercauteren,
+Average calibration error: A differentiable loss for improved reliability
+in image segmentation, in: *MICCAI 2024*, 2024, pp. 139–149. doi:
+10.1007/978-3-031-72114-4\_14.
+[42] Z. Zhou, M. M. R. Siddiquee, N. Tajbakhsh, J. Liang, Unet++: Re-
+designing skip connections to exploit multiscale features in image seg-
+mentation, IEEE Transactions on Medical Imaging 39 (6) (2020) 1856–
+1867. doi:10.1109/TMI.2019.2959609.
+[43] M. Tan, Q. Le, Efficientnet: Rethinking model scaling for convolutional
+neural networks, in: K. Chaudhuri, R. Salakhutdinov (Eds.), Proceed-
+ings of the 36th International Conference on Machine Learning, Vol. 97
+of Proceedings of Machine Learning Research, PMLR, 2019, pp. 6105–
+6114.
+URL https://proceedings.mlr.press/v97/tan19a.html
+[44] S. Mehta, M. Rastegari, Mobilevit: Light-weight, general-purpose, and
+mobile-friendly vision transformer (2022). arXiv:2110.02178.
+URL https://arxiv.org/abs/2110.02178
+[45] T.-Y. Lin, P. Goyal, R. Girshick, K. He, P. Doll´ar, Focal loss for dense
+object detection, in: 2017 IEEE International Conference on Computer
+Vision (ICCV), 2017, pp. 2999–3007. doi:10.1109/ICCV.2017.324.
+[46] I. Loshchilov, F. Hutter, Decoupled weight decay regularization (2019).
+arXiv:1711.05101.
+URL https://arxiv.org/abs/1711.05101
+43
+[47] L. N. Smith,
+A disciplined approach to neural network hyper-
+parameters: Part 1 – learning rate, batch size, momentum, and weight
+decay (2018). arXiv:1803.09820.
+URL https://arxiv.org/abs/1803.09820
+[48] L. Perez, J. Wang, The effectiveness of data augmentation in image
+classification using deep learning (2017). arXiv:1712.04621.
+URL https://arxiv.org/abs/1712.04621
+[49] M. Riera i Mar´ın, J. Garc´ıa L´opez, J. Kleiss, S. O K, A. Galdr´an,
+M. May, M. A. Gonz´alez-Ballester, J. Rodr´ıguez Comas, M. Schmidt,
+C. Hessman, A. Aubanell, A. Antol´ın, Curvas: Calibration and un-
+certainty for multirater volume assessment in multiorgan segmentation
+(Apr. 2024). doi:10.5281/zenodo.10979642.
+URL https://doi.org/10.5281/zenodo.10979642
+44

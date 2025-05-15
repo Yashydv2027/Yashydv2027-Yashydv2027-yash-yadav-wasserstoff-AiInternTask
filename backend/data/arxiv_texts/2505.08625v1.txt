@@ -1,0 +1,670 @@
+Beyond Predefined Actions: Integrating Behavior
+Trees and Dynamic Movement Primitives for
+Robot Learning from Demonstration
+David Cáceres Domínguez[0000−0003−2279−9418], Erik
+Schaffernicht[0000−0002−0804−8637], and Todor Stoyanov[0000−0002−6013−4874]
+Center for Applied Autonomous Sensor Systems (AASS), Örebro University, Sweden
+{firstname.lastname}@oru.se
+Abstract. Interpretable policy representations like Behavior Trees (BTs)
+and Dynamic Motion Primitives (DMPs) enable robot skill transfer from
+human demonstrations, but each faces limitations: BTs require expert-
+crafted low-level actions, while DMPs lack high-level task logic. We ad-
+dress these limitations by integrating DMP controllers into a BT frame-
+work, jointly learning the BT structure and DMP actions from single
+demonstrations, thereby removing the need for predefined actions. Addi-
+tionally, by combining BT decision logic with DMP motion generation,
+our method enhances policy interpretability, modularity, and adaptabil-
+ity for autonomous systems. Our approach readily affords both learning
+to replicate low-level motions and combining partial demonstrations into
+a coherent and easy-to-modify overall policy.
+Keywords: Behavior Trees · Learning from Demonstration.
+1
+Introduction
+In robotics, there has been a long-standing pursuit to enable machines to learn
+tasks through human demonstrations [1,28]. A key challenge remains in design-
+ing a flexible and interpretable framework that allows intelligent autonomous
+systems to execute complex behaviors efficiently. Among promising approaches
+explored in recent years is the use of Behavior Trees (BTs) [5] — hierarchical
+structures that offer an intuitive framework for representing and orchestrating a
+robot’s decision-making processes.
+Prior work has demonstrated the capacity to learn the structure of BTs from
+demonstrations [8], however, existing methods require access to task-specific ex-
+pert knowledge in the form of a predefined set of actions. This requires manual
+effort and not only consumes considerable time, but also limits the range of be-
+haviors that can be composed. In parallel, efforts to address the issue of design-
+ing low-level action primitives for BTs have explored using Dynamic Movement
+Primitives (DMPs) [18] and Motion Generators [25]. However, these methods re-
+quire manually designing the BT structure and the manual integration of prede-
+fined actions, often necessitating action parameter adjustment during execution.
+arXiv:2505.08625v1  [cs.RO]  13 May 2025
+2
+D. Cáceres Domínguez et al.
+Fig. 1. Experimental setup for evaluation: a Franka Emika Panda robotic manipulator
+equipped with a shovel, scoops a tennis ball and deposits it into one of two stations.
+Thus, current approaches to learning BTs from demonstration are incomplete
+and limited to learning the BT structure when the actions are manually defined,
+or conversely, learning the action parameters when the BT structure is fixed.
+In this paper, we introduce a new approach for learning both the high-level
+task structure and associated low-level actions from demonstrations, employing
+BTs as a compositional structure and DMPs for low-level motion generation.
+We encapsulate each DMP within a BT action node, leveraging the pre- and
+post-conditions of the BT nodes to supervise execution. This allows us to create
+complex and adaptive behaviors that can handle different situations and con-
+tingencies. For example, we can use BTs to implement conditional branching,
+looping, and fallback mechanisms, which are not possible with DMPs, nor other
+imitation learning approaches.
+Our main contribution is a novel method that learns a comprehensive BT pol-
+icy from human demonstration. Our approach seamlessly segments the demon-
+stration movements into distinct BT actions and their associated condition
+nodes, enabling the automatic learning of the BT structure. By leveraging DMPs,
+our method eliminates the need for predefined action nodes when learning the
+structure of a BT, allowing us to encapsulate a wide range of motions directly
+within the BT. Additionally, the higher-level decision logic of BTs facilitates
+seamless switching between different DMPs and enhances the interpretability
+and modularity of the learned robot policy.
+2
+Background
+2.1
+Behavior Trees
+Behavior Trees are task-switching structures offering modularity, reusability, and
+reactivity, serving as an alternative to Finite State Machines [14]. A BT consists
+Integrating BTs and DMPs for Robot Learning from Demonstration
+3
+?
+→
+→
+→
+(a)
+(b)
+Fig. 2. Behavior Tree nodes: (a) Control nodes (Sequence, Parallel, Fallback) and (b)
+Execution nodes (Condition, Action).
+of a root node, control nodes, and leaf nodes [5]. Execution begins at the root,
+sending "tick" signals through the tree to activate nodes. Nodes execute only
+when ticked, returning one of three statuses: Running, Success, or Failure.
+Control Nodes (Fig. 2(a)) include Sequence, Fallback, and Parallel types. A
+Sequence ticks children left-to-right, succeeding only if all children succeed. A
+Fallback ticks children left-to-right until one succeeds. Both stop ticking further
+children if one returns Running. A Parallel ticks all children simultaneously,
+succeeding if a set number succeed. Leaf Nodes (Fig. 2(b)) are either Action or
+Condition nodes. An Action node executes commands when ticked, returning
+Running, Success, or Failure based on progress or outcome. Condition nodes
+evaluate propositions, returning Success if true and Failure otherwise
+2.2
+Dynamic Movement Primitives
+Dynamic Movement Primitives (DMPs) are a flexible framework for learning
+trajectories from demonstration, representing both periodic and discrete move-
+ments. In this study, we build on the DMP framework introduced in [10], based
+on the formulation in [13,22]. These primitives comprise a system of second-order
+ordinary differential equations, resembling a mass-spring-damper system with an
+added forcing term. DMPs model the forcing term to generalize trajectories to
+new start/goal positions while preserving their learned shape. The formulation
+for one-dimensional DMPs is outlined as:
+(
+τ ˙v = K(g −x) −Dv + K(g −x0)s + Kf(s)
+τ ˙x = v,
+(1)
+where x, v, x0, g ∈R represent the position, the velocity, the initial position,
+and the goal, respectively. The constants K, D are the spring and damping
+terms, chosen in such a way that the associated homogeneous system is critically
+damped: D = 2
+√
+K. τ ∈R+ is a temporal scaling factor, and f is a real-valued
+nonlinear forcing (also called perturbation) term, defined as:
+f(s) =
+PN
+i=1 ωiψi(s)
+PN
+i=1 ψi
+,
+(2)
+with Gaussian functions ψi(s) = exp (−hi(s −ci)2) with centers ci and widths
+hi. Instead of time, f depends explicitly on a phase variable s,
+τ ˙s = −αs,
+(3)
+4
+D. Cáceres Domínguez et al.
+where α is the predefined constant for the canonical system defined in equa-
+tion 3. The learning process consists of determining the weights ωi ∈R by com-
+puting f(s) for a given desired trajectory. DMPs support chaining, switching,
+and blending, enabling transitions without exact starting states and allowing
+demonstrations to be segmented into independently learned DMPs.
+3
+Related work
+3.1
+Learning from Demonstration
+Interpretable policies are crucial for ensuring that human operators can un-
+derstand, analyze, and debug learned robotic behaviors. Traditional Learning
+from Demonstration (LfD) methods, such as those based on Hidden Markov
+Models [4], neural networks [7], or DMPs [16, 19] have shown to be proficient
+at encoding and reproducing complex behaviors. However, they are black-box
+methods that learn complex mappings from input to output without an explicit
+representation in a human-understandable form. They suit tasks where accurate
+output matters more than understanding the decision-making process.
+Caccavale et al. [3] propose a method combining Hierarchical Task Networks
+with Dynamic Motion Primitives (DMPs) to structure complex tasks into smaller
+sub-tasks while using DMPs for motion generation. However, their approach re-
+quires manually defining abstract task descriptions, which is both time-intensive
+and limits adaptability to unstructured tasks.
+Other works synthesize human-readable programs mapping directly to robot
+actions, enhancing transparency [23,29]. However, they rely on manually defined
+task or action abstractions, which can be a bottleneck, especially in complex
+tasks where these abstractions may not cover all necessary behaviors. To the best
+of our knowledge, there are currently no baseline interpretable LfD methods that
+can both abstract from low-level actions and extract high-level decision logic.
+3.2
+Learning BTs from demonstration
+Learning BTs has been a subject of extensive research, with a wide range of
+techniques aimed at automatically generating, enhancing, or optimizing their
+structure. A variety of approaches have been proposed, including Genetic Pro-
+gramming [6], Reinforcement Learning [20] and Case-Based Reasoning [21].
+In the context of learning BTs from demonstration, methods typically rely on
+intermediary algorithms like CART [2] or C5.0 [24] to initially construct a Deci-
+sion Tree (DT) from a labeled dataset and then apply a conversion algorithm to
+derive a BT. These techniques leverage the similarities between logical expres-
+sions derived from the resulting DT and specific BT nodes. However, describing
+reactive behaviors using DTs often requires repeated predicate re-evaluation at
+varying tree depths, resulting in larger and less interpretable BTs [30]. To address
+this challenge, efforts have been made to optimize the DT’s logical statements.
+Sagredo-Olivenza et al. [26] rely on manual optimizations, while French et al. [8]
+Integrating BTs and DMPs for Robot Learning from Demonstration
+5
+and Gugliermo et al. [12] propose logic minimization algorithms to reduce the
+DT’s logical statements prior to conversion. Building on the work of French et
+al. [8], Wathieu et al. [30] introduce the RE:BT-Espresso algorithm, which en-
+hances the interpretability of the learned BT by eliminating logical redundancies.
+All current BT learning methods rely on the availability of a labeled dataset
+with pre-defined actions, thereby limiting BT actions to either a manually en-
+gineered set of complex action nodes or to using discretized low-level atomic
+actions. Both of these options have undesirable consequences: the former are
+limiting in the expressivity and variety of motions and time-consuming to define;
+the latter results in large and hard-to-interpret BTs. In contrast, our approach
+uses DMPs to segment, label, and learn action nodes from human demonstra-
+tions, assembling them into interpretable BTs that overcome predefined action
+set limitations and enhance flexibility when learning the structure.
+4
+Proposed method
+The main contribution of our approach is the integration of BTs and DMPs
+to learn robot policies from human demonstrations without requiring manual
+labeling or predefined BT actions. As illustrated in Fig. 3, our methodology
+for learning BTs with DMPs involves three main stages. Sec. 4.1 introduces the
+framework, while Sec. 4.2-4.4 provide detailed explanations of each stage.
+4.1
+Combining DMPs with BTs
+Given a dataset T = {(ti, ci)}N
+i=1 containing demonstrated trajectories ti and
+associated state variables ci, the objective is to learn an upper-level BT policy
+πbt and a set of lower-level DMP control policies πdmp
+i,j (θi,j) such that:
+πbt : (ci, sbt) →πdmp
+i,j (θi,j)
+(4)
+where sbt represents the current state of execution of the BT policy πbt de-
+termined by the current location of the tick. θi,j represents the parameters of
+the DMP policy for segment j of trajectory i. Each DMP policy is encapsulated
+within a BT Action node. Both policies — πbt and πdmp
+i,j
+— operate concurrently
+but at different frequencies, with πdmp
+i,j (θi,j) commanding the robot’s low-level
+trajectory, denoted as τi,j.Our approach learns the set of πdmp
+i,j (θi,j) from T using
+the trajectory splitting strategy detailed in Fig. 4. The high-level BT policy πbt
+is learned from the dataset D = {(πdmp
+i,j , ci)}N
+i=1 using RE:BT-Espresso [30].
+4.2
+Data collection
+The first stage collects a dataset of demonstrations T = {(ti, ci)}N
+i=1, where each
+demonstration comprises the observed trajectories ti and associated state vari-
+ables ci. These demonstrations can be obtained from a variety of sources, includ-
+ing direct (e.g. Kinesthetic teaching) and indirect (e.g., visual systems) teaching.
+6
+D. Cáceres Domínguez et al.
+→
+BT root
+t
+DMP Controller
+t
+1. Data collection
+2. DMP Learning & trajectory splitting
+DMP Grid Search
+DTW
+3. BT Learning
+DMP Grid Search
+DTW
+→
+→
+→
+Fig. 3. Proposed method flowchart. (1) Data collection gathers demonstrations T, link-
+ing trajectories ti with state variables ci. (2) DMP Learning recursively fits segmented
+trajectories with DMPs πdmp
+i,j (θi,j), evaluated via DTW. (3) BT Learning trains a De-
+cision Tree with CART and converts it to a BT policy πbt using RE:BT-Espresso.
+The state ci may include environmental variables (e.g., object pose, sensor read-
+ings) or engineered conditions (e.g., gripper status). If an engineered condition
+changes during a demonstration, a new trajectory (ti+1, ci+1) is recorded and
+added to T. Associating ci to each ti ensures that each learned πdmp coincides
+with the subset of ci that will later be used in πbt, resulting in continuity in the
+trajectories between states. Additionally, it allows the identification of different
+ti from similar demonstrations that belong to the same πdmp.
+4.3
+DMP Learning and trajectory-splitting
+Learning DMPs involves several parameters θ — e.g., the number of basis func-
+tions, the width of the basis functions, and the constant of the canonical system.
+Consequently, we perform a grid search over θi in πdmp
+i
+(θi), ultimately selecting
+the optimal parameter configuration that best fits ti.
+To determine which πdmp
+i
+(θi) best fits to the demonstration trajectory ti =
+{ti1, ti2, ..., tin, ..., ti|ti|}, we measure the similarity between the demonstration
+Integrating BTs and DMPs for Robot Learning from Demonstration
+7
+Fig. 4. Recursive segmentation of ti: split into ti,j if DTW(ti,j, τi,j) > ϵ. Valid segments
+(green) link to DMPs when DTW ≤ϵ, continuing on ti,j+1.
+and the generated trajectory τi = {τi1, τi2, ..., τim, ..., τi|τi|}. We approximate
+trajectory similarity using FastDTW [27] — an approximation of Dynamic Time
+Warping (DTW) [15] that has a linear time and space complexity. The basic idea
+is to find the distance between the two sequences, which may vary in length or
+speed, by warping their time axes and constructing the warp path W:
+W = {w1, w2, ..., wk}
+max(|ti|, |τi|) ≤K < |ti| + |τi|
+(5)
+where K is the length of the warp path and the k-th element of the warp path
+is wk = (n, m). We calculate the DTW distance between ti and τi as:
+DTW(ti, τi) =
+K
+X
+k=1
+c(tin, τim)
+(6)
+where c(tin, τim) is the Euclidean distance between the two data point indexes
+(one from ti and one from τi) in the k-th element of the warp path. We mea-
+sure DTW distance for each of the generated πdmp
+i
+(θi) during the grid search
+and select the one with the lowest value. Afterwards, we perform the following
+evaluation based on a fitness threshold ϵ:
+– If DTW(ti, τi) ≤ϵ, πdmp
+i
+(θi) is deemed successfully learned, and the trajec-
+tory ti is labeled in the dataset with that particular DMP.
+– If DTW(ti, τi) > ϵ, πdmp
+i
+(θi) is deemed unsuccessfully learned and ti is split
+in half following the strategy in Fig. 4. Then, we perform a grid search for
+each segment ti,j to find the best πdmp
+i,j (θi,j). This segmentation is recursively
+performed until DTW(ti,j, τi,j) ≤ϵ and all ti,j are labeled with a DMP.
+The process produces the dataset D = (πdmp
+i,j , ci)
+N
+i=1, detailed in Algorithm 1.
+4.4
+Behavior Tree Learning
+Once D is learned, we take the associated environmental variables ci as condi-
+tions and associated πdmp
+i,j (θi,j) as labels and feed them into the RE:BT-Espresso
+algorithm described in Sec. 3 to obtain πbt. The process first learns a decision
+8
+D. Cáceres Domínguez et al.
+Algorithm 1: DMP learning and trajectory splitting
+Input
+: Trajectories T, threshold ϵ, minimum trajectory support min_split
+Output: Set of learned DMPs D
+1 for ti in T do
+2
+Initialize first segment index: j ←0;
+3
+Set active segment to full trajectory: ti,j ←ti;
+4
+while ti > 0 and ti,j > min_split do
+5
+Fit DMP to ti,j: πdmp
+i,j (θi,j) ←DMP_grid_search (ti,j);
+6
+Sample DMP trajectory: τ ←gen(πdmp
+i,j );
+7
+if DTW(ti,j, τ) ≤ϵ or ti,j ≤min_split then
+8
+D ←D ∪{πdmp
+i,j (θi,j), ci};
+9
+ti, ti,j ←(ti\ti,j);
+10
+j ←(j + 1);
+11
+else
+12
+Split ti,j in half: ti,j ←segment (ti,j);
+tree (DT) by classifying πdmp
+i,j (θi,j) based on a set of rules derived from ci and
+then converts it to a BT by using the RE:BT-Espresso algorithm [30]. In partic-
+ular, RE:BT-Espresso employs the CART [17] algorithm to learn the DT from
+D and subsequently transforms the DT into boolean equations, one for each
+πdmp
+i,j (θi,j). Then, RE:BT-Espreeso simplifies the boolean equations using logic
+minimization and constructs the BT policy πbt after pruning unnecessary nodes.
+This methodology provides a robust and flexible approach to learning BTs
+from demonstration, and its combination with DMPs allows for the learning of
+complex behaviors from a wide range of demonstrations. In the next section, we
+demonstrate and evaluate the capabilities of our approach in a complex multi-
+step learning from demonstration setting.
+5
+Experimental evaluation
+We implement our approach by building upon the DMP implementation from [10]
+and the BehaviorTree.CPP1 library. For evaluation, we assess our methodology
+using a Franka Emika Panda 7-DOF manipulator using a Cartesian impedance
+controller and the experimental setup shown in Fig. 1. We choose a dynamic
+manipulation task, where the robot is supposed to slide a rigidly attached scoop
+under a target test object (a tennis ball), lift it up, and transport it to one of
+two drop areas. The open sides of the shovel make balancing the tennis ball a
+difficult task, as it easily rolls off even during small movements.
+5.1
+Demonstration data collection
+To collect the demonstrations, we utilize a Microsoft Kinect v2 sensor and affix
+ArUco markers [9] to various locations, including different stations and surfaces,
+1 https://www.behaviortree.dev/
+Integrating BTs and DMPs for Robot Learning from Demonstration
+9
+S1
+S2
+OBS
+S0
+(a)
+(b)
+Fig. 5. (a) Experimental task: The robot scoops a ball from S0, and transports it to
+S1 or S2. Trajectories: O1 (red), O2 (blue), and O3 (green) with an obstacle near S1.
+(b) Snapshot from a video demonstration showing O3.
+to track occupancy. Additionally, we attach a marker to the handle of the shovel
+to record its pose, which later represents the end-effector pose for the robot.
+We collect vision-only demonstrations of a human using a shovel to perform
+one of three operations, all starting from the same initial position. Each opera-
+tion consists of picking up the tennis ball with the shovel, transporting it while
+maintaining appropriate shovel orientation, and placing it in one of the two goal
+stations. Operation 1 (O1) entails the placement of the object into station 1,
+while Operation 2 (O2) occurs when station 1 is already occupied, leading to
+the placement of the object in station 2. Operation 3 (O3) consists of placing
+the ball into station 1 with the added difficulty of having an obstacle in front
+of the station, requiring a different motion to avoid the obstacle. Demonstra-
+tion data collected includes the tracked pose of the shovel and four engineered
+binary features, which represent the conditions that determine the overall sce-
+nario logic. We track the occupancy of start (S0), station 1 (S1), station 2 (S2),
+and the presence of an obstacle at station 1 (OBS), using these as state space
+observations. Fig. 5 provides an overview of the experimental setup.
+We follow the DMP and BT learning strategies described in Sec. 4 and per-
+form a DMP grid search for the number of Gaussian basis functions Nψ, (ranging
+from 10 to 100 with a step size of 10) and the constant of the canonical system
+α (ranging from 1 to 20 with a step size of 1). Due to the absence of correctness
+guarantees following pruning, we automatically select the BT with the lowest
+pruning level that closely correlates with the generated DT rules.
+We tick the BT continuously until the goal is reached (Success) or an unre-
+coverable failure occurs (e.g., collision). To enhance reactivity, ticks are triggered
+immediately after the root returns a status, resulting in a variable update fre-
+10
+D. Cáceres Domínguez et al.
+Table 1. Results of Single Demonstration Experiments and DMP Controller Tracking
+Errors: Translation errors (meters), orientation errors (radians), and success rates over
+25 trials for each operation.
+Operation
+Translation
+Orientation
+Success
+rate
+Med
+Std
+Med
+Std
+(O1) Place S1
+0.013
+0.026
+0.073
+0.124
+84%
+(O2) Place S2
+0.003
+0.012
+0.029
+0.059
+100%
+(O3) Place S1 w/OBS
+0.007
+0.040
+0.037
+0.135
+100%
+Overall
+94.7%
+quency based on the number of nodes processed. We then evaluate our approach
+in increasingly complex scenarios.
+5.2
+Single demonstration
+To demonstrate the capability of learning from a single demonstration using
+our method, we create individual BTs from each of the operations previously
+described and assess the execution success rate of the learned policies across 25
+trials. In all three scenarios our method learned a BT composed of three DMPs.
+On average, the learning process for DMPs and BT structure took 14.4 and 12.9
+seconds respectively, resulting in the robot replicating the demonstration within
+a minute of being shown the original motion. The results are shown in Table 1.
+For the BT corresponding to Operation 1, the success rate was 84%, as in 4
+of the trials the ball bounced off the station boundary. In this case, failures can
+be attributed to the unsuitable orientation of the shovel, which was positioned
+too close to horizontal. Upon closer inspection, we note that the DMP controller
+tracking error along the orientation dimension was negligible (see Tab. 1). Con-
+sequently, we attribute this issue to pose estimation errors in the ArUco marker
+during the demonstration. While in the majority of the evaluations these errors
+were not crucial to the final task success, in some cases the stochasticity of the
+dynamics of the ball during the placement phase resulted in failures.
+For the BTs representing the other two operations, O2 and O3, the learned
+policies were notably more competent, successfully completing the task in all
+trials. When considering the overall performance across all experiments, the
+success rate averaged at 94.67%, demonstrating a consistent level of proficiency
+in executing tasks across different scenarios.
+5.3
+Combined demonstrations
+To demonstrate the adaptability of our methodology in learning from heteroge-
+neous demonstrations, we utilize the previously learned DMPs and their associ-
+ated segment demonstrations from Sec. 5.2 to construct a new BT that encapsu-
+lates all learned behaviors. In particular, we merge all the D datasets from each
+Integrating BTs and DMPs for Robot Learning from Demonstration
+11
+Table 2. Results - Combined experiments
+Operation
+Disturbance
+New obj.
+# Trials
+Success rate
+(O1) Place S1
+S1 occupied
+O2
+10
+100%
+OBS
+O3
+10
+100%
+(O2) Place S2
+S1 free
+O1
+10
+100%
+S1 free & OBS
+O3
+10
+100%
+(O3) Place S1 w/OBS
+OBS free
+O1
+10
+90%
+S1 occupied
+O2
+10
+100%
+Overall
+60
+98.33%
+operation into a unified dataset and then proceed with stage 3 (BT learning) of
+our proposed approach. Given the DMP controllers and state variables from the
+previous section, the BT generation process in this scenario took 17.2 seconds.
+In this experiment, we artificially introduce a disturbance during the normal
+execution of one of the three operations to simulate real-world challenges and
+combine the picking of tennis ball and an unseen object during demonstrations,
+a rubber duck. Disturbances are chosen such that they interrupt the current
+Operation and require a change of the objective and a switch to one of the other
+two Operations. For example, under Operation 1 (see Fig 5), a possible distur-
+bance is changing the condition that S1 is occupied, forcing the BT to change
+objective and continue the execution with the DMPs associated to Operation 2.
+In Table 2, we present the success rate of continuing with the operation after
+introducing a disturbance during the execution of the first DMP for each of
+the operations, corresponding to the initial scooping and lifting of the object.
+Disturbances in later phases are not evaluated, as recovery is limited to halting
+execution. Results show a 90–100% success rate in adapting to disturbances,
+demonstrating our method’s robustness and adaptability to real-world challenges
+and dynamic objectives.
+5.4
+Editing learned behaviors
+One of the main disadvantages of LfD methods based on directly copying the
+behavior of the teacher is that it is hard to modify them with fallback behav-
+iors to address failures not seen during demonstration. Our approach addresses
+this limitation by allowing a human designer to quickly and easily modify the
+learned behavior. To demonstrate the capacity of our approach to modify learned
+behaviors, we manually integrate a recovery behavior into the learned BT from
+Sec. 5.3. This recovery behavior involves sweeping the work table with the shovel
+in response to a scenario where the ball has fallen mid-execution of a DMP. To fa-
+cilitate this, we introduce a new engineered feature: the occupancy of the shovel,
+by tracking an ArUco marker attached to the surface of the shovel blade.
+12
+D. Cáceres Domínguez et al.
+Fig. 6. Recovery behavior: If the ball falls during a DMP execution, the robot transi-
+tions to sweeping the table with a shovel to return the ball to the start position.
+In our experiments, we subjected the BT to react to failure scenarios across
+20 trials, similar to those in Fig. 6. Our approach consistently responded to these
+failures in all trials, thereby demonstrating the effectiveness of our modular BT
+approach in modifying behaviors to manage disruptions and seamlessly transition
+between different control strategies.
+6
+Limitations and Future Work
+One trade-off we did not explore in detail in this paper stems from the granular-
+ity of learned actions. While the proposed approach produces competent BTs, it
+does not necessarily optimize the number of action nodes used —a factor that
+can enhance efficiency and interpretability [11]. Moreover, the parameters and
+structure of DMPs do not directly map to intuitive action labels, thus diminish-
+ing the overall interpretability of the BT policy. Additionally, the choice of tra-
+jectory splitting criteria significantly influences tree structure and performance;
+exploring alternative criteria based on task-specific heuristics or data-driven ap-
+proaches could yield better results but requires further validation. Lastly, scal-
+ability becomes a concern as tasks grow in complexity, requiring careful design
+to balance efficiency, reactivity, and system simplicity.
+Future research will address the above limitations and extend the framework
+to incorporate online learning mechanisms and human feedback loops to facilitate
+policy adaption and improvement. Finally, investigating techniques to handle
+uncertainty and variability in human demonstrations would contribute to the
+robustness and reliability of the learned robot policies.
+7
+Conclusion
+In conclusion, our proposed approach presents a novel solution to the challenge
+of learning interpretable and adaptable robot policies from demonstration. By
+combining BTs for high-level decision-making with DMPs for low-level motion
+generation, we achieve a framework that can learn both the task structure and
+Integrating BTs and DMPs for Robot Learning from Demonstration
+13
+associated actions concurrently from a single demonstration, as well as combine
+multiple demonstrations in a coherent high-level policy.
+We evaluate our approach in a real-world scenario of teaching a robot arm
+complex manipulation tasks and demonstrate that our method can successfully
+replicate and combine different demonstrations into cohesive actions. Moreover,
+we show that our framework allows for manual augmentation and modification,
+enhancing its adaptability and usability in practical applications.
+Acknowledgments. This work was supported in part by Industrial Graduate School
+Collaborative AI & Robotics (CoAIRob), in part by the Swedish Knowledge Foundation
+under Grant Dnr:20190128, and the Knut and Alice Wallenberg Foundation through
+Wallenberg AI, Autonomous Systems and Software Program (WASP).
+Disclosure of Interests. The authors have no competing interests to declare that
+are relevant to the content of this article.
+References
+1. Atkeson, C.G., Schaal, S.: Robot learning from demonstration. In: ICML. vol. 97,
+pp. 12–20. Citeseer (1997)
+2. Breiman, L.: Classification and regression trees. Routledge (2017)
+3. Caccavale, R., Saveriano, M., Finzi, A., Lee, D.: Kinesthetic teaching and atten-
+tional supervision of structured tasks in human–robot interaction 43(6), 1291–1307
+4. Calinon, S., D’halluin, F., Sauser, E.L., Caldwell, D.G., Billard, A.G.: Learning
+and reproduction of gestures by imitation. IEEE Robotics & Automation Magazine
+17(2), 44–54 (2010)
+5. Colledanchise, M., Ögren, P.: Behavior trees in robotics and AI: an introduction.
+CoRR (2017)
+6. Colledanchise, M., Parasuraman, R., Ögren, P.: Learning of behavior trees for
+autonomous agents. IEEE Transactions on Games 11(2), 183–189 (2019)
+7. Duan, Y., Andrychowicz, M., Stadie, B., Jonathan Ho, O., Schneider, J., Sutskever,
+I., Abbeel, P., Zaremba, W.: One-shot imitation learning. Advances in neural in-
+formation processing systems 30 (2017)
+8. French, K., Wu, S., Pan, T., Zhou, Z., Jenkins, O.C.: Learning behavior trees from
+demonstration. In: 2019 International Conference on Robotics and Automation
+(ICRA). pp. 7791–7797. IEEE (2019)
+9. Garrido-Jurado, S., Muñoz-Salinas, R., Madrid-Cuevas, F., Medina-Carnicer, R.:
+Generation of fiducial marker dictionaries using mixed integer linear programming.
+Pattern Recognition 51 (2015)
+10. Ginesi, M., Sansonetto, N., Fiorini, P.: Overcoming some drawbacks of dynamic
+movement primitives. Robotics and Autonomous Systems 144, 103844 (2021)
+11. Gugliermo, S., Domínguez, D.C., Iannotta, M., Stoyanov, T., Schaffernicht, E.:
+Evaluating behavior trees. Robotics and Autonomous Systems 178, 104714 (2024)
+12. Gugliermo, S., Schaffernicht, E., Koniaris, C., Pecora, F.: Learning behavior trees
+from planning experts using decision tree and logic factorization. IEEE Robotics
+and Automation Letters 8(6), 3534–3541 (2023)
+13. Hoffmann, H., Pastor, P., Park, D.H., Schaal, S.: Biologically-inspired dynami-
+cal systems for movement generation: Automatic real-time goal adaptation and
+obstacle avoidance. In: 2009 IEEE International Conference on Robotics and Au-
+tomation. pp. 2587–2592 (2009)
+14
+D. Cáceres Domínguez et al.
+14. Iovino, M., Förster, J., Falco, P., Chung, J.J., Siegwart, R., Smith, C.: Comparison
+between behavior trees and finite state machines. arXiv preprint: 2405.16137 (2024)
+15. Kruskall, J.B.: The symmetric time warping algorithm: From continuous to dis-
+crete. Time warps, string edits and macromolecules (1983)
+16. Kulvicius, T., Ning, K., Tamosiunaite, M., Worgötter, F.: Joining movement se-
+quences: Modified dynamic movement primitives for robotics applications exem-
+plified on handwriting 28(1), 145–157
+17. Lewis, R.J.: An introduction to classification and regression tree (cart) analysis. In:
+Annual meeting of the society for academic emergency medicine in San Francisco,
+California. vol. 14. Citeseer (2000)
+18. Liu, M., Zhu, W., Luo, L., Lu, Q., Yeh, W., Zhang, Y., Shi, Q.: Robotic arm
+movement primitives assembly planning method based on bt and dmp. In: Inter-
+national Conference on Cognitive Systems and Signal Processing. pp. 400–412.
+Springer (2022)
+19. Matsubara, T., Hyon, S.H., Morimoto, J.: Learning parametric dynamic movement
+primitives from multiple demonstrations 24(5), 493–500 (2011)
+20. Mayr, M., Chatzilygeroudis, K., Ahmad, F., Nardi, L., Krueger, V.: Learning of
+parameters in behavior trees for movement skills. In: 2021 IEEE/RSJ International
+Conference on Intelligent Robots and Systems (IROS). pp. 7572–7579. IEEE (2021)
+21. Palma, R., González-Calero, P.A., Gómez-Martín, M.A., Gómez-Martín, P.P.: Ex-
+tending case-based planning with behavior trees. In: Twenty-Fourth International
+FLAIRS Conference (2011)
+22. Park, D.H., Hoffmann, H., Pastor, P., Schaal, S.: Movement reproduction and
+obstacle avoidance with dynamic movement primitives and potential fields. In:
+Humanoids 2008 - 8th IEEE-RAS International Conference on Humanoid Robots.
+pp. 91–98 (2008)
+23. Patton, N., Rahmani, K., Missula, M., Biswas, J., Dillig, I.: Programming-by-
+demonstration for long-horizon robot tasks. Proceedings of the ACM on Program-
+ming Languages 8(POPL), 512–545 (2024)
+24. Quinlan, J.R.: Induction of decision trees. Machine learning 1, 81–106 (1986)
+25. Rovida, F., Wuthier, D., Grossmann, B., Fumagalli, M., Krüger, V.: Motion gener-
+ators combined with behavior trees: A novel approach to skill modelling. In: 2018
+IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS).
+pp. 5964–5971. IEEE (2018)
+26. Sagredo-Olivenza, I., Gómez-Martín, P.P., Gómez-Martín, M.A., González-Calero,
+P.A.: Trained behavior trees: Programming by demonstration to support ai game
+designers. IEEE Transactions on Games 11(1), 5–14 (2017)
+27. Salvador, S., Chan, P.: Toward accurate dynamic time warping in linear time and
+space. Intelligent Data Analysis 11(5), 561–580 (2007)
+28. Schaal, S.: Learning from demonstration. Advances in neural information process-
+ing systems 9 (1996)
+29. Trivedi, D., Zhang, J., Sun, S.H., Lim, J.J.: Learning to synthesize programs as
+interpretable and generalizable policies. Advances in neural information processing
+systems 34, 25146–25163 (2021)
+30. Wathieu, A., Groechel, T.R., Lee, H.J., Kuo, C., Matarić, M.J.: Re: Bt-espresso:
+Improving interpretability and expressivity of behavior trees learned from robot
+demonstrations. In: 2022 International Conference on Robotics and Automation
+(ICRA). pp. 11518–11524. IEEE (2022)

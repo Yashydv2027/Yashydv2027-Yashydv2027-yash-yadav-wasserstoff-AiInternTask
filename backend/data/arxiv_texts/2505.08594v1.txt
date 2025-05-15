@@ -1,0 +1,1171 @@
+Clustering of Incomplete Data via a Bipartite Graph
+Structure
+Amirhossein Javaheri and Daniel P. Palomar
+Hong Kong University of Science and Technology
+sajavaheri@connect.ust.hk, palomar@ust.hk
+Abstract—There are various approaches to graph learning for
+data clustering, incorporating different spectral and structural
+constraints through diverse graph structures. Some methods rely
+on bipartite graph models, where nodes are divided into two
+classes: centers and members. These models typically require
+access to data for the center nodes in addition to observations
+from the member nodes. However, such additional data may
+not always be available in many practical scenarios. Moreover,
+popular Gaussian models for graph learning have demonstrated
+limited effectiveness in modeling data with heavy-tailed distribu-
+tions, which are common in financial markets. In this paper, we
+propose a clustering method based on a bipartite graph model
+that addresses these challenges. First, it can infer clusters from
+incomplete data without requiring information about the center
+nodes. Second, it is designed to effectively handle heavy-tailed
+data. Numerical experiments using real financial data validate
+the efficiency of the proposed method for data clustering.
+Index Terms—Graph learning, data clustering, bipartite graph,
+heavy-tailed distribution, incomplete data, financial data.
+I. INTRODUCTION
+Clustering is a fundamental technique in data mining
+and machine learning [1], with applications spanning bio-
+informatics [2] image segmentation [3], social networks [4],
+and financial markets [5]. Among various clustering tech-
+niques including hierarchical [6], density-based [7] and model-
+based methods [8], there are approaches that leverage graph-
+ical models to capture similarities between data points [9].
+Spectral graph clustering [10] is an early example of such
+methods, utilizing heuristic similarity graphs to represent data
+relationships. A more advanced approach involves learning
+graphs from data under a Gaussian Markov random field
+(GMRF) model. The Graphical LASSO (GLASSO) [11] was a
+foundational method in this area, later enhanced by introducing
+Laplacian structural constraints to the graph learning problem
+[12]–[16].
+A more advanced approach in graph-based clustering in-
+corporates spectral constraints into graph learning to infer
+specific structures, such as k-component graphs, which ex-
+plicitly represent clusters [17], [18]. However, these methods
+often struggle to accurately model data with heavy-tailed
+distributions, which are prevalent in real-world applications
+like financial markets. Consequently, recent efforts have fo-
+cused on generalizing k-component graph learning methods to
+handle heavy-tailed distributions [19]–[21]. Another category
+of methods for clustering introduces k-component bipartite
+graph structures, comprising two types of nodes: cluster
+centers and their members [22], [23]. While effective, these
+approaches typically require additional data for the center
+nodes to learn the graph. This dependency on center node
+data, however, poses challenges in applications where such
+data is unavailable.
+In this paper, we propose a graph learning method for data
+clustering based on a bipartite graph structure. Our method
+is designed to handle scenarios with incomplete information
+about the center nodes and is robust to heavy-tailed data
+distributions, making it suitable for a wide range of real-world
+applications.
+A. Notations
+Vectors and matrices are respectively denoted with bold
+lowercase and uppercase letters. (e.g., x and X). The i-th
+element of a vector x is denoted by xi. Also Xi,j denotes
+the (i, j)-th element of X. The notation xi1:i2 is defined as
+xi1:i2 ≜[xi1, . . . , xi2]. We use ∥x∥to denote the ℓ2 norm of
+a vector and ∥X∥F to denote the Frobenius norm of a matrix.
+Diagonal elements of X are shown with diag(X), while
+Diag(x) is a diagonal matrix with x on its main diagonal. The
+notation det∗also represents the generalized determinant.
+II. PROBLEM FORMULATION
+Consider a weighted undirected graph with p vertices, where
+each node represents an element of a signal x ∈Rp, and
+the weights of the edges encode the relationships between the
+elements. Suppose we have n measurements of x, represented
+as the columns of X = [x1, . . . , xn] ∈Rp×n. The problem we
+investigate in this paper is to learn an undirected k-component
+bipartite graph for clustering the data into k clusters. In this
+graph structure, inspired by [23], one class of nodes represents
+the centers of the clusters, while the other class represents the
+members (to be clustered). Assume we divide the nodes into
+k centers and r members, where r + k = p. Let Bi,j ≥0 be
+the weight of the edge connecting the member i ∈{1, · · · , r}
+to the center j ∈{1, · · · , k}. Then, the Laplacian matrix of
+the graph can be expressed as
+L =
+h Diag(B1k)
+−B
+−B⊤
+Diag(B⊤1r)
+i
+,
+(1)
+where B ∈Rr×k
++
+. The weight Bi,j models the probability of
+member node i being within cluster j, Hence, the sum of each
+row of B equals one.
+Next, we consider a stochastic approach to learning such
+graph structure from data. In specific, we assume xis are
+drawn from a zero-mean multivariate Student-t distribution as
+p(xi) ∝det∗(L)1/2
+
+1 + x⊤
+i Lxi
+ν
+−(ν+p)/2
+,
+ν > 2.
+1
+arXiv:2505.08594v1  [cs.LG]  13 May 2025
+Under the above model, the problem of maximum likelihood
+estimation of the graph from data can be formulated by
+min
+L, B
+p+ν
+n
+Pn
+i=1 log
+
+1 + x⊤
+i Lxi
+ν
+
+−log det∗(L)
+s. t.
+L =
+h Diag(B1k)
+−B
+−B⊤
+Diag(B⊤1r)
+i
+, rank(L) = p −k,
+B ≥0, B1k = 1r.
+Suppose we are only given the first r rows of the data
+matrix, corresponding to the members, which we refer to
+as the incomplete data denoted by ˜X ∈Rr×n. We may
+consider each unavailable row of the data matrix, correspond-
+ing to the centers, to be a weighted average of the rows of
+˜X (members). Hence, the augmented data matrix yields as
+X =
+h
+˜X⊤
+˜X⊤A
+i⊤
+∈Rp×n, where A ∈Rr×k
++
+denotes the
+weight matrix with non-negative elements. The sum of these
+weights for each center node equals unity, and hence, we have
+A⊤1r = 1k. We also assume A and B share the same support
+(indicating the membership sets of the clusters).
+Consider the i-th column of X as x⊤
+i = [˜x⊤
+i ˜x⊤
+i A]⊤, where
+˜xi is the i-th column of ˜X. Also let ˜Si = ˜xi˜x⊤
+i . Then with
+simple calculations we get:
+x⊤
+i Lxi = hi + tr(BGi(A)),
+hi = ˜x⊤
+i ˜xi = tr(˜Si),
+Gi(A) = −2A⊤˜Si + diag
+
+A⊤˜SiA
+
+1⊤
+r .
+(2)
+Using this equation, the problem would be restated as
+min
+L, B, A
+p+ν
+n
+Pn
+i=1 log
+
+1 + hi+tr(BGi(A))
+ν
+
+−log det∗(L)
+s. t.
+L =
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
+, rank(L) = p −k,
+B1k = 1r, A⊤1r = 1k,
+A, B ≥0, A ⊙1(B = 0) = 0,
+(3)
+where we have used B1k = 1r and Diag(1r) = Ir in the first
+equality constraint.
+III. PROPOSED METHOD
+By relaxing the constraint L =
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
+, the
+augmented Lagrangian function yields as
+Lρ(A, B, L) = p + ν
+n
+n
+X
+i=1
+log
+
+1 + hi + tr(BGi(A))
+ν
+
+−log det∗(L) + ρ
+2
+L −
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
+2
+F
++ ⟨L −
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
+, Y⟩
+(4)
+Now, we use a variant of the ADMM method [24] to solve
+problem (3) by alternating minimization of the augmented La-
+grangian function. Here, we have 3 update steps corresponding
+to the primal variables L, B, and A, and one update step for
+the dual variable Y. These are given as follows:
+A. L update step:
+The update step for L is obtained by solving the following
+subproblem
+Ll+1 = argmin
+L⪰0,
+rank(L) = p−k
+ρ
+2
+L −
+h
+Ir
+−Bl
+−Bl⊤Diag(Bl⊤1r)
+i
++ 1
+ρYl
+2
+F
+−log det∗(L)
+The closed-form solution to this is given as
+Ll+1 = 1
+2ρUl 
+Σl + (Σl2 + 4ρI)1/2
+Ul⊤,
+(5)
+with Σl being a diagonal matrix having the largest p −k
+eigenvalues of ρ
+h
+Ir
+−Bl
+−Bl⊤Diag(Bl⊤1r)
+i
+−Yl with corresponding
+eigenvectors Ul.
+B. B update step:
+The subproblem associated with the update step of B is
+formulated as follows:
+Bl+1 =
+argmin
+B≥0, B1k=1r
+fB(B)
+fB(B) =
+p+ν
+n
+P
+i log
+
+1 + hi+tr(BGi(Al))
+ν
+
++
+ρ
+2
+Ll+1 −
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
++ 1
+ρYl
+2
+F .
+(6)
+This problem does not admit a closed-form solution. Thus, we
+first simplify the problem using the majorization-minimization
+(MM) technique [25]. For this, we need to find a (smooth) ma-
+jorization function f S
+B(B; Bl) with the following properties:
+f S
+B(B; Bl) > fB(B),
+∀B ̸= Bl
+f S
+B(Bl; Bl) = fB(Bl),
+(7)
+where Bl is a constant matrix.
+Lemma 1. The function fB(B) in (6) can be majorized as
+f S
+B(B; Bl) = tr(BHl) + ρ ∥B∥2
+F + ρ
+21⊤
+r BB⊤1r + C(Bl)
+(8)
+where
+Hl = Pl + ρ
+ Ml⊤
+rk + Ml
+kr −diag(Ml)r+1:p1⊤
+r
+
+,
+Pl = p + ν
+n
+X
+i
+Gi(Al)
+hi + tr (BlGi(Al)) + ν ,
+Ml =
+h
+Ml
+rr Ml
+rk
+Ml
+kr Ml
+kk
+i
+= Ll+1 + 1
+ρYl.
+Proof. See Appendix A.
+Using this lemma, the upperbounded problem can be ex-
+pressed as
+Bl+1 =
+argmin
+B≥0, B1k=1r
+f S
+B(B; Bl).
+(9)
+To solve this, we use the projected gradient descent (PGD)
+method [26] with the the step-size µ as:
+Bm+1 = PSrow
+ Bm −µ∇f S
+B(Bm; Bl)
+
+,
+∇f S
+B(Bm; Bl) = Hl⊤+ 2ρBm + ρ1r1⊤
+r Bm.
+(10)
+2
+where PSrow is a matrix operator that projects each row of the
+input matrix onto the probability simplex {x ≥0 | ⟨x, 1⟩=
+1}. For vector inputs, the simplex projection operator PS gives
+the solution to:
+PS(x0) =
+argmin
+x≥0, x⊤1=1
+1
+2 ∥x −x0∥2
+(11)
+This problem admits a nearly closed-form solution as given
+in Appendix B.
+C. A update step:
+The subproblem for the update step of A is
+min
+fA(A)
+s. t.
+A ≥0, A⊤1r = 1k, A ⊙1(Bl+1 = 0) = 0,
+(12)
+where
+fA(A) = p + ν
+n
+n
+X
+i=1
+log
+
+1 + hi + tr(Bl+1Gi(A))
+ν
+
+.
+(13)
+Here, we again apply the MM to solve the problem, due to
+difficulty in obtaining the closed-form solution. We use the
+following lemma to construct a majorization for fA(A).
+Lemma 2. Let aj denote the j-th -column of A. Then, for
+constant Al, fA(A) in (13) can be majorized via
+f S
+A(A; Al) = Pk
+j=1 gS
+aj(aj; Al) + C(Al),
+(14)
+where
+gS
+aj(aj; Al) = bl+1
+j
+a⊤
+j ˜Slaj −2bl+1⊤
+j
+˜Slaj,
+˜Sl = p + ν
+n
+X
+i
+˜Si
+hi + tr(Bl+1Gi(Al)) + ν ,
+(15)
+bl+1
+j
+= ⟨bl+1
+j
+, 1⟩, and bl+1
+j
+denotes the j-column of Bl+1.
+Proof. See Appendix C.
+Next, the update step for A is obtained by solving the
+following equation:
+Al+1 = argmin f S
+A(A; Al)
+s.t.
+A ≥0, A⊤1r = 1k,
+A ⊙1(Bl+1 = 0) = 0
+(16)
+This problem can iteratively be solved for each aj via the
+PGD as
+am+1
+j
+=
+argmin
+aj≥0, a⊤
+j 1=1
+aj⊙1(bl+1
+j
+=0)= 0
+gS
+aj(aj, Al)
+(17)
+= PS
+
+am
+j −2η ˜Sl(bl+1
+j
+am
+j −bl+1
+j
+)
+
+⊙1(bl+1
+j
+> 0)
+where η is the step-size and PS refers to the projection oper-
+ator that maps a vector onto the simplex {x ≥0, x⊤1 = 1}
+(given in Appendix B).
+Algorithm 1 Proposed algorithm for bipartite k-component
+graph learning
+1: Input: ˜X ∈Rr×n
+Parameters: k, ν, ρ, µ, and η
+2: Output: Bl
+3: Initialization: A0, B0 = PΩB[(X⊤X/n)†]rk, l = 0
+4: repeat
+5:
+Update Ll+1 using (5).
+6:
+Update Bl+1 by iterating (10) (starting from Bl).
+7:
+Update Al+1 by iterating (17) (starting from Al).
+8:
+Update the dual variable using (18).
+9:
+Set l ←l + 1.
+10: until a stopping criterion is satisfied
+D. Dual variable update step:
+Finally we have the update step for the dual variable as
+Yl+1 = Yl + ρ
+
+Ll+1 −
+h
+Ir
+−Bl+1
+−Bl+1⊤Diag(Bl+1⊤1r)
+i
+.
+(18)
+IV. NUMERICAL RESULTS
+In this part, we present numerical results to evaluate the per-
+formance of our proposed method for clustering heavy-tailed
+data. For this purpose, we utilize real-world financial data,
+specifically the log-returns of S&P 500 stocks. Our experiment
+focuses on a subset of 100 stocks, divided into k = 8 clusters
+corresponding to financial sectors, with ground-truth cluster
+labels defined by the GICS classification standard1. The log-
+returns of these stocks are calculated over a 1000-day period
+from January 2016 to January 2020. The resulting data matrix
+˜X ∈Rr×n consists of r = 100 rows (stocks) and n = 1000
+columns (days).
+To assess clustering performance, we employ accuracy
+(ACC), purity [28], modularity (MOD) [29], adjusted Rand
+index (ARI) [30], and Calinski-Harabasz index (CHI) [31].
+Accuracy and purity measure the ratio of true-positive labels
+to p. Accuracy considers the optimal alignment of inferred
+cluster labels to ground truth across all k! permutations, while
+purity considers the majority label within each cluster as the
+ground truth. ARI, on the other hand, quantifies the similarity
+between the true and inferred cluster labels. Modularity also
+measures how disjoint the nodes with different labels are. The
+Calinski-Harabasz index (CHI) is a reference-free criterion that
+measures the ratio of the between-cluster separation to the
+within-cluster separation.
+To run our method, we first obtain ν by fitting a multivariate
+Student-t distribution to the data using the fitHeavyTail R
+package2. We then consider two cases for initialization of A.
+In the first case, A0 is sampled from a random uniform U[0, 1]
+distribution. In the other case, the entries of A0 are drawn
+from the normal distribution N(0, 1). We later normalize A0
+so that each column has unit sum. The augmented data matrix
+is then constructed as X =
+h
+˜X⊤
+˜X⊤A
+i⊤
+. Using this, we
+1https://www.msci.com/our-solutions/indexes/gics
+2https://CRAN.R-project.org/package/fitHeavyTail
+3
+AAL
+ABC
+ADM
+AIG
+ALB
+ALK
+AMCR
+AMP
+ANTM
+APDAVY
+AXP
+BAC
+BEN
+BK
+BLK
+BLL
+C
+CAG
+CAH
+CBRE
+CE
+CF
+CFG
+CHD
+CI
+CL
+CLX
+CMA
+CNC
+COF
+COST
+COTY
+CPB
+CVS
+DAL
+DD
+DFS
+DVA
+(a) CLR method [17]
+ADM
+AEE
+AEP
+AES
+AFL
+AIG
+AIZ
+AJG
+ALB
+ALL
+ALLE
+AME
+AMP
+AON
+AOS
+APD
+ATO
+AVY
+AWK
+AXP
+BA
+BAC
+BEN
+BK
+BLK
+BLL
+BMY
+C
+CAT
+CB
+CBOE
+CBRE
+CE
+CF
+CFG
+CHD
+CHRW
+CINF
+CL
+CLX
+CMA
+CME
+CMI
+CMS
+CNP
+COF
+COST
+COTY
+CPRT
+CSX
+CTAS
+D
+DD
+DE
+DFS
+DOV
+DTE
+DUK
+(b) SGLA method [18]
+ABBV
+ADM
+AFL
+AIG
+AIZ
+AJG
+ALB
+ALL
+ALLE
+ALXN
+AMCR
+AME
+AMGN
+AON
+AOS
+APA
+APD
+AVY
+BA
+BIIB
+BKR
+BLL
+BMY
+CAG
+CAT
+CB
+CBOE
+CBRE
+CE
+CF
+CHD
+CHRW
+CINF
+CL
+CLX
+CME
+CMI
+COG
+COP
+COST
+COTY
+CPB
+CPRT
+CSX
+CTAS
+CVX
+DD
+DE
+DOV
+(c) Fingraph method [27]
+AAL
+ADM
+AES
+ALB
+ALK
+AMCR
+AMP
+APD
+AVY
+AXP
+BAC
+BEN
+BK
+BLK
+BLL
+C
+CAG
+CBOE
+CBRECE
+CF
+CFG
+CHD
+CL
+CLX
+CMA
+COF
+COST
+COTY
+CPB
+DAL
+DD
+DFS
+(d) Javaheri et al. [20]
+A
+ABC
+AIG
+ALGN
+AMCR
+AMP
+APA
+AVY
+AXP
+BAC
+BEN
+BIO
+BK
+BKR
+BLK
+BLL
+C
+CAH
+CBRE
+CERN
+CFG
+CHRW
+CMA
+COF
+COP
+COST
+CPRT
+CSX
+CTAS
+CVX
+DFS
+DHR
+DVA
+(e) Proposed method with random uniform A0.
+AAL
+ADM
+AFL
+AIG
+AIZ
+AJG
+ALL
+ALLE
+AON
+APD
+CB
+CBOE
+CBRE
+CE
+CF
+CHD
+CINF
+CL
+CLX
+CME
+COTY
+CPB
+CPRT
+CTAS
+CVS
+DAL
+DD
+(f) Proposed method with random normal A0.
+Consumer Staples
+Energy
+Financials
+Health Care
+Industrials
+Materials
+Real Estate
+Utilities
+Fig. 1: The graphs learned from financial data corresponding to the log-returns of 100 stocks in S&P500 index (including k = 8 sectors).
+TABLE I: Clustering performance of the graphs shown in Fig. 1
+ACC
+Purity
+MOD
+ARI
+CHI
+CLR [17]
+0.61
+0.71
+0.34
+0.43
+4.73
+SGLA [18]
+0.42
+0.44
+0.41
+0.12
+3.08
+Fingraph [27]
+0.51
+0.66
+0.64
+0.26
+3.48
+Javaheri et al. [20]
+0.67
+0.79
+0.52
+0.57
+4.34
+Proposed (uniform A0)
+0.67
+0.81
+0.85
+0.53
+5.05
+Proposed (normal A0)
+0.73
+0.77
+0.85
+0.63
+5.05
+compute the initial value of B0 = PΩB[(X⊤X/n)†]rk, where
+ΩB denotes the set of feasible B matrices. Once the graph is
+learned, we assign the argument of the maximum entry of the
+i-th row of Bl as the cluster label for node i.
+We compare our proposed method against several bench-
+mark algorithms, including the constrained Laplacian rank
+(CLR) method [17], the SGLA method [18], the Fingraph
+method [19], and the method proposed by Javaheri et al. [20].
+Figure 1 illustrates the resulting graphs where the node
+colors represent the ground-truth clusters (sector indices). The
+clustering performance associated with these graphs are also
+given in Table I. As shown in the table, the graph learned
+by the proposed method with random normal initialization
+achieves the highest accuracy and the highest ARI, while
+the result with the uniform initialization gives the highest
+purity. Overall, the proposed method is shown to have superior
+performance for financial data clustering.
+V. CONCLUSION
+In this paper, we addressed the problem of learning bipartite
+k-component graphs for clustering data with heavy-tailed
+distributions, which are common in financial markets. Unlike
+existing methods that rely on access to data for both cluster
+centers and members in a bipartite graph model, our proposed
+approach addresses this limitation by jointly inferring the
+connections and the center nodes of the graph. Numerical
+experiments highlight the efficiency of the proposed method
+in clustering heavy-tailed data, particularly data from financial
+markets.
+APPENDIX A
+PROOF OF LEMMA 1
+For simplicity in presentation, let us omit the superscript of
+the variables. Let M = L+ 1
+ρY, m = diag(M), mr = m1:r,
+and mk = mr+1:p. Then, we may write
+D
+M,
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+iE
+= m⊤
+r 1r −⟨Mrk, B⟩−⟨Mkr, B⊤⟩+ m⊤
+k B⊤1r
+= m⊤
+r 1r −tr
+  M⊤
+rk + Mkr −mk1⊤
+r
+
+B
+
+,
+(19)
+and
+
+h
+Ir
+−B
+−B⊤Diag(B⊤1r)
+i
+2
+F = r + 2 ∥B∥2
+F + 1⊤
+r BB⊤1r.
+(20)
+Thus, fB(B) in problem (6), can be simplified as
+fB(B) = tr(BR) + ρ ∥B∥2
+F + ρ
+21⊤
+r BB⊤1r
++ p + ν
+n
+X
+i
+log
+
+1 + hi + tr(BGi(A))
+ν
+
+,
+where R = ρ
+ M⊤
+rk + Mkr −mk1⊤
+r
+
+.
+4
+Now, using the logarithmic inequality, log(x) ≤x −
+1, ∀x > 0, one can find an upperbound as follows:
+p + ν
+n
+X
+i
+log
+
+1 + hi + tr(BGi(A))
+ν
+
+≤tr (BP0) + C(B0),
+with
+P0 = p + ν
+n
+X
+i
+Gi(A)
+hi + tr (B0Gi(A)) + ν .
+and C(B0) being a constant term. Thus, we may propose a
+majorization function for fB(B) as
+f S
+B(B; B0) = tr(BH) + ρ ∥B∥2
+F + ρ
+21⊤
+r BB⊤1r + C(B0),
+where H0 = P0 + R. Thus, one can obtain (8) by choosing
+B0 = Bl.
+APPENDIX B
+SIMPLEX PROJECTION OPERATOR
+The Lagrangian function corresponding to problem (11) is
+as follows:
+L(x, α, µ) = 1
+2
+x −x02 + α(1 −⟨x, 1⟩) −⟨µ, x⟩
+(21)
+Based on the KKT conditions [26], the optimal solution
+satisfies:
+∂
+∂xL(x, α, µ) = x −x0 −α1 −µ = 0
+⟨x, 1⟩= 1
+µiϕi = 0
+ϕi ≥0
+µi ≥0
+(22)
+A nearly closed-form solution to this can be obtained via a
+quick sorting method as follows
+PS(x) = max{0, x + α1}
+α = max
+
+0, 1 −P
+i∈Iα xi
+|Iα|
+
+Iα = {i| −α ≤xi}
+(23)
+APPENDIX C
+PROOF OF LEMMA 2
+For simplicity we remove the superscripts in the notations.
+Let gi(A) = hi + tr (BGi(A)). We then have:
+gi(A) = hi + tr
+
+B
+
+−2A⊤˜Si + diag
+
+A⊤˜SiA
+
+1⊤
+r
+
+= hi −2⟨A, ˜SiB⟩+ 1⊤
+r B diag
+
+A⊤˜SiA
+
+.
+(24)
+This can be decomposed in terms of the columns aj of A as
+gi(A) = hi −2
+k
+X
+j=1
+⟨aj, ˜Sibj⟩+
+k
+X
+j=1
+bja⊤
+j ˜Siaj,
+(25)
+where bj = 1⊤
+r bj. Using the logarithmic inequality log(x) ≤
+x −1,
+∀x > 0, we get
+p + ν
+n
+log
+
+1 + gi(A)
+ν
+
+≤p + ν
+n
+gi(A)
+gi(A0) + ν + C(A0).
+where A0 and C(A0) are constant. Hence, fA(A) in (13) can
+be majorized as
+gA(A; A0) = p + ν
+n
+X
+i
+gi(A)
+gi(A0) + ν =
+k
+X
+j=1
+gaj(aj; A0),
+where
+gaj(aj; A0) = bja⊤
+j ˜S0aj −2 b⊤
+j ˜S0aj + cj(A0),
+(26)
+and
+˜S0 = p + ν
+n
+X
+i
+˜Si
+hi + tr(BGi(A0)) + ν .
+(27)
+Choosing A0 = Al, one yields (14).
+REFERENCES
+[1] G. J. Oyewole and G. A. Thopil,
+“Data clustering: application and
+trends,” Artificial Intelligence Review, vol. 56, no. 7, pp. 6439–6475,
+July 2023.
+[2] M. B. Eisen, P. T. Spellman, P. O. Brown, and D. Botstein, “Cluster
+analysis and display of genome-wide expression patterns,” Proceedings
+of the National Academy of Sciences, vol. 95, no. 25, pp. 14863–14868,
+1998.
+[3] J. Shi and J. Malik, “Normalized cuts and image segmentation,” IEEE
+Transactions on Pattern Analysis and Machine Intelligence, vol. 22, no.
+8, pp. 888–905, 2000.
+[4] K. Singh, H. K. Shakya, and B. Biswas, “Clustering of people in social
+network based on textual similarity,” Perspectives in Science, vol. 8, pp.
+570–573, Sept. 2016.
+[5] G. Marti, F. Nielsen, M. Bi´nkowski, and P. Donnat, A review of two
+decades of correlations, hierarchies, networks and clustering in financial
+markets, 2021, arXiv:1703.00485.
+[6] S. C. Johnson, “Hierarchical clustering schemes,” Psychometrika, vol.
+32, pp. 241–254, 1967.
+[7] M. Ester, H. P. Kriegel, J. Sander, and X. Xu,
+“A density-based
+algorithm for discovering clusters in large spatial databases with noise,”
+in Proceedings of the Second International Conference on Knowledge
+Discovery and Data Mining. 1996, p. 226–231, AAAI Press.
+[8] G. J. McLachlan and D. Peel, Finite Mixture Models, John Wiley &
+Sons, Mar. 2004.
+[9] J. Paratte,
+“Graph-based Methods for Visualization and Clustering,”
+2017, Publisher: Lausanne, EPFL.
+[10] A. Ng, M. Jordan, and Y. Weiss, “On Spectral Clustering: Analysis and
+an algorithm,” in Advances in Neural Information Processing Systems
+(NeurIPS), 2001, vol. 14.
+[11] J. Friedman, T. Hastie, and R. Tibshirani, “Sparse inverse covariance
+estimation with the graphical lasso,”
+Biostatistics, vol. 9, no. 3, pp.
+432–441, July 2008.
+[12] B. Lake and J. Tenenbaum, “Discovering structure by learning sparse
+graphs,” in Proceedings of the 32nd Annual Meeting of the Cognitive
+Science Society, Portland, Oregon, United States, Aug. 2010, pp. 778–
+784.
+[13] H. E. Egilmez, E. Pavez, and A. Ortega, “Graph Learning From Data
+Under Laplacian and Structural Constraints,” IEEE Journal of Selected
+Topics in Signal Processing, vol. 11, no. 6, pp. 825–841, Sept. 2017.
+[14] L. Zhao, Y. Wang, S. Kumar, and D. P. Palomar,
+“Optimization
+Algorithms for Graph Laplacian Estimation via ADMM and MM,” IEEE
+Transactions on Signal Processing, vol. 67, no. 16, pp. 4231–4244, Aug.
+2019.
+[15] J. Ying, J. V. de M. Cardoso, and D. P. Palomar, “Nonconvex Sparse
+Graph Learning under Laplacian Constrained Graphical Model,”
+in
+Advances in Neural Information Processing Systems, 2020, vol. 33, pp.
+7101–7113.
+[16] A. Javaheri, A. Amini, F. Marvasti, and D. P. Palomar,
+“Learning
+Spatiotemporal Graphical Models From Incomplete Observations,” IEEE
+Transactions on Signal Processing, vol. 72, pp. 1361–1374, 2024.
+[17] F. Nie, X. Wang, M. I. Jordan, and H. Huang,
+“The Constrained
+Laplacian Rank algorithm for graph-based clustering,” in Proceedings
+of the Thirtieth AAAI Conference on Artificial Intelligence, Phoenix,
+Arizona, Feb. 2016, AAAI’16, pp. 1969–1976.
+5
+[18] S. Kumar, J. Ying, J. V. de M. Cardoso, and D. P. Palomar, “A Unified
+Framework for Structured Graph Learning via Spectral Constraints,”
+Journal of Machine Learning Research, vol. 21, no. 22, pp. 1–60, 2020.
+[19] J. V. M. Cardoso, J. Ying, and D. P. Palomar, “Graphical models in
+heavy-tailed markets,” in Advances in Neural Information Processing
+Systems, 2021, vol. 34, pp. 19989–20001.
+[20] A. Javaheri, J. V. de M. Cardoso, and D. P. Palomar, “Graph Learning
+for Balanced Clustering of Heavy-Tailed Data,”
+in 2023 IEEE 9th
+International Workshop on Computational Advances in Multi-Sensor
+Adaptive Processing (CAMSAP), Herradura, Costa Rica, Dec. 2023, pp.
+481–485.
+[21] A. Javaheri and D. P. Palomar,
+“Learning time-varying graphs for
+heavy-tailed data clustering,” in 2024 32nd European Signal Processing
+Conference (EUSIPCO), 2024, pp. 2472–2476.
+[22] F. Nie, X. Wang, C. Deng, and H. Huang, “Learning a structured optimal
+bipartite graph for co-clustering,”
+in Neural Information Processing
+Systems, 2017.
+[23] J. V. de M. Cardoso, J. Ying, and D. P. Palomar, “Learning Bipartite
+Graphs: Heavy Tails and Multiple Components,” Advances in Neural
+Information Processing Systems, vol. 35, pp. 14044–14057, Dec. 2022.
+[24] S. Boyd,
+“Distributed Optimization and Statistical Learning via the
+Alternating Direction Method of Multipliers,” Foundations and Trends®
+in Machine Learning, vol. 3, no. 1, pp. 1–122, 2010.
+[25] Y. Sun, P. Babu, and D. P. Palomar, “Majorization-Minimization Algo-
+rithms in Signal Processing, Communications, and Machine Learning,”
+IEEE Transactions on Signal Processing, vol. 65, no. 3, pp. 794–816,
+Feb. 2017.
+[26] S. Boyd and L. Vandenberghe,
+Convex Optimization,
+Cambridge
+University Press, 1 edition, Mar. 2004.
+[27] J. V. de M. Cardoso, J. Ying, and D. P. Palomar, “Graphical Models in
+Heavy-Tailed Markets,” in Advances in Neural Information Processing
+Systems (NeurIPS), 2021, vol. 34, pp. 19989–20001.
+[28] B. Everitt, Ed.,
+Cluster analysis,
+Wiley series in probability and
+statistics. Wiley, Chichester, West Sussex, U.K, 5th ed edition, 2011.
+[29] M. E. J. Newman, “Modularity and community structure in networks,”
+Proceedings of the National Academy of Sciences, vol. 103, no. 23, pp.
+8577–8582, June 2006.
+[30] W. M. Rand,
+“Objective Criteria for the Evaluation of Clustering
+Methods,” Journal of the American Statistical Association, vol. 66, no.
+336, pp. 846–850, Dec. 1971.
+[31] T. Cali´nski and J Harabasz, “A dendrite method for cluster analysis,”
+Communications in Statistics, vol. 3, no. 1, pp. 1–27, 1974.
+6

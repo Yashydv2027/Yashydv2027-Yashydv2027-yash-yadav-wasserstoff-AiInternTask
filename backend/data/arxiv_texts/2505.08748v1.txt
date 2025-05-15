@@ -1,0 +1,1027 @@
+Implet: A Post-hoc Subsequence Explainer for Time
+Series Models
+Fanyu Meng†
+Department of Computer Science
+UC Davis
+Davis, USA
+fymeng@ucdavis.edu
+Ziwen Kan†
+Department of Computer Science
+UC Davis
+Davis, USA
+zwkan@ucdavis.edu
+Shahbaz Rezaei
+Department of Computer Science
+UC Davis
+Davis, USA
+srezaei@ucdavis.edu
+Zhaodan Kong
+Department of Computer Science
+UC Davis
+Davis, USA
+zdkong@ucdavis.edu
+Xin Chen
+College of Engineering
+Georgia Institute of Technology
+Atlanta, USA
+xinchen@gatech.edu
+Xin Liu
+Department of Computer Science
+UC Davis
+Davis, USA
+xinliu@ucdavis.edu
+Abstract—Explainability in time series models is crucial for
+fostering trust, facilitating debugging, and ensuring interpretabil-
+ity in real-world applications. In this work, we introduce Im-
+plet, a novel post-hoc explainer that generates accurate and
+concise subsequence-level explanations for time series models.
+Our approach identifies critical temporal segments that signifi-
+cantly contribute to the model’s predictions, providing enhanced
+interpretability beyond traditional feature-attribution methods.
+Based on it, we propose a cohort-based (group-level) explanation
+framework designed to further improve the conciseness and
+interpretability of our explanations. We evaluate Implet on several
+standard time-series classification benchmarks, demonstrating its
+effectiveness in improving interpretability. The code is available
+at https://github.com/LbzSteven/implet.
+Index Terms—explainability, time series classification.
+I. INTRODUCTION
+Deep learning models have demonstrated remarkable suc-
+cess in various time series forecasting and classification tasks,
+often surpassing traditional statistical methods. Despite their
+effectiveness, these models are frequently considered black-
+boxes, making their predictions challenging to interpret. Un-
+derstanding which temporal patterns or subsequences con-
+tribute significantly to a model’s decisions is crucial for
+building trust, debugging erroneous predictions, and making
+informed decisions, especially in high-stakes domains such as
+finance, healthcare, and climate science.
+Existing explainability methods for time series predomi-
+nantly rely on feature attribution techniques, such as gradient-
+based saliency maps or perturbation-based approaches. While
+these methods provide valuable insights into individual time
+points or features influencing model predictions, their high
+dimensionality can complicate interpretation.
+In comparison, subsequence-based explanations, such as
+shapelet-based methods, are a type of global explanation that
+offer more intuitive insights by identifying discriminative tem-
+poral patterns within time series data. However, these methods
+†equal contribution
+Fig. 1: The workflow of the proposed post-hoc subsequence
+explainer Implet. It first computes attributions, then identifies
+continuous subsequences with consistently high attributions.
+Lastly, subsequences with similar shapes and attributions are
+clustered together to enhance conciseness.
+typically inherent instead of post-hoc, and may not match
+the predictive performance of state-of-the-art architectures like
+InceptionTime [1] and may fail to generalize to complex
+deep learning models. To bridge this gap, we introduce
+Implet (importance-based shapelets), a post-hoc subsequence
+explainer that highlights critical temporal segments driving
+model predictions. Our method effectively combines the in-
+arXiv:2505.08748v1  [cs.LG]  13 May 2025
+terpretability of subsequence-level insights with the flexibility
+and accuracy of modern deep learning architectures.
+To further enhance the interpretability and conciseness of
+Implet, we introduce a cohort explanation framework. XAI
+methods are usually categorized into global versus local
+method. Globals methods are concise, but may not generalize
+well to all samples; local methods explain each sample,
+but can be overly verbose. Our cohort explanations strike a
+balance between the two by grouping similar subsequences
+into representative clusters, significantly reducing redundancy.
+This framework enables users to interpret model decisions at
+a higher abstraction level, making explanations more coherent
+and actionable for domain experts.
+The key contributions of our work are:
+• Introducing Implet, a novel post-hoc explainer that iden-
+tifies salient time series subsequences. It combines the
+simplicity of subsequence-based explanations and the
+post-hoc nature of feature attributions.
+• Proposing Coh-Implet, a cohort explanation framework
+to cluster similar subsequences, thereby improving ex-
+planation conciseness. To the best of our knowledge, this
+is the first work on cohort explanation in time series.
+Fig. 1 shows the outline of the proposed framework of
+implet and its cohort explanation.
+• Designing a novel baseline method for subsequence ab-
+lation analysis in time series.
+• Validating Implet across real-world time series datasets,
+demonstrating its effectiveness in capturing essential pre-
+dictive factors utilized by deep learning models.
+II. RELATED WORK
+A. Time Series Explainability
+Feature Attribution: Feature attribution methods are post-
+hoc explainability techniques that quantify the contribution
+of individual input features or specific time steps toward
+a model’s predictions. Common gradient-based attribution
+methods include Grad-CAM [2], Integrated Gradients [3], and
+Input×Gradient [4]. Another popular approach is occlusion,
+which involves masking parts of the input and evaluating
+changes in the model’s predictions [5]. Similarly, Dynamask
+[6] utilizes dynamic masks to evaluate the importance of
+timesteps. LIME approximates feature importance through
+local linear surrogate models [7], while SHAP computes
+feature attributions using cooperative game theory principles,
+accounting for interactions among features [8]. These methods
+are generally model-agnostic and can be readily adapted for
+time series applications.
+More recently, attention mechanisms have also been ex-
+plored for explainability [9], with specific adaptations to
+time series domains [10], [11]. However, such methods are
+primarily limited to transformer-based architectures.
+Additionally, several attribution techniques have been de-
+signed for time series data. For instance, [12] incorporates
+frequency-domain information, and [13] employs generative
+models to produce in-distribution perturbations for attribution
+analysis.
+Our approach leverages feature attribution techniques to
+identify salient subsequences within time series, simplifying
+the explanations and enhancing transparency and potentially
+trust in the underlying model.
+Instance-based Explanations: Instance-based explanation
+methods, such as counterfactual explanations [14] and pro-
+totype selection [15], provide insights by identifying repre-
+sentative or minimally altered instances influencing model
+predictions. In time series, counterfactual explanations aim to
+generate minimally perturbed sequences that alter the model’s
+predictions, thus elucidating decision boundaries [16], [17].
+However, these methods are often computationally expensive
+and can be less inherently interpretable to humans. In con-
+trast, our method differs by extracting concise subsequences
+directly from the original instances, highlighting only essential
+temporal segments to improve interpretability.
+Subsequence-based Explanations: Subsequence-based ex-
+planations have gained attention due to their capacity to
+offer intuitive and interpretable insights by highlighting dis-
+criminative temporal patterns within time series data. They
+usually find discriminative subsequences by maximizing the
+information gain between samples with and without the sub-
+sequence. Prominent approaches, such as shapelet methods,
+have been widely studied for interpretability in classification
+and forecasting tasks [18]. Subsequent advancements include
+incorporating feature selection techniques [19], multi-channel
+classification capabilities [20], Dynamic Time Warping (DTW)
+for improved pattern alignment [21], and deep learning-based
+attention mechanisms for enhanced fidelity [22].
+However, most existing shapelet-based methods focus on in-
+herent explanations—explanations generated during the model
+training process—rather than post-hoc explanations. This lim-
+its their flexibility, and the models utilizing shapelets often fail
+to match state-of-the-art deep learning performance. One could
+train a shaplets model based on the inputs and outputs of a
+black-box model, but it raises concerns regarding whether the
+shapelets truly explain the model behavior or merely capture
+data characteristics. To the best of our knowledge, the only
+prior work on post-hoc subsequence explainers is LASTS
+[23], which generates exemplars and counter-exemplars, fits a
+decision tree, and then uses shapelets to explain the decision
+branches. In contrast to LASTS, our method directly derives
+subsequences from local feature attributions, ensuring that
+explanations faithfully represent the model’s internal decision-
+making rather than the dataset alone.
+B. Cohort Explanation
+Cohort explanations interpret model predictions by analyz-
+ing groups (cohorts) of similar instances instead of individual
+samples. Cohort-based methods reduce variance in explana-
+tions, improve conciseness, and capture broader patterns in
+the model’s decision-making process. Typically, cohort-based
+explanations involve applying local explanation methods to
+instances and subsequently clustering those instances based
+on similarities in their explanations.
+Algorithm 1: Implet Extraction
+Input : Sample x,
+attribution scores w.r.t. class C: wC.
+Output: Implets w.r.t. class C: {IC
+1 , . . . , IC
+r }.
+1 implets ←[]
+2 i ←1
+3 repeat
+4
+if wi ≥ϕ then
+5
+jmin ←i + ℓmin −1
+6
+jmax ←min(i + ℓmax −1, len(x))
+// find the best end loc
+7
+j∗←arg maxjmax
+j=jmin s(i, j; x, wC)
+8
+if s(i, j∗; x, w) ≥ϕ then
+9
+append I(i, j∗; x, wC) to implets
+// skip to the end of the implet
+10
+i ←j∗+ 1
+11
+else
+12
+i ←i + 1
+13
+end
+14
+else
+15
+i ←i + 1
+16
+end
+17 until i > len(x) −ℓmin + 1;
+18 return implets
+Notable cohort explanation methods include Glocal-SHAP
+[24], which computes averaged SHAP values within pre-
+defined cohorts. Other methods automatically infer cohort
+structures; for example, VINE clusters Individual Conditional
+Expectation (ICE) curves through unsupervised clustering
+techniques [25], while CohEx employs iterative supervised
+clustering to enhance explanation locality [26]. Additionally,
+REPID [27] and [28] utilize tree-based partitioning methods
+to form cohorts based on ICE curves or permutation feature
+importances. The GADGET framework extends these methods
+by integrating functional decomposition for improved cohort
+partitioning [29]. Beyond cohort partitioning, methods such
+as GALE refine local explanations (e.g., LIME scores) using
+homogeneity-based reweighting prior to aggregation, espe-
+cially useful in multiclass classification settings [30].
+Despite that these methods can be applied to time series
+data, their explanations are not ideal: time series samples
+can have arbitrary lengths, samples may not be aligned, and
+discriminative information can appear at different locations.
+Therefore, it’s challenging to directly apply the naive sample
+aggregation method used in the existing cohort explanations.
+To the best of our knowledge, no direct work has specifically
+addressed cohort explanations for time series. Our approach
+explicitly clusters salient subsequences into cohorts, generat-
+ing group-level explanations that significantly improve clarity,
+interpretability, and conciseness.
+III. METHOD
+A. Implet
+The core assumption underlying Implet is that feature attri-
+bution methods accurately reflect the behavior of time series
+models. By “accurate,” we mean that time steps with higher
+absolute attribution values significantly influence the model’s
+Algorithm 2: Coh-Implet (Implet Clustering)
+Input : Implets {I1, . . . , Ir}.
+Output: Optimal number of clusters k∗,
+Coh-implets (centroids) {M1, . . . , Mk∗},
+Cluster assignments {a1, . . . , ar}.
+1 k∗←1 ;
+/* optimal number of clusters */
+2 h∗←−∞;
+/* best silhouette score */
+3 M ∗←{} ;
+/* best centroids */
+4 A∗←{} ;
+/* best assignments */
+5 for k ←1, . . . , kmax do
+6
+for q ←1, . . . , Q ;
+/* repeat Q times */
+7
+do
+8
+rand. init. centroids {M1, . . . , Mk} from implets
+9
+repeat
+10
+for j ←1, . . . , r do
+11
+aj ←arg mink
+c=1 ddtw(Ij, Mc)
+12
+end
+13
+for c ←1, . . . , k do
+// DTW Barycenter Averaging
+Mc ←DBA({Ij | aj = c})
+14
+end
+15
+until convergence;
+16
+h ←Silhouettedtw({Ij}, {aj})
+17
+if h > h∗then
+18
+update k∗←k, h∗←h, M ∗←{Mc},
+A∗←{aj}
+19
+end
+20
+end
+21 end
+22 return k∗, M ∗, A∗
+predictions compared to steps with near-zero attributions.
+However, raw attributions are often high-dimensional and
+“spiky,” making direct comprehension challenging. Therefore,
+Implet aims to extract consecutive subsequences exhibiting
+high cumulative attribution scores. Additionally, to avoid triv-
+ial subsequences, we encourage longer subsequences, allowing
+minor gaps with near-zero attribution if necessary. More
+formally:
+Definition 1. Given a model f, a sample x = {x1, . . . , xT },
+and corresponding feature attributions w = {w1, . . . , wT }, a
+subsequence
+I(l, r; x, w) .=
+ {xl, . . . , xr}; {wl, . . . , wr}
+
+(1)
+is considered an implet of x if its score s satisfies:
+s(l, r; x, w) .=
+ r
+X
+i=l
+|wi|
+!
++ λ(r −l + 1) ≥ϕ,
+(2)
+and its length is within predefined boundaries:
+ℓmin ≤r −l + 1 ≤ℓmax,
+(3)
+where λ is a hyperparameter controlling subsequence length,
+and ϕ is a threshold.
+In Eq. 2, the first term ensures high cumulative attribution
+within the subsequence, while the second term discourages
+excessively short segments. Additionally, the minimum length
+prevents single spikes in attribution being categorized as an
+Implet. In practice, we set λ = 0.1 and normalize the
+attribution scores w. We also set ϕ = 1, corresponding to
+a score threshold approximately one standard deviation above
+the mean of normalized attributions. Consistent with previous
+shapelet literature, we set length constraints as ℓmin = 3 and
+ℓmax = ⌊T/2⌋[18].
+To avoid overlapping subsequences, we sequentially extract
+the highest-scoring subsequence starting from each candidate
+location l. After identifying an implet, we update the search
+to resume from the subsequence’s endpoint. Additionally,
+candidate positions with attributions below ϕ are pruned to
+accelerate extraction. The detailed extraction algorithm is
+provided in Alg. 1. The algorithm first find the first time
+step which have an attribution higher than phi, and then find
+a valid end location that maximize the score in Eq. 2. This
+subsequence is added to the implet list. It then finds the next
+time step after the previous implet with an attribution higher
+than ϕ, and repeat. Since the input attribution wC is w.r.t
+class C, the result implets will also be correspond to C. The
+complexity of extracting implets for a single sample is O(T).
+B. Coh-implet (Implet Clusters)
+To further enhance conciseness, we propose to cluster
+similar implets together, and report the centroids as succinct
+explanations. We name the centroids as Coh-Implets. Similar
+to Implets, Coh-Implets are 2-dimensional subsequences, of
+which the first dimension contains feature values, and the
+second dimension contains attributions. The difference is that a
+Coh-Implet is a representative centroid of a cluster of Implets.
+We achieve this via a modified k-means algorithm. The
+clustering distance metric is the two-dimensional dependent
+Dynamic Time Warping (DTW) distance [31], and cluster
+centroids are computed using DTW Barycenter Averaging
+(DBA) [32]. We choose DTW over sliding-window distance
+(used by shapelet algorithms) is to account for the variable
+subsequence length of implets. DTW also has the added bene-
+fit of being more suitable for post-hoc explanations, as network
+operations such as pooling allow models to perceive slightly
+stretched subsequences as equivalent patterns. Furthermore,
+we incorporate attribution information into the DTW com-
+putation, recognizing that identical subsequence values might
+influence the model differently depending on temporal context
+or correlated features. Thus, the two-dimensional (feature plus
+attribution) dependent DTW provides a more faithful measure
+for subsequence similarity in post-hoc explanations.
+To automatically determine the optimal number of clusters
+k, we compute silhouette scores based on the two-dimensional
+dependent DTW metric. The full clustering algorithm is out-
+lined in Alg. 2, where ddtw denotes the two-dimensional
+dependent DTW distance, and Silhouettedtw is the corre-
+sponding silhouette metric. Similar to k-means, the algorithm
+randomly initialize centroids by sample k implets. It then
+assign each implet to the nearest cluster. The centroid are
+recomputed using DBA, and this process is repeated until
+convergence.
+(a) class gun-draw, cluster 1
+(b) class gun-draw, cluster 2
+(c) class finger-pnt, cluster 1 (d) class finger-pnt, cluster 2
+Fig. 2: Implet cohort explanations for the GunPoint dataset.
+Each subfigure corresponds to one cohort, with highlighted
+regions representing the identified implets. The bold subse-
+quence to the right of the dividing line denotes the Coh-Implet
+(cluster centroid) The color intensity represents attribution
+strength.
+IV. EVALUATIONS
+In this section, we demonstrate the faithfulness and inter-
+pretability of Implet through comprehensive evaluations. We
+begin by qualitatively analyze Implet explanations on widely
+used time-series datasets (Sect. IV-A). We then quantitatively
+assess the faithfulness of Implet by removing the identified
+subsequences and measuring their impact on model accuracy
+(Sect. IV-B). Finally, we verify that after clustering, Coh-
+Implets also maintain faithfulness to the model (Sect. IV-C).
+Throughout this section, we evaluate Implet on two rep-
+resentative models: a simpler Fully Convolutional Network
+(FCN) [33] and a more complex state-of-the-art model, In-
+ceptionTime [1]. We consider the most widely-used attribu-
+tion methods, including DeepLIFT1 [34], Input×Gradient [4],
+LIME [7], KernelSHAP [8], Saliency [35], and Occlusion [5].
+The models were implemented using the tsai package [36],
+attribution explainers with captum [37], shapelets with pyts
+[38], and Dynamic Time Warping (DTW) / DBA computations
+with dtaidistance [39].
+A. Qualitative Analysis
+To illustrate the meaningfulness of Implet explanations, we
+tie Implets to domain knowledge and qualitatively analyze
+clusters of identified Implets on two popular time series
+datasets: GunPoint and Chinatown. These datasets contain
+clearly defined temporal patterns with intuitive explanations.
+We use FCN as the target model for both datasets, and select
+saliency as the attribution method due to its consistently
+strong performance in quantitative faithfulness evaluations
+(Sect. IV-B).
+1captum’s DeepLIFT implement is incompatible iwth tsai’s Inception-
+Time due to its ReLU layers. Thus, we omit DeepLIFT explanations for
+InceptionTime.
+(a) weekend cluster
+(b) weekday cluster
+Fig. 3: Implet cohort explanations for the Chinatown dataset.
+Each figure represents one cohort, with highlighted regions
+denoting the identified implets. The bold subsequence to the
+right of the dividing line denotes the Coh-Implet (cluster
+centroid). The color intensity represents attribution strength.
+1) GunPoint: The GunPoint dataset is a binary classifi-
+cation problem involving human activity recognition sensor
+data [40]. The two classes are gun-draw and finger-pnt.
+In the gun-draw class, participants begin with their hands
+positioned by their hips, draw a replica gun from a hip-
+mounted holster, point it toward a target for approximately one
+second, and then return the gun to the holster and their hands
+back to their sides. In the finger-pnt class, participants
+perform the same action using their index finger instead of
+a gun. The recorded data tracks participants’ hand positions
+along the X-axis over time.
+Fig. 2 visualizes the implet cohort explanations for the
+GunPoint dataset. Each class results in two distinct clusters:
+one highlighting upward (increasing) motions and the other
+capturing downward (decreasing) motions. The separation into
+these two clusters is consistent with physical intuition, as
+drawing motions involving a gun and a finger exhibit different
+acceleration and deceleration profiles. Also note that each
+cluster contains two types of visually distinct samples (e.g.
+in Fig. 2a, there’s “taller” samples and “wider” samples). The
+reason behind this is that the GunPoint dataset collects samples
+using two subjects (one male and one female) for both classes.
+Despite the overall shape differences of the two subjects, Coh-
+Implet recognizes the similarity of subsequences from the
+two subjects. Therefore, each cluster contains subsequences
+from both subjects, presenting the most meaningful temporal
+subsequences influencing the model’s classification decisions.
+2) Chinatown: The Chinatown dataset comprises hourly
+pedestrian traffic data collected in Melbourne, Australia’s
+Chinatown throughout 2017. Each sample spans 24 hours,
+with each time step recording the total pedestrian count in the
+corresponding hour. The classification task is to distinguish
+between weekend and weekday pedestrian traffic patterns.
+Implets and Coh-Implets on the Chinatown dataset are
+visualized in Fig. 3. Each class yields one main cluster, both
+focusing prominently on the early morning hours (1 AM to
+6 AM). This aligns with intuition: weekend patterns exhibit
+higher pedestrian traffic during late-night hours compared to
+weekdays, where traffic tends to decline earlier. These findings
+validate that Implet successfully extracts human-interpretable
+temporal patterns consistent with our expectations.
+Fig. 4: Example of the proposed subsequence removal scheme.
+B. Implet Faithfulness
+To quantitatively evaluate the faithfulness of Implet expla-
+nations, we conduct an ablation analysis. The core idea is to
+identify subsequences highlighted by Implet and subsequently
+remove them from the input samples. If the identified sub-
+sequences (Implets) genuinely reflect the model’s decision-
+making, then their removal should cause a significantly greater
+drop in accuracy compared to randomly removing subse-
+quences of equivalent length. Thus, we define faithfulness as
+the mean accuracy drop after “removing” the subsequences
+from all samples.
+However, effectively removing subsequences from time
+series data poses challenges. Many time series models are
+sensitive to sudden changes or abrupt transitions [41], [42].
+Simple removal methods such as zero-filling may create ar-
+tificial discontinuities, inadvertently affecting model behavior.
+Other naive methods like sliding-window averages or Gaussian
+removal are also inadequate, as they have limited effects
+on smooth yet crucial subsequences (see Fig. 4). GunPoint
+implets in Fig. 2 are examples of smooth subsequences that
+are difficult for sliding-window averages to remove. Other
+baselines include filling with sample mean [43], reverse the
+time order of the subsequence [44], and learning the most
+useful replacement from a different dataset [45]. All of these
+baselines are subject to abrupt transitions. Thus, to address
+these issues, we propose a simple, specialized removal proce-
+dure via randomized polynomials:
+1) Determine
+the
+number
+of
+control
+points
+with
+max(⌈L/10⌉, 2),
+where
+L
+is
+the
+length
+of
+the
+subsequence;
+2) Assign each control point a random i.i.d. value drawn
+from a distribution with the same mean and standard
+deviation as the original sample.
+3) Add the subsequence starting and ending values to the
+control points. Then interpolate a polynomial connecting
+the control points. Also match the polynomial’s gradi-
+ents at the start and end of the subsequence with the
+gradients on the original sample.
+Fig. 4 shows an example of this procedure. It ensures
+smooth replacement signals, minimizing unintended model
+reactions.
+(a) FCN
+(b) InceptionTime
+Fig. 5: Faithfulness evaluation of implets with different attribution methods, compared against the baseline ShapeletTransform.
+Arrows indicate the accuracy drop from removing identified subsequences (arrow tip) versus removing random subsequences
+of equal length (arrow tail). e.g. an arrow pointing from 0.2 to 0.4 represents removing random subsequence causes an accuracy
+drop of 0.2, while removing the explainer output causes an accuracy drop of 0.4. Longer, upward arrows indicate more faithful
+explanations. Short horizontal lines indicate negligible differences between random and identified subsequence removal. Dashed
+arrow represent ShapeletTransform for clarity. Horizontal dashed lines correspond to the accuracy drops that are equivalent to
+random guess. The last two dataset differ from the rest as Earthquaks is event-based and FordA is frequency-based.
+We perform our evaluations using 13 commonly used binary
+classification datasets from the UCR Time Series Archive
+[46] 2. Model performances can be found in Appendix A.
+Both FCN and InceptionTime achieve high accuracy on all
+tasks, though on certain datasets InceptionTime exhibits slight
+overfitting due to a large parameter size and the limited dataset
+size. We evaluate across multiple attribution methods previ-
+ously discussed. Additionally, we benchmark our approach
+against ShapeletTransform [19] as a model-agnostic baseline.3
+Fig. 5 summarizes the results from our subsequence removal
+experiments. Removing subsequences identified by Shapelet-
+Transform often leads to notable accuracy drops, indicating
+that the shapelets generally contain important model-focused
+features. However, because shapelets tend to be lengthy and
+noisy, removing random subsequences of equal length typ-
+ically results in a comparable accuracy drop. On several
+occasions, random removal leads to an even greater accuracy
+reduction, suggesting that shapelets sometimes include less
+informative segments. This matches our expectation, as though
+Shaplets learns discriminative subsequences, they may not
+match what the target model has learned.
+2In Fig. 5 and 6, DPOC denotes DistalPhalanxOutlineCorrect.
+3We initially attempted to compare against LASTS [23]. However, available
+implementations failed to identify meaningful subsequences in most datasets,
+as perturbations in its latent space rarely flipped predictions, resulting in
+nonexistent explanations. Thus, LASTS is excluded from our comparison.
+In contrast, Implet subsequences demonstrate consistent
+superiority: removing implets almost always leads to signifi-
+cantly larger accuracy drops compared to random subsequence
+removal. Among attribution methods, Implet performs partic-
+ularly well when paired with Saliency, Input×Gradient and
+DeepLIFT, producing consistently high-quality explanations.
+GuidedBackprop perform well with simpler models such as
+FCN but are less effective with deeper architectures like
+InceptionTime. This might due to GuidedBackprop zero-ing
+out negative gradients, causing it to become oblivious to higher
+layer weights [47]. The two perturbation-based approach,
+LIME and KernelSHAP, generally yield sparse, fragmented
+attributions caused by their built-in sparsity constraint or
+regularization term [7], [8]. Sparsity might be desirable for
+a standalone explainer, but it hinder effective subsequence
+identification, resulting in poorer Implet performance.
+Also, we observe that all methods are less effective on
+InceptionTime than FCN. We hypothesize that the reason is
+InceptionTime being more powerful than FCN. Since we only
+remove one segment in each perturbed sample (equivalent to
+removing one feature in a tabular task), not all discriminative
+information is removed. With a much larger receptive field,
+InceptionTime could overcome perturbation by inferring the
+label from unmodified segments. This is more significant on
+simpler tasks such as GunPoint. However, the difference
+between removing Implets and removing random segments is
+(a) FCN
+(b) InceptionTime
+Fig. 6: Faithfulness evaluation comparing Implets (dashed arrows) and Implet-Centroid-Like Subsequences (ICLS, solid arrows).
+Arrows indicate the accuracy drop from removing identified subsequences (arrow tip) versus removing random subsequences of
+equal length (arrow tail). Longer, upward arrows indicate more faithful explanations. Short horizontal lines indicate negligible
+differences between random and identified subsequence removal. Horizontal dashed lines correspond to the accuracy drops
+that are equivalent to random guess. The last two dataset differ from the rest as Earthquaks is event-based and FordA is
+frequency-based.
+still non-trivial in most tasks, demonstrating that Implet does
+find the important segments used by the model.
+We
+note,
+however,
+that
+certain
+datasets—particularly
+Earthquakes
+and
+FordA—pose
+difficulties
+for
+subsequence-based explainers, including both Implet and
+ShapeletTransform. These datasets are either frequency-
+oriented or event-based, which limits the effectiveness of
+subsequence explanations [48]. Additionally, the Chinatown
+dataset presents challenges due to its short time series length
+(24 steps), resulting in very short identified implets (typically
+length 3), which makes our smooth removal method less
+impactful. We consider this lack of accuracy drop is more
+related to the smooth removal than the effectiveness of
+Implets. We analyze with different removals method on
+these tasks and obtain better results, and we report them in
+Appendix B.
+C. Cohort Explanation: Coh-Implet
+In the previous sections, we demonstrated that implets
+provide faithful and interpretable subsequence explanations.
+Here, we investigate whether the cohort explanation frame-
+work—particularly the centroids generated by clustering im-
+plets—is also faithful to the underlying model. To evaluate
+this, we design an experiment using the same datasets, models,
+and attribution methods as previously in Sect. IV-B. The
+evaluation pipeline is structured as follows:
+1) Split each dataset evenly into two subsets: the Implet
+extraction subset and the Implet evaluation subset.
+2) Extract implets from the Implet extraction subset using
+Algorithm 1, and then cluster them using Algorithm 2
+to obtain the Coh-Implets.
+3) In the Implet evaluation subset, find subsequences that
+are similar to the identified Coh-Implets. For each Coh-
+Implet, identify subsequences that best match the cen-
+troid shape using 1-D DTW solely based on the feature
+values. We refer to these subsequences as Coh-Implet-
+Like Subsequences (CILS).
+4) Evaluate the impact of removing the identified CILS
+on model accuracy, following the ablation approach
+described in Sect. IV-B.
+5) As a baseline, extract implets directly from the Implet
+evaluation subset and measure accuracy drops using the
+same removal approach.
+The results of this evaluation are presented in Fig. 6,
+comparing the accuracy drops caused by removing CILS
+versus removing the original implets. Due to space constraints,
+we show results only for the attribution methods exhibiting
+consistently strong performance: Input×Gradient, Saliency,
+GuidedBackprop, and DeepLIFT. Across most datasets, we
+observe that removing ICLS results in accuracy reductions
+comparable to removing implets, even though no attribution
+information is used in obtaining CILS. This indicates that
+cohort centroids capture model-relevant information and thus
+faithfully represent the underlying model behavior.
+Note that in identifying CILS, we deliberately omit the
+attribution dimension and consider only the raw time series
+values. We want to prevent bias towards higher attribution
+areas, since the implet centroids’ attribution dimension is
+naturally high. Instead, we want to verify that the shape of
+the implet centroids alone remain meaningful and faithful to
+model behavior. Therefore, this is a stronger results than if
+we find CILS using both dimensions. If we were to use both
+dimensions, their faithfulness would be between 1D CILS and
+real implets. Such results are reported in Appendix C.
+Additionally, removing CILS is slightly less effective than
+removing implets, underscoring the importance of including
+attribution information during Implet extraction and clustering.
+Without attribution, clusters may combine subsequences that
+appear similar in value but differ significantly in terms of
+model impact, reducing overall explanation effectiveness.
+V. CONCLUSION
+In this work, we introduced Implet, a novel post-hoc subse-
+quence explainer designed to enhance interpretability of time
+series models by identifying critical temporal segments derived
+from feature attributions. Unlike traditional shapelet-based
+approaches, Implet is explicitly model-aware, generating con-
+cise and faithful explanations that directly reflect the model’s
+decision-making process. Additionally, we proposed a cohort
+explanation framework to cluster similar implets, produc-
+ing higher-level, interpretable summaries. Through extensive
+qualitative and quantitative evaluations, we demonstrated that
+Implet significantly improves the faithfulness, conciseness,
+and clarity of explanations across a variety of datasets. Our
+approach effectively bridges the gap between fine-grained
+feature attribution methods and human-interpretable temporal
+explanations, paving the way toward more transparent and
+trustworthy time series AI systems.
+In our experiments, we focused primarily on binary clas-
+sification tasks, as they are more straightforward for inter-
+pretation and visualization purposes. However, Implet can be
+naturally extended to higher-dimensional data by generalizing
+each implet from 2-dimensional (value and attribution) to
+2n-dimensional, where n represents the dimensionality of
+the original input sample. A promising direction for future
+research involves automatically identifying and removing di-
+mensions that contribute minimal explanatory information,
+further improving the conciseness and usability of implets in
+complex, high-dimensional scenarios.
+APPENDIX
+A. Model Performance
+Table I shows the performance of the two models on the
+UCR datasets. InceptionTime is more expressive than FCN,
+though due to limited dataset size, it exhibits overfitting in
+some datasets and yield a slightly worse performance than
+FCN. It can be improved by hyperparameter tuning, but this
+FCN
+InceptionTime
+Chinatown
+98.54%
+97.67%
+Coffee
+96.43%
+96.43%
+Computers
+87.20%
+76.80%
+DPOC
+76.81%
+74.64%
+ECG200
+86.00%
+89.00%
+ECGFiveDays
+95.94%
+99.77%
+GunPoint
+100.00%
+98.67%
+Lightning2
+70.49%
+77.05%
+PowerCons
+93.33%
+99.77%
+Strawberry
+97.30%
+100.00%
+TwoLeadECG
+99.74%
+97.37%
+Earthquakes
+74.82%
+70.50%
+FordA
+90.91%
+94.24%
+TABLE I: Prediction accuracy of the two models on the UCR
+datasets.
+is beyond the scope of this paper as we are focusing on
+explanation.
+B. Implet Faithfulness with Alternative Removal
+In Sect. IV-B, we observe that neither ShapeletTransform
+nor Implet achieve high faithfulness score on three datasets:
+Chinatown, Earthquakes and FordA. We hypothesize
+each has a different reason. Chinatown samples are short
+(24 steps), causing the Implets to also be short, limiting the
+effectiveness of the proposed smooth subseuqnces removal
+method. For the later two datasets, Earthquakes is an
+event-based task, and multiple events are needed to correctly
+classify [46]. FordA’s primary features are frequency-based
+and appears multiple times in each sample. On these two
+datasets, removing one subsequence has limited effects. To
+verify our hypothesis that Implets are faithful to the target
+models on these datasets, and the lacking results in Fig. 5
+are due to experiment designs, we conduct the following
+additional evaluations:
+• On Chinatown, instead of using the smooth subse-
+quence removal procedure, we fill the target subsequence
+with the sample mean;
+• On Earthquakes and FordA, instead of removing
+each subsequence individually, we find all Implets from
+each sample, remove all of them and then test for
+accuracy. The random removal baseline is also changed
+to remove the same number of random subsequences with
+equivalent lengths.
+The results are reported in Fig. 8. We observe better faith-
+fulness on Chinatown and Earthquakes, matching our
+expectations. Note that ShapeletTransform’s results do not
+change significantly compared to the test in Sect. IV-B.
+Additionally, on Chinatown, saliency and GuidedBackprop
+implets causes the model performance to degrade to be much
+lower than random guess. This suggests that Implets found
+with these two explainers are crucial to model predictions,
+and perturbing them would drastically affect model behavior.
+On FordA, Input×Gradient, occlusion and GuidedBack-
+prop achieves decent performance on InceptionTime. All
+(a) FCN
+(b) InceptionTime
+Fig. 7: Faithfulness evaluation comparing (1) Implets, (2) CILS using feature dimension only, and (3) CILS using both feature
+and attribution dimensions. The height of the bars represent the difference in accuracy drop between removing identified
+subsequences versus removing random subsequences of equal length. Values are equivalent to arrow lengths in Fig. 6. Higher
+values indicate more faithful explanations. The last two dataset differ from the rest as Earthquaks is event-based and FordA
+is frequency-based.
+Fig. 8: Alternative faithfulness evaluation on three datasets
+that do not perform well in Fig. 5. Chinatown uses mean-
+fill as the subsequence removal method, and Earthquakes
+and FordA removes multiple subsequences from each sample.
+Arrows indicate the accuracy drop from removing identified
+subsequences (arrow tip) versus removing random subse-
+quences of equal length (arrow tail). Longer, upward arrows
+indicate more faithful explanations.
+subsequences explainers are still less effective on FCN. We
+conclude that the frequency features are challenging for sub-
+sequence explainers.
+C. Evaluating Coh-Implets using Both Dimensions
+In Sect. IV-C, we evaluate the quality of Coh-Implets by
+finding Coh-Implet-Like subsequence (CILS). We achieve this
+by looking for subsequences that are similar to Coh-Implets
+in the feature value dimension. In this section, we perform the
+same evaluate, albeit we use both the feature and the attribution
+dimensions in finding CILS.
+Fig. 7 shows the 2D results. Intuitively, using both di-
+mensions when finding CILS should yield a higher change
+in accuracy drop, since Coh-Implets naturally have higher
+attribution values. This will cause CILS to be biased towards
+higher attribution areas, causing 2D CILS to be more sim-
+ilar to Implets. We observe that in majority of the datasets
+and explainer combinations, the difference in accuracy drop
+follows 1D CILS < 2D CILS < Implets, which matches our
+expectation. This further motivates the usage of the attribution
+dimension in Implets.
+However, the performances of 1D CILS are not far from 2D
+CILS or Implets, barring a few exceptions with GuidedBack-
+prop. This shows that after clustering Coh-Implets correctly
+captures the most relevant information to the target model.
+REFERENCES
+[1] H. Ismail Fawaz, B. Lucas, G. Forestier, C. Pelletier, D. F. Schmidt,
+J. Weber, G. I. Webb, L. Idoumghar, P.-A. Muller, and F. Petitjean,
+“Inceptiontime: Finding alexnet for time series classification,” Data
+Mining and Knowledge Discovery, vol. 34, no. 6, pp. 1936–1962, 2020.
+[2] R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and
+D. Batra, “Grad-cam: Visual explanations from deep networks via
+gradient-based localization,” in Proceedings of the IEEE international
+conference on computer vision, 2017, pp. 618–626.
+[3] M. Sundararajan, A. Taly, and Q. Yan, “Axiomatic attribution for deep
+networks,” in International conference on machine learning.
+PMLR,
+2017, pp. 3319–3328.
+[4] A. Shrikumar, P. Greenside, A. Shcherbina, and A. Kundaje, “Not just
+a black box: Learning important features through propagating activation
+differences,” arXiv preprint arXiv:1605.01713, 2016.
+[5] M. D. Zeiler and R. Fergus, “Visualizing and understanding convo-
+lutional networks,” in Computer Vision–ECCV 2014: 13th European
+Conference, Zurich, Switzerland, September 6-12, 2014, Proceedings,
+Part I 13.
+Springer, 2014, pp. 818–833.
+[6] J. Crabb´e and M. Van Der Schaar, “Explaining time series predictions
+with dynamic masks,” in International conference on machine learning.
+PMLR, 2021, pp. 2166–2177.
+[7] M. T. Ribeiro, S. Singh, and C. Guestrin, ““why should i trust you?”
+explaining the predictions of any classifier,” in Proceedings of the 22nd
+ACM SIGKDD international conference on knowledge discovery and
+data mining, 2016, pp. 1135–1144.
+[8] S. M. Lundberg and S.-I. Lee, “A unified approach to interpreting model
+predictions,” Advances in neural information processing systems, vol. 30,
+2017.
+[9] A. Vaswani, “Attention is all you need,” Advances in Neural Information
+Processing Systems, 2017.
+[10] B. Zhao, H. Xing, X. Wang, F. Song, and Z. Xiao, “Rethinking attention
+mechanism in time series classification,” Information Sciences, vol. 627,
+pp. 97–114, 2023.
+[11] Q. Du, W. Gu, L. Zhang, and S.-L. Huang, “Attention-based lstm-
+cnns for time-series classification,” in Proceedings of the 16th ACM
+conference on embedded networked sensor systems, 2018, pp. 410–411.
+[12] H. Chung, S. Jo, Y. Kwon, and E. Choi, “Time is not enough: Time-
+frequency based explanation for time-series black-box models,” in
+Proceedings of the 33rd ACM International Conference on Information
+and Knowledge Management, 2024, pp. 394–403.
+[13] H. Meng, C. Wagner, and I. Triguero, “Explaining time series clas-
+sifiers through meaningful perturbation and optimisation,” Information
+Sciences, vol. 645, p. 119334, 2023.
+[14] S. Wachter, B. Mittelstadt, and C. Russell, “Counterfactual explanations
+without opening the black box: Automated decisions and the gdpr,”
+2018. [Online]. Available: https://arxiv.org/abs/1711.00399
+[15] C. Chen, O. Li, D. Tao, A. Barnett, C. Rudin, and J. K. Su, “This looks
+like that: deep learning for interpretable image recognition,” Advances
+in neural information processing systems, vol. 32, 2019.
+[16] E. Delaney, D. Greene, and M. T. Keane, “Instance-based counterfactual
+explanations for time series classification,” in International conference
+on case-based reasoning.
+Springer, 2021, pp. 32–47.
+[17] E. Ates, B. Aksar, V. J. Leung, and A. K. Coskun, “Counterfactual ex-
+planations for multivariate time series,” in 2021 international conference
+on applied artificial intelligence (ICAPAI).
+IEEE, 2021, pp. 1–8.
+[18] L. Ye and E. Keogh, “Time series shapelets: a novel technique that
+allows accurate, interpretable and fast classification,” Data mining and
+knowledge discovery, vol. 22, pp. 149–182, 2011.
+[19] J. Lines, L. M. Davis, J. Hills, and A. Bagnall, “A shapelet transform
+for time series classification,” in Proceedings of the 18th ACM SIGKDD
+international conference on Knowledge discovery and data mining,
+2012, pp. 289–297.
+[20] M. F. Ghalwash and Z. Obradovic, “Early classification of multivariate
+temporal observations by extraction of interpretable shapelets,” BMC
+bioinformatics, vol. 13, pp. 1–12, 2012.
+[21] M. Shah, J. Grabocka, N. Schilling, M. Wistuba, and L. Schmidt-
+Thieme, “Learning dtw-shapelets for time-series classification,” in Pro-
+ceedings of the 3rd IKDD Conference on Data Science, 2016, 2016, pp.
+1–8.
+[22] J. Grabocka, N. Schilling, M. Wistuba, and L. Schmidt-Thieme, “Learn-
+ing time-series shapelets,” in Proceedings of the 20th ACM SIGKDD
+international conference on Knowledge discovery and data mining,
+2014, pp. 392–401.
+[23] R. Guidotti, A. Monreale, F. Spinnato, D. Pedreschi, and F. Giannotti,
+“Explaining any time series classifier,” in 2020 IEEE second interna-
+tional conference on cognitive machine intelligence (CogMI).
+IEEE,
+2020, pp. 167–176.
+[24] M. Cavus, A. Stando, and P. Biecek, “Glocal explanations of expected
+goal models in soccer,” arXiv preprint arXiv:2308.15559, 2023.
+[25] M. Britton, “Vine: Visualizing statistical interactions in black box
+models,” arXiv preprint arXiv:1904.00561, 2019.
+[26] F. Meng, X. Liu, Z. Kong, and X. Chen, “Cohex: A generalized
+framework for cohort explanation,” 2024. [Online]. Available: https:
+//arxiv.org/abs/2410.13190
+[27] J. Herbinger, B. Bischl, and G. Casalicchio, “Repid: Regional effect
+plots with implicit interaction detection,” in International Conference on
+Artificial Intelligence and Statistics.
+PMLR, 2022, pp. 10 209–10 233.
+[28] C. Molnar, G. K¨onig, B. Bischl, and G. Casalicchio, “Model-agnostic
+feature importance and effects with dependent features: a conditional
+subgroup approach,” Data Mining and Knowledge Discovery, pp. 1–39,
+2023.
+[29] J. Herbinger, B. Bischl, and G. Casalicchio, “Decomposing global
+feature
+effects
+based
+on
+feature
+interactions,”
+arXiv
+preprint
+arXiv:2306.00541, 2023.
+[30] I. Van Der Linden, H. Haned, and E. Kanoulas, “Global aggrega-
+tions of local explanations for black box models,” arXiv preprint
+arXiv:1907.03039, 2019.
+[31] M. Shokoohi-Yekta, B. Hu, H. Jin, J. Wang, and E. Keogh, “Generalizing
+dtw to the multi-dimensional case requires an adaptive approach,” Data
+mining and knowledge discovery, vol. 31, pp. 1–31, 2017.
+[32] F. Petitjean, A. Ketterlin, and P. Ganc¸arski, “A global averaging method
+for dynamic time warping, with applications to clustering,” Pattern
+recognition, vol. 44, no. 3, pp. 678–693, 2011.
+[33] F. Karim, S. Majumdar, H. Darabi, and S. Chen, “Lstm fully convolu-
+tional networks for time series classification,” IEEE access, vol. 6, pp.
+1662–1669, 2017.
+[34] A. Shrikumar, P. Greenside, and A. Kundaje, “Learning important
+features through propagating activation differences,” in International
+conference on machine learning.
+PMlR, 2017, pp. 3145–3153.
+[35] K. Simonyan, A. Vedaldi, and A. Zisserman, “Deep inside convolutional
+networks: Visualising image classification models and saliency maps,”
+arXiv preprint arXiv:1312.6034, 2013.
+[36] I.
+Oguiza,
+“tsai
+-
+a
+state-of-the-art
+deep
+learning
+library
+for
+time series and sequential data,” Github, 2023. [Online]. Available:
+https://github.com/timeseriesAI/tsai
+[37] N. Kokhlikyan, V. Miglani, M. Martin, E. Wang, B. Alsallakh,
+J. Reynolds, A. Melnikov, N. Kliushkina, C. Araya, S. Yan, and
+O. Reblitz-Richardson, “Captum: A unified and generic model inter-
+pretability library for pytorch,” 2020.
+[38] J. Faouzi and H. Janati, “pyts: A python package for time series
+classification,” Journal of Machine Learning Research, vol. 21, no. 46,
+pp. 1–6, 2020. [Online]. Available: http://jmlr.org/papers/v21/19-763.
+html
+[39] W. Meert, K. Hendrickx, T. Van Craenendonck, P. Robberechts,
+H. Blockeel, and J. Davis, “DTAIDistance,” Aug. 2020. [Online].
+Available: https://github.com/wannesm/dtaidistance
+[40] C. A. Ratanamahatana and E. Keogh, “Everything you know about
+dynamic time warping is wrong,” in Third workshop on mining temporal
+and sequential data, vol. 32.
+Citeseer, 2004.
+[41] M. H. Pesaran, D. Pettenuzzo, and A. Timmermann, “Forecasting time
+series subject to multiple structural breaks,” The Review of Economic
+Studies, vol. 73, no. 4, pp. 1057–1084, 2006.
+[42] T. Boot and A. Pick, “Does modeling a structural break improve forecast
+accuracy?” Journal of Econometrics, vol. 215, no. 1, pp. 35–59, 2020.
+[43] C. Loeffler, W.-C. Lai, B. Eskofier, D. Zanca, L. Schmidt, and
+C. Mutschler, “Don’t get me wrong: How to apply deep visual interpre-
+tations to time series,” arXiv preprint arXiv:2203.07861, 2022.
+[44] U. Schlegel, H. Arnout, M. El-Assady, D. Oelke, and D. A. Keim,
+“Towards a rigorous evaluation of xai methods on time series,” in 2019
+IEEE/CVF International Conference on Computer Vision Workshop
+(ICCVW).
+IEEE, 2019, pp. 4197–4201.
+[45] P. S. Parvatharaju, R. Doddaiah, T. Hartvigsen, and E. A. Rundensteiner,
+“Learning saliency maps to explain deep time series classifiers,” in
+Proceedings of the 30th ACM international conference on information
+& knowledge management, 2021, pp. 1406–1415.
+[46] H. A. Dau, A. Bagnall, K. Kamgar, C.-C. M. Yeh, Y. Zhu, S. Gharghabi,
+C. A. Ratanamahatana, and E. Keogh, “The ucr time series archive,”
+IEEE/CAA Journal of Automatica Sinica, vol. 6, no. 6, pp. 1293–1305,
+2019.
+[47] J. Adebayo, J. Gilmer, M. Muelly, I. Goodfellow, M. Hardt, and B. Kim,
+“Sanity checks for saliency maps,” Advances in neural information
+processing systems, vol. 31, 2018.
+[48] S. Rezaei and X. Liu, “Explanation space: A new perspective into time
+series interpretability,” arXiv preprint arXiv:2409.01354, 2024.

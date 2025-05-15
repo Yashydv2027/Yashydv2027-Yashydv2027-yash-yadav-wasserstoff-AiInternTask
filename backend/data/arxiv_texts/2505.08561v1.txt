@@ -1,0 +1,1673 @@
+Reinforcement Learning meets Masked Video Modeling : Trajectory-Guided
+Adaptive Token Selection
+Ayush K. Rai∗,1, Kyle Min∗,2
+Tarun Krishna1, Feiyan Hu1, Alan F. Smeaton1, Noel E. O’Connor1
+1Insight Research Ireland Centre for Data Analytics, Dublin City University 2Intel Labs, USA
+ayush.rai3@mail.dcu.ie kyle.min@intel.com
+Abstract
+Masked video modeling (MVM) has emerged as a highly
+effective pre-training strategy for visual foundation models,
+whereby the model reconstructs masked spatiotemporal to-
+kens using information from visible tokens. However, a key
+challenge in such approaches lies in selecting an appropriate
+masking strategy. Previous studies have explored predefined
+masking techniques, including random and tube-based mask-
+ing, as well as approaches that leverage key motion priors,
+optical flow and semantic cues from externally pre-trained
+models. In this work, we introduce a novel and general-
+izable Trajectory-Aware Adaptive Token Sampler (TATS),
+which models the motion dynamics of tokens and can be
+seamlessly integrated into the masked autoencoder (MAE)
+framework to select motion-centric tokens in videos. Addi-
+tionally, we propose a unified training strategy that enables
+joint optimization of both MAE and TATS from scratch us-
+ing Proximal Policy Optimization (PPO). We show that our
+model allows for aggressive masking without compromising
+performance on the downstream task of action recognition
+while also ensuring that the pre-training remains memory
+efficient. Extensive experiments of the proposed approach
+across four benchmarks, including Something-Something
+v2, Kinetics-400, UCF101, and HMDB51, demonstrate the
+effectiveness, transferability, generalization, and efficiency
+of our work compared to other state-of-the-art methods.
+1. Introduction
+Self-supervised video representation learning has recently
+emerged as a prominent area of research due to the gen-
+eralization capabilities of the learned embeddings. Such
+representations can be applied to several downstream tasks
+such as action recognition [22, 60], object detection [2], and
+segmentation [3] in videos. Due to the scarcity of labeled
+data, a standard approach in self-supervised learning (SSL)
+*Equal contribution
+methods for video understanding involves defining a pretext
+task. A pretext task can be interpreted as a self-supervised
+pseudo-objective for pre-training a model. Intuitively, if a
+model learns to solve a complex task that requires a high-
+level understanding of its input, then the features learned as
+a result should generalize well to other tasks.
+Inspired by BERT [30] in language modeling, masked
+modeling in the form of masked autoencoders (MAE) was
+adopted for images [23, 33, 64] and for videos [14, 52, 59]
+as a self-supervised pretext task. Masked modeling involves
+masking a large fraction (between 75-95%) of the input data
+and then learning to reconstruct or predict the removed con-
+tent based on the visible information. Although this concept
+is simple, it has been shown to improve performance [14, 23],
+generalization [14, 23], data efficiency [52], memory effi-
+ciency [4, 14], scalability [23, 59], robustness [24] and to
+reduce overfitting [17] on downstream tasks.
+Several studies have explored different formulations of
+MAE, focusing on masking portions of input, features, aug-
+menting the masked modeling objective [6, 10, 33, 64, 69,
+70, 72]. However, less emphasis has been given to adap-
+tive masking mechanisms that adaptively select space-time
+patches based on the input. The masking mechanism forms a
+crucial component of the family of MAE methods, as it is re-
+sponsible for selecting which information is to be exploited
+by the encoder and predicted by the decoder.
+[23, 70] explored random masking approaches for im-
+age patches, blocks, and grids. Though such approaches
+have shown promise and performance gains on downstream
+tasks, there still exists a research gap in terms of the mask-
+ing mechanism being able to adapt to the input. With fixed
+masking mechanisms, MAEs are unable to exploit the ex-
+pressivity of transformer-based encoders. In this direction,
+other contemporary works have investigated different mask-
+ing strategies for images such as semantically guided mask-
+ing [33], uniform sampling for pyramid-based vision trans-
+former (ViT) [34] and utilizing mask generators based on
+object priors [7] and learning easy-to-hard masking through
+curriculum learning [36].
+1
+arXiv:2505.08561v1  [cs.CV]  13 May 2025
+Figure 1. A depicts our overall architecture with MAE (fϕ) and TATS (gθ). B illustrates the joint training (Algorithm 1) of fϕ and gθ using
+PPO. Until epoch mo, standard random space-time masking is applied. Afterward, every k steps, Phase 1 (gθ frozen,fϕ unfrozen) stores
+old state of gθ in memory buffer Mb as episodes, followed by Phase 2 (gθ unfrozen,fϕ frozen), where gθ is optimized via Ls(θ). The
+optimization process then alternates between Phase 1 and Phase 2.
+The challenging aspect of MVM is the extra time dimen-
+sion and high spatiotemporal inductive biases from adja-
+cent frames carrying highly redundant information. This
+introduces potential information leakage as masked space-
+time patches can be trivially inferred from spatiotemporal
+neighborhoods, enabling learning of the shortcuts and less
+generalizable representations during pre-training. Hence, a
+substantial amount of compute and memory resources are
+inefficiently utilized in the prediction of uninformative to-
+kens. On the contrary, such a high level of redundancy can
+be exploited to aggressively mask space-time tokens with a
+high mask ratio without compromising the prediction quality
+of the masked space-time patches.
+Several approaches in MVM have utilized frame, tube,
+and patch-based masking [14, 52, 59], and there is no sin-
+gle universal masking strategy that works for all datasets.
+VideoMAE [52] achieves the best action classification results
+on Something-Something v2 (SSv2) [20] with random tube
+masking while STMAE [14] achieves its best performance
+on Kinetics-400 (K400) [29] with random space-time patch
+masking. An explanation for this observation is that not all
+space-time tokens carry meaningful information, and a fixed
+masking strategy steers the model’s optimization towards a
+particular task. Thus, it is crucial to incorporate adaptive
+computation in MAEs to dynamically select informative to-
+kens based on the given input and the mask ratio. Previous
+works such as MGMAE [25] proposed motion-guided mask-
+ing by extracting the optical flow from pre-trained models,
+and AdaMAE [4] introduced a token sampler module to se-
+lect high-activity regions using REINFORCE [67]. In order
+to exploit unequal information density among patches, we
+introduce TATS module that learns a video-specific masking
+strategy from scratch to select space-time patches based on
+their spatio-temporal motion and trajectory information us-
+ing Trajectory Attention (TA) [42]. TATS does not rely on
+any computationally expensive dense optical flow features
+or semantic cues obtained from external pretrained models
+like RAFT [51], CLIP [44], or DINOv2 [40].
+TATS can be interpreted as a policy agent that models
+a categorical distribution over the set of input space-time
+tokens by leveraging their trajectory information and then
+samples the most relevant tokens based on a predefined mask
+ratio. However, since training MAE in conjunction with
+TATS is unstable due to the non-differentiability of the sam-
+pling operation, we additionally propose a unified training
+recipe to train MAE and TATS modules simultaneously us-
+ing PPO [46] method used in reinforcement learning (RL).
+Our goal is to incorporate adaptivity into MAEs while pre-
+2
+serving their representation quality in terms of generalization
+and ensuring that the pre-training process remains memory
+efficient. Overall, our main contributions are:
+• We propose a novel and generalizable TATS module that
+learns to adaptively sample motion-centric tokens for
+MAE pre-training by modeling their motion trajectories in
+videos. TATS can be seamlessly integrated into the MAE
+framework and does not rely on auxiliary modalities like
+optical flow (RAFT [51]) or external pre-trained models
+(DINOv2 [40], CLIP [44]) for motion or semantic cues.
+• Additionally, we introduce a unified training recipe (Al-
+gorithm 1) that facilitates the joint optimization of both
+MAE and TATS from scratch using PPO [46] to ensure sta-
+ble convergence during pre-training even with aggressive
+masking.
+• Finally, we conduct a comprehensive evaluation on four
+benchmark datasets (K400, SSv2, UCF101, HMDB51)
+for action recognition to demonstrate the effectiveness,
+generalization, transferability, and efficiency of our work
+compared to the state-of-the-art methods (Tables 1,2,3).
+2. Related Work
+2.1. SSL for video representation learning.
+SSL has emerged as a promising alternative to the supervised
+paradigm for pre-training deep models, enabling training
+on large-scale datasets with enhanced generalization while
+eliminating the need for labeled annotations. SSL in video
+primarily focuses on leveraging the temporal dimension for
+designing tasks such as temporal ordering [16, 32, 38, 58,
+65], future prediction [9, 35, 37, 56, 57], spatiotemporal
+contrast [13, 21, 43, 49], temporal coherence [19, 68] and
+object motion [1, 41, 62, 63].
+2.2. Masked Modeling.
+Masked Language Modeling has been universally adopted in
+natural language understanding, leading to groundbreaking
+works such as BERT [30]. Several researchers have adopted
+masked prediction for images/videos through Masked Image
+Modeling (MIM)/MVM, respectively. MIM/MVM can be
+interpreted as a generalized Denoising Autoencoder [55]
+where the masking can be attributed to noise addition.
+Generative Pre-training from pixels [8] introduced the
+task of masked pixel prediction. However, pixel-level pre-
+diction demands high computational costs for pre-training
+and results in inferior performance compared to ConvNets.
+The notion of dividing an image into visual tokens through
+patches, as introduced in the ViT [11], enabled the adoption
+of BERT-style pre-training for visual tokens. BeiT [6] and
+PeCo[10] are built upon using an offline tokenizer to learn
+discrete codebooks using VQ-VAE [53] with the goal of
+reconstructing the original image from randomly masked
+discrete tokens. iBOT [72] and DALL-E [45] proposed
+an online tokenizer based on teacher networks trained via
+self-distillation. Maskfeat [64] introduced reconstruction of
+Histogram-of-Oriented-Gradients features for masked-out
+regions. MAE [23] and SimMIM [70] claimed that directly
+reconstructing the RGB pixel values performs equivalent
+to codebook-based methods. [71] proposed a theoretical
+understanding of the masking mechanism.
+MVM techniques have been employed for video pre-training
+by masking random space-time patches as in STMAE [14],
+or by utilizing tube masking with a high masking ratio, as
+in VideoMAE [52, 59]. Other MVM approaches include
+BEVT [60], Masked Video Distillation [61]. Our method is
+specifically designed for videos but can be integrated into the
+MAE framework while maintaining the original reconstruc-
+tion target and MAE architecture without any modifications.
+2.3. Masking Strategies in MIM/MVM.
+Many studies have demonstrated that the performance of
+MAEs and their variants on downstream tasks relies heavily
+on the choice of masking strategy. SemMAE [33] harnesses
+iBOT [72] for semantic segmentation and generates semanti-
+cally aware masks for pre-training. ADIOS [47] introduces a
+method to jointly learn a masking function and an image en-
+coder through an adversarial objective. AutoMAE [7] avails
+an adversarially-trained mask generator based on Gumbel-
+softmax [27] for MIM. CL-MAE [36] uses curriculum learn-
+ing to generate adaptive masks based on the desired level of
+complexity (i.e. easy to hard masks). Cluster Masking [66]
+learns to apply random masking to clusters of image patches,
+while R-MAE [39] focuses on masking pixels within a spec-
+ified region. [34] proposed a uniform masking strategy that
+enables MAE pre-training for Pyramid-based ViTs with lo-
+cality. AttnMask [28] proposed a distillation-based MIM
+where masking of the student network is guided by attention
+maps generated by the teacher network. [69] introduced a
+method to mask the frequency domain representation of the
+images using low/high pass filters while [15] constructs a
+patch association graph using attention maps and addresses
+the unlabeled part partition problem as a graph cut problem
+using the Expectation-Maximization algorithm [5] to obtain
+semantics-based masks.
+The masking strategy is a core design choice in MVM,
+which significantly impacts the information that the network
+learns during pre-training. MGMAE [25] and MGM [12]
+introduced motion-guided masking by exploiting a pre-
+trained lightweight optical flow estimator RAFT [51] and
+motion vectors stored in the H.264 codec to select space-time
+patches with rich motion information. EVEREST [26] pro-
+posed redundancy robust token selection and an information-
+intensive frame selection mechanism for pre-training and
+fine-tuning. MME [50] modifies the pre-training objective
+from the reconstruction of the appearance content to the re-
+construction of the motion trajectory. AdaMAE [4], the work
+3
+most closely related to ours, proposed an end-to-end train-
+able token sampling module that learns to sample space-time
+patches from high-activity regions using REINFORCE [67].
+Our approach draws inspiration from AdaMAE [4], however
+our TATS module selects space-time tokens based on their
+motion trajectories in videos. Additionally, we propose a
+novel training recipe that jointly optimizes MAE and TATS
+from scratch using PPO, ensuring stable convergence during
+pre-training, even with aggressive masking.
+3. Method
+3.1. Overview of MVM
+Here we briefly describe important components of a standard
+MVM method.
+Tokenizer. Consider an input video V of size T ×C×H×W,
+where T represents the number of frames, C denotes the
+input channels and H, W is the height and width of a frame.
+A Tokenizer composed of 3D convolutional layer with kernel
+K of size (t, C, h, w), stride S of size (t, h, w) and d output
+channels is availed to tokenize V into N number of tokens
+with dimensiion d indicated as X, where N = T
+t × H
+h ×
+W
+w . Positional information is further embedded into the
+tokens using a fixed 3D periodic positional encoding scheme
+outlined in [54].
+Token Sampler. Based on a specific masking mechanism
+(tube [52], adaptive [4], random space-time [14]), a set of
+visible token indices Iv are sampled from X for a given
+mask ratio ρ ∈(0, 1) while the remaining indices corre-
+spond to the masked Indices Im. The choice of masking
+mechanism is a pivotal design choice of MVM techniques.
+Encoder-Decoder. The design of encoder-decoder is usually
+a variant of VideoMAE [52]. The encoded representation
+Fv is learned by feeding the sampled visible tokens Xv into
+a vision transformer-based encoder. The learned represen-
+tations for visible tokens Fv are concatenated with a fixed
+learnable representation fm corresponding to the masked
+tokens. Subsequently, the positional information is added
+for both representations in the same order. These combined
+tokens are then passed through a transformer-based decoder
+to estimate predictions ˆV.
+The entire network is trained by reconstruction loss com-
+puted between ground-truth and predicted values for the
+masked tokens.
+3.2. Trajectory-Aware Adaptive Token Sampler
+We propose TATS module (gθ) that can be easily integrated
+into the family of MAE (fϕ) architectures, can be trained
+from scratch and learns to sample motion-centric tokens
+without the use of any external pre-trained models to com-
+pute optical flow such as RAFT [51] in MGMAE [25], mo-
+tion vector in MGM [12] or having motion-specific pre-
+training objective in MME [50]. In particular, we avail of
+TA [42], which captures motion dynamics in a video by
+learning a probabilistic path of a token between frames. By
+exclusively sampling motion-centric tokens, TATS facilitates
+the encoder to learn more generic and expressive representa-
+tions, which is crucial for downstream tasks such as action
+recognition. The computational overhead of TATS is minimal
+compared to MAE.
+Trajectory Attention. In the TATS module, we apply TA
+[42] across space-time tokens, where a trajectory represents
+the probabilistic path of a token in a video sequence deter-
+mined by the motion between a pair of frames. A set of
+query-key-value vectors qst, kst, vst ∈Rd are computed
+through linear projections (W) for a given space-time token
+xst (xst ∈X) corresponding to space-time location st (‘ref-
+erence point’) in a video. For qst, a set of trajectory tokens
+˜ystt′ ∈Rd are computed, encapsulating spatially pooled
+information weighted by the trajectory probability. These
+trajectory tokens, extend throughout the video sequence and
+can be represented independently at different time steps t′.
+˜ystt′ =
+X
+s′
+vs′t′ ·
+exp⟨qst, ks′t′⟩
+P
+¯s exp⟨qst, k¯st′⟩.
+(1)
+Here, exp denotes the exponential function, ⟨., .⟩represents
+dot product, and · indicates element-wise multiplication.
+Next, trajectories are pooled across time to capture intra-
+frame relationships. The trajectory tokens ˜ystt′ are mapped
+to a new set of query, key, and value representations, denoted
+as ˜qst, ˜kstt′, ˜vstt′, using the projection matrix ˜W. Now ˜qst
+becomes the updated reference query for reference point
+st. ˜qst is then utilized to aggregate information across the
+temporal dimension using 1D attention given by:
+yst =
+X
+t′
+˜vstt′ ·
+exp⟨˜qst, ˜kstt′⟩
+P
+¯t exp⟨˜qst, ˜kst¯t⟩
+.
+(2)
+The trajectory information is encoded in yst. In practice, we
+employ an approximation of TA (Orthoformer [42]), which
+has linear complexity in space-time.
+The TATS module (gθ) has two branches, one of which
+processes the input tokens X by passing them through a block
+of TA followed by a Linear layer, and a Softmax activation to
+compute the probability scores πθ(X) ∈RN for all tokens.
+Z = TA(X); Z ∈RN×d
+(3)
+πθ(X) = Softmax(Linear(Z)) ∈RN
+(4)
+Following AdaMAE [4], these probability scores are uti-
+lized to define an N-dimensional categorical distribution
+over πθ(X), from which visible token indices are sampled
+without replacement i.e. Iv ∼Categorical(N, πθ(X)). The
+masked token indices are the complement of visible token
+indices and are given by Im = Iv. The number of sampled
+visible tokens N v = N × (1 −ρ) and ρ ∈(0, 1) is the
+4
+predefined mask ratio. This branch can be interpreted as the
+actor-network (or policy network), which outputs the proba-
+bility of relevance for every token. In other words, this output
+probability can be perceived as policy πθ(X) representing
+the likelihood of a token being selected given its token repre-
+sentation X. The second branch processes the mean repre-
+sentation of all the tokens (Xµ) and passes it through a feed-
+forward network consisting of two linear layers with a ReLU
+activation Linear(1568) →ReLU(Linear(784)) →1. This
+can be interpreted as the value network, which learns to
+predict the expected reward for the current input tokens X,
+given a mean state Xµ. We denote the output of the value
+network as ψθ(Xµ). This value is used for computing the
+advantage A(X, Im) as detailed in the optimization section.
+Overall, the computation of TATS (gθ) can be represented as:
+πθ(X), ψθ(Xµ) = gθ(X)
+(5)
+The complete architecture is shown in Fig 1.
+3.3. Optimization
+TATS can be conceptualized as an agent interacting with its
+environment, represented by the MAE, with the objective
+of learning an optimal masking strategy that removes redun-
+dant tokens while selecting only the most informative and
+motion-centric ones for encoding, given a mask ratio ρ. The
+environment provides feedback to TATS through a reward,
+which corresponds to the reconstruction error LR [4].
+The intuition for this reward is that tokens with low recon-
+struction errors are easier to reconstruct and thus contain re-
+dundant information, whereas motion-centric tokens, which
+are more challenging to reconstruct, exhibit higher recon-
+struction error. Consequently, TATS must be optimized to
+prioritize the selection of these motion-centric tokens or
+tokens with higher reconstruction error. Our optimization
+strategy is loosely inspired from application of RL [18] in
+the context of aligning large language model (LLM) outputs
+with human preferences. A major challenge in this formu-
+lation is the simultaneous training of both the agent (TATS)
+and the reward model (MAE), differing from conventional
+LLM approaches where the reward model is typically pre-
+trained separately based on human-labeled data. The joint
+optimization process incorporates two distinct losses, i.e.
+reconstruction loss and the sampling loss, as outlined below.
+Reconstruction Loss: To optimize the MAE (characterized
+by fϕ), we compute the mean squared error loss LR between
+the predicted and the normalized ground-truth RGB values
+of the masked tokens as shown in the following equation:
+LR(ϕ) =
+1
+N −Nv
+X
+i∈Im
+|| ˜Vi −ˆVi||2
+(6)
+where ˆV denotes the predicted tokens from the decoder, ˜V
+represents the patch normalized ground-truth RGB values
+corresponding to the masked tokens.
+Sampling Loss. TATS (gθ) is optimized using the sampling
+loss LS(θ) based on PPO [46]. To jointly train fϕ and gθ
+from scratch, we propose a unified training approach that
+alternates between optimizing fϕ and gθ. Initially, our objec-
+tive is to train fϕ up to epoch mo using random space-time
+masking, minimizing the reconstruction loss LR. This en-
+sures that the MAE learns the task of reconstructing masked
+tokens, as the reconstruction error would be used as a reward
+for sampling the most challenging space-time tokens.
+Since gθ is trained using PPO, which requires episodes
+recorded from a previous state of gθ.
+To facilitate this
+during Phase 1 (after mo epochs), for every k steps, gθ
+is kept frozen while Iv ∼Categorical(N, πθold(X)) and fϕ
+is optimized based on LR(ϕ). Simultaneously, the mem-
+ory buffer Mb is updated with recorded episodes in the
+form of {X, πθold(Im|X), LR(ϕ).detach, ψθold(Xµ)}. Here,
+X represents the tokens, πθold(Im|X) denotes the proba-
+bility of sampling the masked indices, LR(ϕ) corresponds
+to the reconstruction error from fϕ, and ψθold(Xµ) repre-
+sents the output of the value network. Using recorded re-
+wards and value estimates, the advantage is computed as
+Aθold(X, Im) = LR(ϕ) −ψθold(Xµ).
+In Phase 2, fϕ is frozen while gθ is unfrozen. Recorded
+episodes are then sampled from Mb, and the current state
+of gθ is used for computing πθ(X), ψθ(Xµ) = gθ(X) and
+Iv′ ∼Categorical(N, πθ(X)). Notably, LR(ϕ) is detached
+from the computation graph to prevent gradient propagation
+in MAE during this step. The overall PPO objective used for
+training gθ is defined by the following equation.
+J P P O(θ) = E
+h
+c1J CLIP(θ) −c2 (ψθ(Xµ) −LR(ϕ))2
++ c3H(X, πθ)(.)
+i
+(7)
+J CLIP(θ) = E
+h
+min (r(θ)Aθold(X, Im),
+clip (r(θ), 1 −ϵ, 1 + ϵ) Aθold(X, Im))
+i
+(8)
+where r(θ) =
+πθ(Im′|X)
+πθold(Im|X) represents the importance sam-
+pling ratio, and ϵ = 0.2 is the clipping (clip) threshold. The
+term (ψθ(Xµ)−LR(ϕ))2 serves as the objective for training
+the value network, representing the error in value estimation.
+H(X, πθ)(.) denotes the entropy term associated with the to-
+kens X and policy πθ, promoting sufficient exploration. The
+coefficients c1, c2, c3 balance J CLIP(θ) (policy loss), value
+loss, and entropy term, respectively, in the overall PPO ob-
+jective. After completing Phase 2, fϕ is unfrozen, Mb is
+reset, and the algorithm transitions back to Phase 1. This
+alternating process continues, switching between Phase 1
+and Phase 2 iteratively throughout training. Since we want
+to minimize the sampling loss hence LS(θ) = −J P P O(θ).
+AdaMAE [4] utilizes REINFORCE [67] which has high vari-
+ance, however using PPO [46] improves stability as it uses a
+5
+clipped objective J CLIP(θ) preventing it from making large
+updates, therefore balancing exploration and exploitation.
+Our training recipe is illustrated in Algorithm 1.
+Algorithm 1 Unified Training Recipe for joint optimization
+of MAE and TATS.
+Require: Video V , MAE network fϕ, TATS module gθ, mask ratio
+ρ, memory buffer Mb, epochs E, Train only MAE epochs mo,
+TATS update interval k, Total number of tokens N.
+1: Initialize MAE fϕ and TATS gθ.
+2: for e = 1 to E do
+3:
+for step, batch in dataloader do
+4:
+tokenize V into X with indices {I1, I2, . . . , IN}.
+5:
+if e ≤mo then ▷Random Space-Time Masking Phase
+6:
+Iv ∼Random Distribution with ρ
+7:
+optimize LR = fϕ(Xv) w.r.t. ϕ.
+8:
+else
+▷TATS Training Phase
+9:
+freeze gθ, compute πθold(X), ψθold(Xµ) = gθ(X).
+10:
+Iv ∼Categorical(N, πθold(X)) with ρ ; Im = Iv
+11:
+optimize LR(ϕ) = fϕ(Xv) w.r.t. ϕ.
+12:
+episode = {X, πθold(Im|X), LR(ϕ).detach, ψθold(Xµ)}
+13:
+Mb.update(episode)
+14:
+if step mod k = 0 then
+▷TATS Update
+15:
+freeze fϕ, unfreeze gθ.
+16:
+for episode in Mb do
+17:
+compute πθ(X), ψθ(Xµ) = gθ(X)
+18:
+Iv′ ∼Categorical(N, πθ(X)) ; Im′ = Iv′
+19:
+optimize LS(θ) = −J P P O(θ) w.r.t. θ.
+20:
+end for
+21:
+unfreeze fϕ.
+22:
+Mb.reset()
+23:
+end if
+24:
+end if
+25:
+end for
+26: end for
+4. Experimental Setup
+Datasets. We validate our method on four bench-
+marks:
+SSv2
+[20],
+K400
+[29],
+UCF101
+[48]
+and
+HMDB51 [31].
+Implementation Details. We employ the ViT-Base model
+(≈87M parameters) [11] for our experiments. The input
+video has the dimension 16 × 3 × 224 × 224 while the patch
+size is 2×3×16×16 (tubelet length = 2), yielding a total of
+1568 tokens. Mask ratio ρ takes the value {0.85, 0.90, 0.95}.
+Our experiments contain two types of settings:
+1. Small Scale Pre-training. For K400 and SSV2, we con-
+struct a smaller training data subset by sampling approx-
+imately 15% of the training set (equivalent to validation
+set size), while maintaining a class distribution consistent
+with the original dataset. Notably, the validation set re-
+mains unchanged from the original dataset. The standard
+train/validation sets for UCF101 and HMDB51 are used.
+The models have been pre-trained for 400 epochs with a
+Table 1. Comparison of fine-tuning result of
+Our model against
+baselines ([4, 52]) on action recognition task across benchmark
+datasets and different ρ with top-1/top-5 accuracy as evaluation
+metric. ((↑) / (↓) : denotes increase/decrease in performance)
+.
+Dataset
+Mask Ratio
+VideoMAE [52]
+AdaMAE [4]
+Ours
+ρ
+top-1
+top-5
+top-1
+top-5
+top-1
+top-5
+0.85
+80.36
+94.95
+83.98
+96.37
+85.94 (↑)
+96.98 (↑)
+UCF101
+0.90
+76.64
+94.29
+82.42
+95.84
+84.53 (↑)
+96.37 (↑)
+0.95
+65.86
+89.14
+80.83
+95.26
+81.75 (↑)
+95.29 (↑)
+0.85
+40.82
+71.61
+41.28
+73.37
+41.60 (↑)
+73.31 (↓)
+HMDB51
+0.90
+36.39
+69.73
+39.13
+72.33
+41.28 (↑)
+73.76 (↑)
+0.95
+33.98
+65.36
+37.70
+70.38
+38.67 (↑)
+72.01 (↑)
+0.85
+42.26
+68.28
+38.97
+64.68
+43.24 (↑)
+68.76 (↑)
+Kinetics-400
+0.90
+41.79
+68.62
+39.50
+65.70
+43.28 (↑)
+68.85 (↑)
+0.95
+39.73
+66.15
+39.42
+65.14
+41.70 (↑)
+67.29 (↑)
+0.85
+37.63
+66.47
+37.92
+66.63
+39.96 (↑)
+68.10 (↑)
+SSv2
+0.90
+37.85
+66.86
+38.10
+66.29
+40.79 (↑)
+69.30 (↑)
+0.95
+37.24
+65.92
+38.38
+67.11
+40.25 (↑)
+68.73 (↑)
+batch size of 32 on 8 Nvidia A100 GPUs.
+2. Large Scale Pre-training is also conducted on full SSv2,
+however due to computational constraints, we only pretrain
+it for 400 epochs and ρ = 0.95 on 8 Nvidia A100 GPUs.
+Evaluation on action recognition. To assess the effective-
+ness of the pre-trained encoder, we conduct end-to-end fine-
+tuning for the action recognition task over 100 epochs with
+the evaluation metric being top-1 and top-5 accuracy. Most
+of our experiments are conducted in a small-scale setting,
+while results for large-scale pre-training and fine-tuning are
+explicitly reported.
+Refer to the supplementary material (supp) for additional
+implementation details.
+4.1. Results
+We perform extensive quantitative and qualitative studies of
+our approach on the given datasets and compare the perfor-
+mance against [4] and [52] (baselines) respectively. For fair
+comparison with our method under small-scale pre-training
+setup, these baselines were also pretrained (finetuned) for
+400 (100) epochs on the same subset (K400/SSv2) using
+their public source code and default configuration.
+For
+large scale pre-training results refer to the supp.
+Fine-tuning Results. Table 1 presents the top-1 and top-5
+accuracy obtained after fine-tuning our method across dif-
+ferent mask ratios, ρ = {0.85, 0.90, 0.95}. Our approach
+consistently surpasses [4, 52] across all benchmark datasets
+and mask ratios with the exception of top-5 accuracy on
+HMDB51 with ρ = 0.85, which is marginally less than [4].
+Notably, even under an aggressive masking ratio (ρ = 0.95),
+our model demonstrates superior performance compared to
+these baselines. These results highlight the effectiveness
+and generalization capability of the proposed TATS mod-
+ule and the training strategy in terms of learning a better
+representation quality than learnt by [4, 52].
+Transferability. Table 2 presents the transfer performance
+of our model on the action recognition task, pre-trained and
+6
+Figure 2. Visualization of adaptive masks learned by TATS for ρ = 0.95. The figure has four blocks: top-left (K400), top-right (SSv2), bottom-
+left (UCF101), and bottom-right (HMDB51). In each block, the first row shows video frames, the second presents predictions/reconstructions,
+the third depicts sampling probabilities for space-time tokens, and the fourth displays the learned adaptive binary masks.
+fine-tuned across different datasets and mask ratio combi-
+nations. Our approach achieves better results than [4, 52]
+across most settings, providing further insight into the strong
+transferability and generalization of our model.
+Qualitative Assessment. We conduct a qualitative analysis
+by visualizing the learned adaptive binary masks learned by
+the TATS module across the benchmark datasets and different
+ρ, as shown in Figure 2. We observe that TATS learns to sam-
+ple motion-centric tokens while also undergoing sufficient
+exploration enabling better generalization. Additionally, we
+visualize the learned TA across all space-time patches by av-
+eraging all heads, as depicted in Figure 3. It is quite evident
+that our TATS module accurately models motion trajecto-
+ries of the space-time tokens as they evolve over time in
+the video, thereby enabling the sampling of motion-centric
+space-time patches. This also validates the formulation of
+the Ls and the training recipe to jointly train MAE and TATS.
+Refer to supp for more mask visualizations.
+4.2. Ablation Studies
+We carry out an ablation study on UCF101 using models
+pre-trained with ρ = 0.95 for 400 epochs and fine-tuned
+on the action recognition task for 100 epochs. The ablation
+results are illustrated in Table 3.
+1. Effect of Trajectory Attention. In Table 3a, we analyze
+the effect of integrating TA within the TATS module com-
+pared to the Multi-Head Self-Attention (MHA). Our findings
+indicate that TA achieves a top-1 accuracy of 81.75% while
+utilizing 25.36 GB of memory, outperforming MHA. This
+highlights the efficiency of TA in delivering superior per-
+Table 2. Comparison of transfer learning result of
+Our model
+against [4, 52] on action recognition across benchmark datasets and
+different ρ with top-1/top-5 accuracy as evaluation metric. ((↑) / (↓)
+/ (−) : denotes increased/decreased/equivalent performance)
+Dataset
+Mask Ratio
+VideoMAE [52]
+AdaMAE [4]
+Ours
+From →To
+ρ
+top-1
+top-5
+top-1
+top-5
+top-1
+top-5
+0.85
+84.91
+96.51
+85.49
+96.93
+86.94 (↑)
+97.67 (↑)
+Kinetics-400 →UCF101
+0.90
+84.41
+96.25
+84.98
+96.48
+86.23 (↑)
+97.27 (↑)
+0.95
+82.40
+95.80
+84.03
+96.50
+85.17 (↑)
+96.77 (↑)
+0.85
+55.60
+82.55
+55.79
+84.44
+60.81 (↑)
+84.44 (−)
+Kinetics-400 →HMDB51
+0.90
+56.71
+83.07
+56.45
+82.49
+60.42 (↑)
+83.59 (↑)
+0.95
+53.26
+79.75
+54.10
+81.25
+58.14 (↑)
+82.62 (↑)
+0.85
+36.42
+65.50
+36.72
+65.72
+38.39 (↑)
+66.47 (↑)
+Kinetics-400 →SSv2
+0.90
+35.70
+64.46
+36.62
+65.27
+39.46 (↑)
+67.25 (↑)
+0.95
+34.11
+62.64
+36.88
+65.64
+38.13 (↑)
+66.48 (↑)
+0.85
+84.88
+96.91
+84.98
+96.72
+87.16 (↑)
+97.38 (↑)
+SSv2 →UCF101
+0.90
+83.88
+96.75
+84.64
+97.06
+86.81 (↑)
+97.51 (↑)
+0.95
+82.53
+95.90
+84.38
+96.21
+85.14 (↑)
+97.11 (↑)
+0.85
+54.82
+82.03
+55.47
+82.81
+59.64 (↑)
+84.83 (↑)
+SSv2 →HMDB51
+0.90
+55.92
+83.40
+55.86
+84.31
+60.35 (↑)
+85.42 (↑)
+0.95
+52.41
+80.14
+54.69
+84.18
+58.40 (↑)
+83.59 (↓)
+formance with reduced memory consumption. Furthermore,
+our results also validate that TA effectively captures motion
+trajectories in a self-supervised manner, without relying on
+any motion-specific learning objective.
+2. Effect of Decoder Depth. Table 3b examines the im-
+pact of different decoder depths, specifically the number
+(#) of transformer blocks in the decoder’s architecture. Our
+findings show that the best performance is achieved with
+# Blocks = 1, yielding a top-1 accuracy of 81.75%. This
+observation aligns with the results observed in [4, 52].
+3. Effect of Reconstruction Loss Function. In Table 3d,
+we examine the effect of the reconstruction objective, specifi-
+cally comparing L1 and MSE losses. Following the standard
+approach introduced in VideoMAE [52], we also explore
+7
+case
+ratio
+top-1
+top-5
+memory
+MHA
+0.95
+81.59
+95.29
+25.37 GB
+TA
+0.95
+81.75
+95.42
+25.36 GB
+(a) Effect of Trajectory Attention. Better performance
+is obtained with TA with marginally less memory usage.
+blocks
+top-1
+top-5
+memory
+1
+81.46
+95.07
+16.54 GB
+2
+80.83
+95.02
+19.48 GB
+4
+81.75
+95.29
+25.36 GB
+8
+79.10
+94.68
+37.13 GB
+(b) Different decoder depth.
+Our
+method performs best when # of de-
+coder blocks = 4.
+method
+memory
+top-1
+VideoMAE [52]
+20.94 GB
+65.86
+AdaMAE [4]
+26.17 GB
+80.83
+Ours
+25.36 GB
+81.75
+(c) Memory Usage. Our method uses
+less memory (pretraining) than [4]
+while achieving significantly higher
+performance (finetuning) than [52].
+case
+top-1
+top-5
+L1 loss (w norm.)
+81.51
+95.58
+L1 loss (w/o norm.)
+81.41
+95.02
+MSE loss (w norm.)
+81.75
+95.29
+MSE loss (w/o norm.)
+81.61
+95.14
+(d) Reconstruction Loss function. The best result is
+obtained by optimizing MSE loss with local patch normal-
+ization.
+case
+top-1
+top-5
+memory
+TA (# Blocks = 1)
+81.75
+95.29
+25.36 GB
+TA (# Blocks = 2)
+65.17
+88.59
+32.18 GB
+TA (# Blocks = 3)
+67.35
+90.20
+39.00 GB
+(e) Number of TA blocks in TATS. Our method performs
+best when # of TA blocks = 1.
+Table 3. Ablation analysis is conducted on the UCF101 dataset using models pre-trained with mask ratio ρ = 0.95 for 400 epochs and
+fine-tuned on action recognition task for 100 epochs. The default choice of our method is highlighted in gray color.
+computing these losses (L1/MSE) using both raw pixel val-
+ues and per-patch normalized pixels. Our results indicate
+that MSE loss with per-patch normalization achieves the
+highest top-1 accuracy of 81.75%.
+4. Effect of Number of Trajectory Attention Blocks. In
+Table 3e, we investigate the effect of varying the # of TA
+blocks in TATS. Our results indicate that the configuration
+with # TA Blocks = 1 yields the highest top-1 accuracy of
+81.75%. As we increase the # TA Blocks, the performance
+decreases while the memory usage increases.
+5. Memory Usage.
+In Table 3c, we inspect the memory
+usage of our approach in comparison to AdaMAE [4] and
+VideoMAE [52]. Our method demonstrates lower memory
+consumption (pretraining) and better performance (finetun-
+ing) than AdaMAE [4]. Although VideoMAE [52] utilizes
+less memory (pretraining) than our approach, our method
+significantly outperforms it in terms of top-1 accuracy (fine-
+tuning) on UCF101, achieving 81.75% compared to only
+65.86% by VideoMAE [52].
+5. Conclusions and Discussions
+In this work, we propose a novel and generalizable TATS
+module that enhances MAE pre-training for videos by adap-
+tively selecting motion-centric tokens based on their spatio-
+temporal motion trajectories. TATS can be integrated into
+the MAE framework without requiring additional modalities
+like optical flow (e.g., RAFT [51]) or external pre-trained
+models such as DINOv2 [40] or CLIP [44] for motion pri-
+ors or semantic cues. We also introduce a unified training
+framework (Algorithm 1) that enables the joint optimization
+of MAE and TATS from scratch using PPO [46], enhancing
+stability during pre-training even under aggressive masking.
+Finally, we perform an extensive quantitative, qualitative and
+ablation assessment (Tables 1,2,3) on benchmark datasets
+(K400, SSv2, UCF101, HMDB51) for the downstream task
+Figure 3. Visualization of the TA learnt by TATS. The figure com-
+prises four blocks : K400, SSv2, UCF101, and HMDB51 in top
+to bottom order. In each block, the first row shows video frames,
+the second depicts the trajectory attention on space-time tokens
+averaged across different heads.
+of action recognition, showcasing the effectiveness, gen-
+eralization, transferability, and efficiency of our approach
+compared to state-of-the-art methods.
+Future Work. Our proposed TATS and training recipe does
+need to be empirically validated on other downstream tasks
+and extended to other modalities. Furthermore, with the
+recent resurgence in RL research due to its applications in
+LLMs, it is important to reconsider strategies that integrate
+dynamic computation into masked modeling approaches,
+optimizing them through RL algorithms. We plan to conduct
+future studies around these topics. We hope this work can
+8
+motivate further research in this direction.
+6. Acknowledgement
+This research is supported by Research Ireland under the
+Grant Number SFI/12/RC/2289 P2 and Irish Centre for High
+End Computing (ICHEC).
+References
+[1] Pulkit Agrawal, Joao Carreira, and Jitendra Malik. Learning
+to see by moving. In Proceedings of the IEEE international
+conference on computer vision, pages 37–45, 2015. 3
+[2] Peri Akiva, Jing Huang, Kevin J Liang, Rama Kovvuri,
+Xingyu Chen, Matt Feiszli, Kristin Dana, and Tal Hassner.
+Self-supervised object detection from egocentric videos. In
+2023 IEEE/CVF International Conference on Computer Vi-
+sion (ICCV), pages 5202–5214, 2023. 1
+[3] G¨orkay Aydemir, Weidi Xie, and Fatma G¨uney.
+Self-
+supervised Object-centric Learning for Videos. In Advances
+in Neural Information Processing Systems, 2023. 1
+[4] Wele Gedara Chaminda Bandara, Naman Patel, Ali Gho-
+lami, Mehdi Nikkhah, Motilal Agrawal, and Vishal M Pa-
+tel. Adamae: Adaptive masking for efficient spatiotempo-
+ral learning with masked autoencoders. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 14507–14517, 2023. 1, 2, 3, 4, 5, 6, 7, 8
+[5] Arindam Banerjee, Inderjit S Dhillon, Joydeep Ghosh, Suvrit
+Sra, and Greg Ridgeway. Clustering on the unit hypersphere
+using von mises-fisher distributions. Journal of Machine
+Learning Research, 6(9), 2005. 3
+[6] Hangbo Bao, Li Dong, Songhao Piao, and Furu Wei. Beit:
+Bert pre-training of image transformers. In International
+Conference on Learning Representations, 2022. 1, 3
+[7] Haijian Chen, Wendong Zhang, Yunbo Wang, and Xiaokang
+Yang. Improving masked autoencoders by learning where to
+mask. In Chinese Conference on Pattern Recognition and
+Computer Vision (PRCV), pages 377–390. Springer, 2023. 1,
+3
+[8] Mark Chen, Alec Radford, Rewon Child, Jeffrey Wu, Heewoo
+Jun, David Luan, and Ilya Sutskever. Generative pretraining
+from pixels. In Proceedings of the 37th International Confer-
+ence on Machine Learning, pages 1691–1703. PMLR, 2020.
+3
+[9] Ali Diba, Vivek Sharma, Luc Van Gool, and Rainer Stiefelha-
+gen. Dynamonet: Dynamic action and motion network. In
+Proceedings of the IEEE/CVF international conference on
+computer vision, pages 6192–6201, 2019. 3
+[10] Xiaoyi Dong, Jianmin Bao, Ting Zhang, Dongdong Chen,
+Weiming Zhang, Lu Yuan, Dong Chen, Fang Wen, Nenghai
+Yu, and Baining Guo. Peco: Perceptual codebook for bert
+pre-training of vision transformers. In Proceedings of the
+AAAI Conference on Artificial Intelligence, pages 552–560,
+2023. 1, 3
+[11] Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov,
+Dirk Weissenborn, Xiaohua Zhai, Thomas Unterthiner,
+Mostafa Dehghani, Matthias Minderer, Georg Heigold, Syl-
+vain Gelly, Jakob Uszkoreit, and Neil Houlsby. An image is
+worth 16x16 words: Transformers for image recognition at
+scale. ICLR, 2021. 3, 6
+[12] David Fan, Jue Wang, Shuai Liao, Yi Zhu, Vimal Bhat, Hec-
+tor Santos-Villalobos, Rohith MV, and Xinyu Li. Motion-
+guided masking for spatiotemporal representation learning.
+In Proceedings of the IEEE/CVF International Conference
+on Computer Vision, pages 5619–5629, 2023. 3, 4
+[13] Christoph Feichtenhofer, Haoqi Fan, Bo Xiong, Ross Gir-
+shick, and Kaiming He. A large-scale study on unsupervised
+spatiotemporal representation learning. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 3299–3309, 2021. 3
+[14] Christoph Feichtenhofer, Yanghao Li, Kaiming He, et al.
+Masked autoencoders as spatiotemporal learners. Advances
+in neural information processing systems, 35:35946–35958,
+2022. 1, 2, 3, 4
+[15] Zhanzhou Feng and Shiliang Zhang. Evolved part masking
+for self-supervised learning. In Proceedings of the IEEE/CVF
+Conference on Computer Vision and Pattern Recognition,
+pages 10386–10395, 2023. 3
+[16] Basura Fernando, Hakan Bilen, Efstratios Gavves, and
+Stephen Gould. Self-supervised video representation learn-
+ing with odd-one-out networks. In Proceedings of the IEEE
+conference on computer vision and pattern recognition, pages
+3636–3645, 2017. 3
+[17] Rohit
+Girdhar,
+Alaaeldin
+El-Nouby,
+Mannat
+Singh,
+Kalyan Vasudev Alwala, Armand Joulin, and Ishan Misra.
+Omnimae: Single model masked pretraining on images and
+videos.
+In Proceedings of the IEEE/CVF Conference on
+Computer Vision and Pattern Recognition (CVPR), pages
+10406–10417, 2023. 1
+[18] Yoav Goldberg. Reinforcement learning for language mod-
+els.
+URL https://gist.github.com/yoavg/
+6bff0fecd65950898eba1bb321cfbd81, 2023. 5
+[19] Ross Goroshin, Joan Bruna, Jonathan Tompson, David Eigen,
+and Yann LeCun. Unsupervised learning of spatiotemporally
+coherent metrics. In Proceedings of the IEEE international
+conference on computer vision, pages 4086–4093, 2015. 3
+[20] Raghav Goyal, Samira Ebrahimi Kahou, Vincent Michal-
+ski, Joanna Materzynska, Susanne Westphal, Heuna Kim,
+Valentin Haenel, Ingo Fruend, Peter Yianilos, Moritz Mueller-
+Freitag, et al. The” something something” video database for
+learning and evaluating visual common sense. In Proceed-
+ings of the IEEE international conference on computer vision,
+pages 5842–5850, 2017. 2, 6, 1
+[21] Tengda Han, Weidi Xie, and Andrew Zisserman. Video repre-
+sentation learning by dense predictive coding. In Proceedings
+of the IEEE/CVF international conference on computer vision
+workshops, pages 0–0, 2019. 3
+[22] Tengda Han, Weidi Xie, and Andrew Zisserman.
+Self-
+supervised co-training for video representation learning. Ad-
+vances in neural information processing systems, 33:5679–
+5690, 2020. 1
+[23] Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr
+Doll´ar, and Ross Girshick. Masked autoencoders are scalable
+vision learners. In Proceedings of the IEEE/CVF conference
+on computer vision and pattern recognition, pages 16000–
+16009, 2022. 1, 3
+9
+[24] Dan Hendrycks, Mantas Mazeika, Saurav Kadavath, and
+Dawn Song. Using self-supervised learning can improve
+model robustness and uncertainty. In Advances in Neural In-
+formation Processing Systems. Curran Associates, Inc., 2019.
+1
+[25] Bingkun Huang, Zhiyu Zhao, Guozhen Zhang, Yu Qiao, and
+Limin Wang. Mgmae: Motion guided masking for video
+masked autoencoding. In Proceedings of the IEEE/CVF In-
+ternational Conference on Computer Vision, pages 13493–
+13504, 2023. 2, 3, 4
+[26] Sunil Hwang, Jaehong Yoon, Youngwan Lee, and Sung Ju
+Hwang. Everest: Efficient masked video autoencoder by
+removing redundant spatiotemporal tokens. In International
+Conference on Machine Learning, 2024. 3
+[27] Eric Jang, Shixiang Gu, and Ben Poole.
+Categorical
+reparameterization with gumbel-softmax.
+arXiv preprint
+arXiv:1611.01144, 2016. 3
+[28] Ioannis Kakogeorgiou, Spyros Gidaris, Bill Psomas, Yannis
+Avrithis, Andrei Bursuc, Konstantinos Karantzalos, and Nikos
+Komodakis. What to hide from your students: Attention-
+guided masked image modeling. In Computer Vision – ECCV
+2022, pages 300–318, Cham, 2022. Springer Nature Switzer-
+land. 3
+[29] Will Kay, Joao Carreira, Karen Simonyan, Brian Zhang,
+Chloe Hillier, Sudheendra Vijayanarasimhan, Fabio Viola,
+Tim Green, Trevor Back, Paul Natsev, et al. The kinetics hu-
+man action video dataset. arXiv preprint arXiv:1705.06950,
+2017. 2, 6, 1
+[30] Jacob Devlin Ming-Wei Chang Kenton and Lee Kristina
+Toutanova. Bert: Pre-training of deep bidirectional transform-
+ers for language understanding. In Proceedings of NAACL-
+HLT, pages 4171–4186, 2019. 1, 3
+[31] Hildegard Kuehne, Hueihan Jhuang, Est´ıbaliz Garrote,
+Tomaso Poggio, and Thomas Serre. Hmdb: a large video
+database for human motion recognition. In 2011 International
+conference on computer vision, pages 2556–2563. IEEE,
+2011. 6, 1
+[32] Hsin-Ying Lee, Jia-Bin Huang, Maneesh Singh, and Ming-
+Hsuan Yang. Unsupervised representation learning by sorting
+sequences. In Proceedings of the IEEE international confer-
+ence on computer vision, pages 667–676, 2017. 3
+[33] Gang Li, Heliang Zheng, Daqing Liu, Chaoyue Wang, Bing
+Su, and Changwen Zheng. Semmae: Semantic-guided mask-
+ing for learning masked autoencoders. Advances in Neural
+Information Processing Systems, 35:14290–14302, 2022. 1, 3
+[34] Xiang Li, Wenhai Wang, Lingfeng Yang, and Jian Yang.
+Uniform masking: Enabling mae pre-training for pyramid-
+based vision transformers with locality.
+arXiv preprint
+arXiv:2205.10063, 2022. 1, 3
+[35] William Lotter, Gabriel Kreiman, and David Cox. Deep
+predictive coding networks for video prediction and unsu-
+pervised learning. In International Conference on Learning
+Representations, 2017. 3
+[36] Neelu Madan, Nicolae-C˘at˘alin Ristea, Kamal Nasrollahi,
+Thomas B Moeslund, and Radu Tudor Ionescu.
+Cl-mae:
+Curriculum-learned masked autoencoders. In Proceedings of
+the IEEE/CVF Winter Conference on Applications of Com-
+puter Vision, pages 2492–2502, 2024. 1, 3
+[37] Michael Mathieu, Camille Couprie, and Yann LeCun. Deep
+multi-scale video prediction beyond mean square error. In
+4th International Conference on Learning Representations,
+ICLR 2016, 2016. 3
+[38] Ishan Misra, C Lawrence Zitnick, and Martial Hebert. Shuffle
+and learn: unsupervised learning using temporal order veri-
+fication. In Computer Vision–ECCV 2016: 14th European
+Conference, Amsterdam, The Netherlands, October 11–14,
+2016, Proceedings, Part I 14, pages 527–544. Springer, 2016.
+3
+[39] Duy Kien Nguyen, Yanghao Li, Vaibhav Aggarwal, Martin R.
+Oswald, Alexander Kirillov, Cees G. M. Snoek, and Xinlei
+Chen. R-MAE: Regions meet masked autoencoders. In The
+Twelfth International Conference on Learning Representa-
+tions, 2024. 3
+[40] Maxime Oquab, Timoth´ee Darcet, Theo Moutakanni, Huy V.
+Vo, Marc Szafraniec, Vasil Khalidov, Pierre Fernandez,
+Daniel Haziza, Francisco Massa, Alaaeldin El-Nouby, Russell
+Howes, Po-Yao Huang, Hu Xu, Vasu Sharma, Shang-Wen Li,
+Wojciech Galuba, Mike Rabbat, Mido Assran, Nicolas Ballas,
+Gabriel Synnaeve, Ishan Misra, Herve Jegou, Julien Mairal,
+Patrick Labatut, Armand Joulin, and Piotr Bojanowski. Di-
+nov2: Learning robust visual features without supervision,
+2023. 2, 3, 8
+[41] Deepak Pathak, Ross Girshick, Piotr Doll´ar, Trevor Darrell,
+and Bharath Hariharan. Learning features by watching objects
+move. In Proceedings of the IEEE conference on computer
+vision and pattern recognition, pages 2701–2710, 2017. 3
+[42] Mandela Patrick, Dylan Campbell, Yuki Asano, Ishan Misra,
+Florian Metze, Christoph Feichtenhofer, Andrea Vedaldi, and
+Joao F Henriques. Keeping your eye on the ball: Trajectory at-
+tention in video transformers. Advances in neural information
+processing systems, 34:12493–12506, 2021. 2, 4
+[43] Rui Qian, Tianjian Meng, Boqing Gong, Ming-Hsuan Yang,
+Huisheng Wang, Serge Belongie, and Yin Cui. Spatiotempo-
+ral contrastive video representation learning. In Proceedings
+of the IEEE/CVF conference on computer vision and pattern
+recognition, pages 6964–6974, 2021. 3
+[44] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+transferable visual models from natural language supervi-
+sion. In International conference on machine learning, pages
+8748–8763. PMLR, 2021. 2, 3, 8
+[45] Aditya Ramesh, Mikhail Pavlov, Gabriel Goh, Scott Gray,
+Chelsea Voss, Alec Radford, Mark Chen, and Ilya Sutskever.
+Zero-shot text-to-image generation. In International confer-
+ence on machine learning, pages 8821–8831. Pmlr, 2021.
+3
+[46] John Schulman, Filip Wolski, Prafulla Dhariwal, Alec Rad-
+ford, and Oleg Klimov. Proximal policy optimization algo-
+rithms. arXiv preprint arXiv:1707.06347, 2017. 2, 3, 5, 8
+[47] Yuge Shi, N Siddharth, Philip Torr, and Adam R Kosiorek.
+Adversarial masking for self-supervised learning. In Interna-
+tional Conference on Machine Learning, pages 20026–20040.
+PMLR, 2022. 3
+[48] Khurram Soomro, Amir Roshan Zamir, and Mubarak Shah.
+10
+Ucf101: A dataset of 101 human actions classes from videos
+in the wild. arXiv preprint arXiv:1212.0402, 2012. 6, 1
+[49] Chen Sun, Fabien Baradel, Kevin Murphy, and Cordelia
+Schmid. Learning video representations using contrastive
+bidirectional transformer. arXiv preprint arXiv:1906.05743,
+2019. 3
+[50] Xinyu Sun, Peihao Chen, Liangwei Chen, Changhao Li,
+Thomas H Li, Mingkui Tan, and Chuang Gan. Masked motion
+encoding for self-supervised video representation learning.
+In Proceedings of the IEEE/CVF Conference on Computer
+Vision and Pattern Recognition, pages 2235–2245, 2023. 3, 4
+[51] Zachary Teed and Jia Deng. Raft: Recurrent all-pairs field
+transforms for optical flow. In Computer Vision–ECCV 2020:
+16th European Conference, Glasgow, UK, August 23–28,
+2020, Proceedings, Part II 16, pages 402–419. Springer, 2020.
+2, 3, 4, 8
+[52] Zhan Tong, Yibing Song, Jue Wang, and Limin Wang. Video-
+MAE: Masked autoencoders are data-efficient learners for
+self-supervised video pre-training. In Advances in Neural
+Information Processing Systems, 2022. 1, 2, 3, 4, 6, 7, 8
+[53] Aaron Van Den Oord, Oriol Vinyals, et al. Neural discrete
+representation learning. Advances in neural information pro-
+cessing systems, 30, 2017. 3
+[54] A Vaswani. Attention is all you need. Advances in Neural
+Information Processing Systems, 2017. 4
+[55] Pascal Vincent, Hugo Larochelle, Yoshua Bengio, and Pierre-
+Antoine Manzagol. Extracting and composing robust features
+with denoising autoencoders. In Proceedings of the 25th Inter-
+national Conference on Machine Learning, page 1096–1103,
+New York, NY, USA, 2008. Association for Computing Ma-
+chinery. 3
+[56] Carl Vondrick, Hamed Pirsiavash, and Antonio Torralba. An-
+ticipating visual representations from unlabeled video. In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, pages 98–106, 2016. 3
+[57] Carl Vondrick, Abhinav Shrivastava, Alireza Fathi, Sergio
+Guadarrama, and Kevin Murphy. Tracking emerges by col-
+orizing videos. In Proceedings of the European conference
+on computer vision (ECCV), pages 391–408, 2018. 3
+[58] Jiangliu Wang, Jianbo Jiao, Linchao Bao, Shengfeng He,
+Yunhui Liu, and Wei Liu. Self-supervised spatio-temporal
+representation learning for videos by predicting motion and
+appearance statistics. In Proceedings of the IEEE/CVF con-
+ference on computer vision and pattern recognition, pages
+4006–4015, 2019. 3
+[59] Limin Wang, Bingkun Huang, Zhiyu Zhao, Zhan Tong, Yinan
+He, Yi Wang, Yali Wang, and Yu Qiao. Videomae v2: Scaling
+video masked autoencoders with dual masking. In Proceed-
+ings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, pages 14549–14560, 2023. 1, 2, 3
+[60] Rui Wang, Dongdong Chen, Zuxuan Wu, Yinpeng Chen,
+Xiyang Dai, Mengchen Liu, Yu-Gang Jiang, Luowei Zhou,
+and Lu Yuan. Bevt: Bert pretraining of video transformers. In
+Proceedings of the IEEE/CVF conference on computer vision
+and pattern recognition, pages 14733–14743, 2022. 1, 3
+[61] Rui Wang, Dongdong Chen, Zuxuan Wu, Yinpeng Chen,
+Xiyang Dai, Mengchen Liu, Lu Yuan, and Yu-Gang Jiang.
+Masked video distillation: Rethinking masked feature mod-
+eling for self-supervised video representation learning. In
+Proceedings of the IEEE/CVF conference on computer vision
+and pattern recognition, pages 6312–6322, 2023. 3
+[62] Xiaolong Wang and Abhinav Gupta. Unsupervised learning
+of visual representations using videos. In Proceedings of
+the IEEE international conference on computer vision, pages
+2794–2802, 2015. 3
+[63] Xiaolong Wang, Allan Jabri, and Alexei A Efros. Learning
+correspondence from the cycle-consistency of time. In Pro-
+ceedings of the IEEE/CVF conference on computer vision and
+pattern recognition, pages 2566–2576, 2019. 3
+[64] Chen Wei, Haoqi Fan, Saining Xie, Chao-Yuan Wu, Alan
+Yuille, and Christoph Feichtenhofer. Masked feature predic-
+tion for self-supervised visual pre-training. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 14668–14678, 2022. 1, 3
+[65] Donglai Wei, Joseph J Lim, Andrew Zisserman, and
+William T Freeman. Learning and using the arrow of time. In
+Proceedings of the IEEE conference on computer vision and
+pattern recognition, pages 8052–8060, 2018. 3
+[66] Zihao Wei, Zixuan Pan, and Andrew Owens. Efficient vision-
+language pre-training by cluster masking. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 26815–26825, 2024. 3
+[67] Ronald J. Williams. Simple statistical gradient-following
+algorithms for connectionist reinforcement learning. Machine
+Learning, 8:229–256, 1992. 2, 4, 5
+[68] Laurenz Wiskott and Terrence J Sejnowski. Slow feature
+analysis: Unsupervised learning of invariances. Neural com-
+putation, 14(4):715–770, 2002. 3
+[69] Jiahao Xie, Wei Li, Xiaohang Zhan, Ziwei Liu, Yew-Soon
+Ong, and Chen Change Loy. Masked frequency modeling
+for self-supervised visual pre-training. In The Eleventh Inter-
+national Conference on Learning Representations, 2023. 1,
+3
+[70] Zhenda Xie, Zheng Zhang, Yue Cao, Yutong Lin, Jianmin
+Bao, Zhuliang Yao, Qi Dai, and Han Hu. Simmim: A simple
+framework for masked image modeling. In Proceedings of
+the IEEE/CVF conference on computer vision and pattern
+recognition, pages 9653–9663, 2022. 1, 3
+[71] Qi Zhang, Yifei Wang, and Yisen Wang. How mask mat-
+ters: Towards theoretical understandings of masked autoen-
+coders. Advances in Neural Information Processing Systems,
+35:27127–27139, 2022. 3
+[72] Jinghao Zhou, Chen Wei, Huiyu Wang, Wei Shen, Cihang Xie,
+Alan Yuille, and Tao Kong. Image BERT pre-training with
+online tokenizer. In International Conference on Learning
+Representations, 2022. 1, 3
+11
+Reinforcement Learning meets Masked Video Modeling : Trajectory-Guided
+Adaptive Token Selection
+Supplementary Material
+7. Datasets
+Something-Something V2 (SSv2) [20] is a curated video
+dataset for human action classification, comprising 174
+classes and a total of 220,847 videos. Each video depicts a
+single action with a duration ranging from 2 to 6 seconds.
+SSv2 is a motion-focused dataset, where temporal relation-
+ships are more pronounced compared to other datasets.
+Kinetics-400 (K400) [29] is a widely used large-scale video
+dataset, comprising 400 classes and over 250,000 videos.
+Each video, approximately 10 seconds in duration, captures
+a single action.
+HMDB51 [31] comprises 51 classes and a total of 6,766
+videos. HMDB51 emphasizes appearance information over
+motion dynamics.
+UCF101 [48] comprises 13,320 video clips categorized into
+101 classes. These classes span five activity types: body
+motion, human-to-human interaction, human-to-object inter-
+action, musical instrument performance, and sports.
+8. Additional Implementation Details
+8.1. Data Preprocessing
+Our data processing pipeline closely follows AdaMAE [4]
+for pre-training. We extract 16 frames of dimension 224 ×
+224 from the videos, using a temporal stride of 4 (K400)
+and 2 (HMDB51/UCF101/SSv2), with the starting frame
+randomly selected [14]. During pre-training, we apply data
+augmentation techniques, including random resized cropping
+Table 4. Hyperparameter setting for pre-training across all bench-
+mark datasets.
+Configuration
+Value
+Learning rate for gθ - lp
+1.5e-6
+Epochs to train fϕ only - mo
+10
+Steps to train fϕ and record gθ episodes - k
+1
+Softmax Temperature
+1
+Policy loss coefficient - c1
+1e-4
+Value loss coefficient - c2
+1e-4
+Entropy coefficient - c3
+1e-4
+Optimizer
+AdamW
+Optimizer betas
+0.9, 0.95
+Batch size
+32
+Base learning rate
+1.5e-4
+Learning rate schedule
+cosine decay
+Warmup epochs
+40
+Augmentation
+MultiScaleCrop
+Table 5. Hyperparameter (mo, k) tuning for pre-training, evaluated
+based on reconstruction error on UCF101 and HMDB51. Same
+configuration is adopted for SSv2 and K400 as in UCF101.
+(mo, k)
+UCF101
+HMDB51
+(0, 1)
+0.5211
+0.8051
+(1, 1)
+0.5205
+0.8195
+(5, 1)
+0.5304
+0.8535
+(10, 1)
+0.5135
+0.8278
+(25, 1)
+0.5269
+0.8987
+(100, 1)
+0.6662
+0.9291
+(50, 5)
+0.7735
+0.9772
+(50, 10)
+0.8149
+0.9776
+(50, 25)
+0.9201
+-
+in the spatial domain, random scaling within the range ∈
+[0.5, 1], and random horizontal flipping [14].
+8.2. Hyper-parameter Setting
+Pre-training. The hyperparameter configurations used dur-
+ing the pre-training phase across all benchmark datasets are
+presented in Table 4. For (mo, k), hyperparameter tuning is
+conducted on the UCF101 and HMDB51 datasets (Table 5),
+and the configuration that minimizes the reconstruction error
+is selected. Similarly we also perform hyperparameter tuning
+for coefficients (c1,c2,c3) in Table 6 during pretraining on
+UCF101 and observe that (1e-4, 1e-4, 1e-4) minimizes the
+reconstruction error. Empirical observations indicate that the
+optimal configuration for UCF101 also performs effectively
+on subset of K400 and SSv2 (small scale pre-training setup).
+It is to be noted that we use reconstruction loss for tuning
+these hyper-parameters because behaviour of reconstruction
+loss during pretraining is more interpretable in terms of con-
+vergence than the sampling loss.
+Fine-tuning.
+The hyperparameter setting for end-to-end
+fine-tuning on the downstream task of action recognition
+across all benchmarks is summarized in Table 7.
+8.3. Encoder-Decoder Architecture
+We adopt an asymmetric encoder-decoder architecture [4]
+for self-supervised pre-training and augment it with TATS
+module and only keep the encoder during the fine-tuning.
+In particular, the design of the encoder-decoder is based on
+16-frame vanilla ViT-Base architecure. Table 8 provides an
+overview of the encoder-decoder architecture utilized in our
+framework.
+1
+Table 6. Hyperparameter (c1, c2, c3) tuning for pre-training, evalu-
+ated based on reconstruction error on UCF101. Same configuration
+is adopted for SSv2, K400 and HMDB51. (mo, k) are fixed as
+(10, 1)
+(c1, c2, c3)
+UCF101
+(1e-4, 1e-3, 1e-3)
+0.5188
+(1e-4, 1e-3, 1e-4)
+0.5167
+(1e-4, 1e-4, 1e-3)
+0.5246
+(1e-3, 1e-4, 1e-4)
+0.8482
+(1e-4, 1e-4, 1e-4)
+0.5135
+(1e-5, 1e-4, 1e-4)
+0.5239
+(1e-3,1e-3,1e-4)
+0.5215
+(1e-3, 1e-3, 1e-4)
+0.7869
+(1e-5, 1e-5, 1e-5)
+0.5173
+Table 7. Hyperparameter setting for end-to-end fine-tuning for all
+benchmark datasets.
+Configuration
+Value
+Optimizer
+AdamW
+Optimizer Betas
+{0.9, 0.999}
+Batch size
+8
+Weight Decay
+5e-2
+Base Learning Rate
+1e-3
+Learning Rate Schedule
+cosine decay
+Layer-wise learning rate decay
+0.75
+Warmup epochs
+5
+RandAug
+9, 0.5
+Label Smoothing
+0.1
+Mixup
+0.8
+DropPath
+0.1
+# Temporal Clips
+5 (k400), 2 (ssv2/hmdb/ucf)
+# Spatial Crops
+3
+9. Large Scale Pre-training Results
+We conduct pre-training (400 epochs) and finetuning (100
+epochs) of our model on full SSv2 [20] dataset for ρ = 0.95
+on 8 Nvidia A100 GPUs. In order to ensure fairness in
+comparison, we also pre-train (400 epochs) and finetune (100
+epochs) both baselines VideoMAE [52] and AdaMAE [4]
+on full SSv2 for ρ = 0.95 with the same GPU setup using
+their public source code and default configuration.
+Table 9 presents the top-1 and top-5 accuracy obtained in
+this experiment. We observe that our approach outperforms
+both the baselines under aggressive masking setting even for
+large scale experiments. This highlights the effectiveness
+and generalization capability of the proposed TATS module
+and the training strategy in terms of learning a better feature
+quality than learnt by [4, 52].
+Due to the availability of limited computational resources,
+our experiments in this setup is limited.
+Table 8. Encoder-Decoder architecture based on AdaMAE [4].
+TATS : Trajectory Aware Adaptive Token Sampler. MHA : Multi-
+Head Self-Attention
+Stage
+ViT-Base
+Output shape
+Input Video
+stride 4 × 1 × 1 for K400
+3 × 16 × 224 × 224
+stride 2 × 1 × 1 for ssv2/ucf/hmdb
+Tokenization
+stride 2 × 16 × 16
+1568 × 768
+emb. dim 768
+kernel size 2 × 16 × 16
+Masking
+TATS Masking
+[(1 −ρ) × 1568] × 768
+mask ratio ρ
+Encoder
+[MHA(768)] × 12
+[(1 −ρ) × 1568] × 768
+Projection
+MHA(384)
+1568 × 384
+concat masked tokens
+Decoder
+[MHA(384)] × 4
+[(1 −ρ) × 1568] × 384
+Projector
+MLP(1536)
+1568 × 1536
+Reshaping
+from 1536 to 3 × 2 × 16 × 16
+3 × 16 × 224 × 224
+Table 9.
+Large Scale Pre-training and Finetuning Results.
+Comparison of fine-tuning result of
+Our model against base-
+lines ([4, 52]) on action recognition task for full SSv2 and ρ = 0.95
+with top-1/top-5 accuracy as evaluation metric. ((↑) : denotes in-
+crease in performance)
+Method
+top-1
+top-5
+VideoMAE [52]ρ=95%
+59.38
+84.17
+AdaMAE [4]ρ=95%
+63.06
+85.89
+Oursρ=95%
+65.82 (↑)
+88.50(↑)
+10. Mask Visualization
+Here we show visualizations adaptive sampling learned by
+our TATS module across benchmark dataset for different
+mask ratios ρ = {0.95, 0.9, 0.85} in Figure 4, 5, 6, 7, 8, 9,
+10, 11, 12, 13, 14, 15.
+In all of these Figures, first row represents input video
+frames, the second row depicts the prediction/reconstruction,
+the third row shows the reconstruction error, the fourth row
+represents the probability of sampling the space-time patch,
+fifth row shows the adaptive masks learned by TATS. The
+last row depicts the binary masks learned by AdaMAE [4]
+for comparison.
+2
+Figure 4. Sample Visualization of a Kinetics 400 video with adap-
+tive sampling using TATS with mask ratio ρ = 0.95. Compared
+with AdaMAE [4] masks.
+Figure 5. Sample Visualization of a Kinetics 400 video with adap-
+tive sampling using TATS with mask ratio ρ = 0.9. Compared with
+AdaMAE [4] masks.
+Figure 6. Sample Visualization of a Kinetics 400 video with adap-
+tive sampling using TATS with mask ratio ρ = 0.85. Compared
+with AdaMAE [4] masks.
+Figure 7. Sample Visualization of a SSv2 video with adaptive
+sampling using TATS with mask ratio ρ = 0.95. Compared with
+AdaMAE [4] masks.
+Figure 8. Sample Visualization of a SSv2 video with adaptive
+sampling using TATS with mask ratio ρ = 0.9. Compared with
+AdaMAE [4] masks.
+Figure 9. Sample Visualization of a SSv2 video with adaptive
+sampling using TATS with mask ratio ρ = 0.85. Compared with
+AdaMAE [4] masks.
+3
+Figure 10. Sample Visualization of a UCF101 video with adaptive
+sampling using TATS with mask ratio ρ = 0.95. Compared with
+AdaMAE [4] masks.
+Figure 11. Sample Visualization of a UCF101 video with adaptive
+sampling using TATS with mask ratio ρ = 0.9. Compared with
+AdaMAE [4] masks.
+Figure 12. Sample Visualization of a UCF101 video with adaptive
+sampling using TATS with mask ratio ρ = 0.85. Compared with
+AdaMAE [4] masks.
+Figure 13. Sample Visualization of a HMDB51 video with adaptive
+sampling using TATS with mask ratio ρ = 0.95. Compared with
+AdaMAE [4] masks.
+Figure 14. Sample Visualization of a HMDB51 video with adaptive
+sampling using TATS with mask ratio ρ = 0.9. Compared with
+AdaMAE [4] masks.
+Figure 15. Sample Visualization of a HMDB51 video with adaptive
+sampling using TATS with mask ratio ρ = 0.85. Compared with
+AdaMAE [4] masks.
+4

@@ -1,0 +1,2893 @@
+Probability Consistency in Large Language Models:
+Theoretical Foundations Meet Empirical Discrepancies
+Xiaoliang Luo
+EmpiriQal Inc.
+ken.empiriqal@gmail.com
+Xinyi Xu
+Department of Mathematics
+London School of Economics and Political Science
+Michael Ramscar
+Department of Psychology
+University of Tübingen
+Bradley C. Love
+Los Alamos National Laboratory
+Abstract
+Can autoregressive large language models (LLMs) learn consistent probability dis-
+tributions when trained on sequences in different token orders? We prove formally
+that for any well-defined probability distribution, sequence perplexity is invariant
+under any factorization, including forward, backward, or arbitrary permutations.
+This result establishes a rigorous theoretical foundation for studying how LLMs
+learn from data and defines principled protocols for empirical evaluation. Applying
+these protocols, we show that prior studies examining ordering effects suffer from
+critical methodological flaws. We retrain GPT-2 models across forward, backward,
+and arbitrary permuted orders on scientific text. We find systematic deviations from
+theoretical invariance across all orderings with arbitrary permutations strongly devi-
+ating from both forward and backward models, which largely (but not completely)
+agreed with one another. Deviations were traceable to differences in self-attention,
+reflecting positional and locality biases in processing. Our theoretical and empirical
+results provide novel avenues for understanding positional biases in LLMs and sug-
+gest methods for detecting when LLMs’ probability distributions are inconsistent
+and therefore untrustworthy.
+1
+Introduction
+Transformer-based [Vaswani et al., 2023] decoder-only large language models (LLMs) owe their
+success largely to a scalable architecture and an autoregressive loss function grounded in probability
+theory. These models approximate the conditional probability distribution over a sequence of
+tokens, denoted as P(Xt | X1:t−1), where Xt is the t-th token in a sequence X1, X2, . . . , Xt, and
+X1:t−1 = X1, . . . , Xt−1 represents the prior context. The training objective minimizes the negative
+log-likelihood loss: L = −1
+n
+Pn
+t=1 ln P(Xt | X1:t−1), where n is the sequence length, encouraging
+the model to assign high probabilities to correct tokens given their context. This leverages vast text
+corpora to learn a probability distribution over sequences in a vocabulary V. A valid probability
+distribution belongs to the set P, satisfying P(X1, . . . , Xn) ≥0 for any sequence X1, . . . , Xn, and
+normalizing such that: P
+(X1,...,Xn)∈Vn P(X1, . . . , Xn) = 1. The chain rule ensures consistency in
+factorization: P(X1, . . . , Xn) = Qn
+t=1 P(Xt | X1:t−1).
+The theoretical foundation of LLMs prompts a critical question: does a formal basis exist to guarantee
+that probability estimates remain consistent across models trained on the same data but with different
+token orderings, such as forward (X1, . . . , Xn) versus reverse (Xn, . . . , X1)? Do practical LLMs,
+which approximate these probabilities, uphold this consistency? If so, under what conditions? If
+Preprint. Under review.
+arXiv:2505.08739v1  [cs.CL]  13 May 2025
+not, what causes the discrepancies? Inconsistencies in probability estimates may arise from practical
+limitations, such as learning order and data complexity [Lampinen et al., 2024, Zucchet et al., 2025],
+gradient-based optimization, architectural biases and constraints [Liu et al., 2023, Latuske et al.,
+2015, Wu et al., 2025, Bondarenko et al., 2023, Gu et al., 2025] or numerical precision limitations
+[Barbero et al., 2024]. These deviations could reflect gaps in our theoretical understanding of LLMs,
+potentially contributing to issues like hallucinations (see Huang et al. 2025 for a review) or unfaithful
+or inconsistent reasoning [Lanham et al., 2023, Lindsey et al., 2025, Chen et al., 2025]. Investigating
+whether a theoretical framework ensures probability consistency and identifying the conditions for its
+validity is crucial for understanding the learning dynamics of these models and how to best evaluate
+them.
+In this contribution, we provide a mathematical proof addressing this theoretical consistency. We
+demonstrate rigorously using the chain rule of probability that sequence perplexity, which is fun-
+damentally determined by the joint probability P(X1, . . . , Xn), is theoretically invariant to the
+order of factorization. This means that calculating perplexity using forward conditionals, backward
+conditionals, or indeed any fixed permutation of the tokens, must yield the exact same result for a
+true probability distribution. While prior work has suggested potential equivalence between forward
+and backward processing [Zhang et al., 2018, Papadopoulos et al., 2024, Zhang et al., 2025], our
+proof formalizes this and generalizes it to arbitrary factorizations, establishing a clear theoretical
+benchmark against which practical model behavior can be assessed (detailed in Section 2).
+Despite the theoretical expectation of perplexity equivalence across token orderings, empirical studies
+have reported discrepancies. For instance, Kallini et al. [2024] found autoregressive transformers
+favor natural language order. Similarly, Papadopoulos et al. [2024] and Luo et al. [2024a] observed
+lower perplexities in forward-trained models. In contrast, Yu et al. [2025] noted inconsistent perplexity
+differences across text domains, while Zhang et al. [2025] corroborated lower forward perplexities,
+aligning with Papadopoulos et al. [2024]. Additionally, Luo et al. [2024a] and Zhang et al. [2025]
+reported superior performance of backward-trained models in multiple-choice tasks.
+However, the aforementioned studies have failed to accurately address the theoretical equivalence of
+forward and backward sequences because they lacked a coherent and complete theoretical foundation,
+which led to critical errors in their experimental setups. When comparing joint probabilities of
+sequences with different factorization orders, these studies inadvertently analyzed distinct text
+sequences, due to errors such as omitting begin-of-sequence tokens [Kallini et al., 2024, Luo et al.,
+2024a, Yu et al., 2025], retraining tokenizers on reversed text [Papadopoulos et al., 2024, Luo
+et al., 2024a], and conflating logical reversal with strict token sequence reversal [Zhang et al., 2025,
+Papadopoulos et al., 2024] (Table 1; see Appendix A for details). These errors undermine the
+reliability of sequence probability comparisons by violating the proof’s conditions, underscoring the
+need for a rigorous theoretical framework to validate interpretations of empirical results.
+Our proof serves to address the errors in prior studies and establishes precise protocols for empirically
+investigating learning inconsistencies in LLMs. These protocols ensure proper handling of special
+tokens, consistent tokenization strategies, and strict alignment of training orderings. To demonstrate
+their efficacy, we revisit the experimental setup of Luo et al. [2024a] and conduct theory-aligned
+training and evaluations in the neuroscience domain.
+To precisely follow the proof and ensure valid sequence perplexity comparisons, we trained 27 GPT-2
+models [Radford et al., 2019] at three scales (124M, 355M, 774M) on twenty years of neuroscience
+publications, using forward, backward, and permuted token orderings. We adhered to strict protocols:
+each sequence starts with a begin-of-sequence (BOS) token, employs a tokenizer trained solely on
+forward text across all factorizations, and applies token permutations within the context window.
+Models with different token orderings use identical data sequences in the same order, differing only in
+token arrangement within the context (see Appendix D for details). We evaluated model differences
+by analyzing consistencies of perplexity, attention strategies, representational alignment and accuracy
+on BrainBench [Luo et al., 2024b], a neuroscientist-curated benchmark that tests models’ ability to
+distinguish original experimental results from subtly altered versions.
+To foreshadow key results, we find forward- and backward-trained models exhibit broadly similar
+perplexity, attention patterns, and downstream performance, though small but systematic discrepancies
+emerge, contrary to our theoretical predictions. These discrepancies are greatly amplified in models
+trained on permuted text, where we trace inconsistencies to positional biases in self-attention. Our
+analysis reveals that causal self-attention exhibits both locality and long-range biases, extending prior
+2
+observations of early-position biases. We further clarify that these biases arise not only from model
+architecture but also from the structure of the training data, beyond current explanations of attention
+biases [Liu et al., 2023, Xiao et al., 2024]. With a theory-driven approach grounded in a mathematical
+proof, our work clarifies an important line of research in the consistency of probability in LLMs,
+bridges the previously disconnected domains of probability consistency and architectural biases and
+illuminates some critical aspects of the way LLMs learn from data.
+Table 1: Methodological Deviations from Theoretical Proof in Recent Studies
+Deviation Category
+Study
+Missing begin-of-sequence and/or final tokens
+Kallini et al. [2024], Luo et al. [2024a]
+Yu et al. [2025]
+Retraining tokenizer on backward text
+Papadopoulos et al. [2024]
+Luo et al. [2024a]
+Mixing logical reversal with token reversal
+Zhang et al. [2025]
+Papadopoulos et al. [2024]
+2
+Proof of Perplexity Equivalence in Sequences of Arbitrary Factorizations
+The perplexity of a sequence of tokens is typically calculated by factorizing the joint probability into
+conditional probabilities in a forward direction, which allows for practical computation using language
+models that predict next tokens given previous context. While this conditional decomposition suggests
+a directional nature, we show that sequence perplexity fundamentally measures the joint probability
+of the entire sequence. Calculations of sequences factorized in different orders are simply different
+paths to recover this same joint probability, guaranteed equal by the chain rule of probability.
+For practical autoregressive language models, which predict each token based on prior context, we
+introduce a begin-of-sequence (BOS) token, X0, to provide the initial context needed for the model
+to predict the first token. While not strictly necessary in a general mathematical context, X0 ensures
+the first conditional probability is well-defined in this setting. We define P(X0) = 1, as it has no
+prior context. Let X1, X2, . . . , Xn be a sequence of n tokens following X0. Let σ be a permutation
+of the indices {1, 2, . . . , n}, defining a reordering: Xσ(1), Xσ(2), . . . , Xσ(n).
+The perplexity for this ordering is defined as
+PPσ = exp
+ 
+−1
+n
+n
+X
+i=1
+ln P(Xσ(i)|X0, Xσ(1), . . . , Xσ(i−1))
+!
+.
+By the chain rule of probability,
+P(Xσ(i)|X0, Xσ(1), . . . , Xσ(i−1)) =
+P(X0, Xσ(1), . . . , Xσ(i))
+P(X0, Xσ(1), . . . , Xσ(i−1)),
+we rewrite the perplexity as
+PPσ = exp
+ 
+−1
+n
+n
+X
+i=1
+ln P(X0, Xσ(1), . . . , Xσ(i))
+P(X0, Xσ(1), . . . , Xσ(i−1))
+!
+= exp
+ 
+−1
+n
+n
+X
+i=1
+
+ln P(X0, Xσ(1), . . . , Xσ(i)) −ln P(X0, Xσ(1), . . . , Xσ(i−1))
+
+!
+.
+This sum telescopes:
+n
+X
+i=1
+
+ln P(X0, Xσ(1), . . . , Xσ(i)) −ln P(X0, Xσ(1), . . . , Xσ(i−1))
+
+= ln P(X0, Xσ(1), . . . , Xσ(n))−ln P(X0),
+since P(X0) = 1, so ln P(X0) = 0, yielding
+PPσ = exp
+
+−1
+n ln P(X0, Xσ(1), . . . , Xσ(n))
+
+.
+3
+Since {Xσ(1), . . . , Xσ(n)} is a permutation of {X1, . . . , Xn}, the joint probability is unchanged:
+P(X0, Xσ(1), . . . , Xσ(n)) = P(X0, X1, . . . , Xn).
+Thus,
+PPσ = exp
+
+−1
+n ln P(X0, X1, . . . , Xn)
+
+.
+(1)
+This general result encompasses the equivalence of perplexities of forward and backward factorized
+sequences as special cases. We provide the corresponding proof in Appendix B. We also provide
+intuitive examples illustrating this equivalence in Appendix C.
+Implications for Language Model Training
+The theoretical proof demonstrates that, in language
+model training, the choice of token prediction order—left-to-right, right-to-left, or any fixed permuta-
+tion—yields the same theoretical perplexity, provided the model accurately captures the conditional
+probabilities. Notably, a model trained on one factorization, such as the forward order, does not ex-
+plicitly model conditionals from other factorizations in the backward order. To empirically verify this
+equivalence, sibling models must be trained on different factorizations, as approximating intermediate
+conditionals of another factorization from a single trained model via sampling is computationally
+infeasible for large text corpora.
+3
+Experiments
+To evaluate whether LLMs approximate consistent probabilities across token orderings, we train 27
+GPT-2 models [Radford et al., 2019] from scratch at three scales (124M, 355M, 774M parameters)
+on a 1.3-billion-token corpus of neuroscience publications spanning 20 years. Prior work showed
+that models of this size, trained on the same data, matched or exceeded expert performance on a
+neuroscience benchmark [Luo et al., 2024c]. Here, the models were trained with forward, backward,
+and permuted token orderings, each with three different initializations. To align with the theoretical
+framework, all sequences include a begin-of-sequence (BOS) token and fully span the model’s context
+window. A new tokenizer, trained on the same neuroscience corpus using forward factorization,
+ensures all models process identical data in consistent orders. All models are trained for five epochs
+to convergence. We assess model consistency through perplexity (Sec. 3.1), attention strategies (Sec.
+3.2), representational alignment (Sec. 3.3) and accuracy on BrainBench (Sec. 3.4; Luo et al. 2024b),
+a neuroscientist-curated benchmark that evaluates models’ ability to distinguish original experimental
+results from subtly altered versions (see Appendix D, E for details).
+3.1
+Perplexity Differences Across Sequence Factorizations
+Forward and backward-trained models show highly similar perplexities across validation set text
+sequences (N = 9, 413; Fig. 1), with Pearson correlation coefficients greater than 0.99 (Table 2).
+However, forward-trained models consistently exhibit lower perplexity than backward-trained models,
+with the gap widening as model size increases (Table 2). Models trained on permuted text exhibit
+significantly higher perplexities, diverging markedly from theoretical expectations (Fig. 1; Table
+2). For perplexity differences on the training set, the complete training and validation losses and
+initialization differences, see Appendix F (Fig. S.1, S.2; Table S.1, S.2).
+3.2
+Tracing Ordering Effects to Self-Attention Biases
+To understand the sources of the perplexity differences, we analyze the attention patterns in models
+trained on differently ordered text sequences. If self-attention inherently biases toward certain
+token positions, these positional preferences could cause discrepancies in perplexity across different
+factorizations.
+Token Ordering Shapes Attention Entropy Across Models
+We investigate variations in attention
+weight distributions across models by analyzing their entropy. Let A(l,h) ∈RT ×T denote the attention
+weight matrix for a specific head h in layer l, where T is the sequence length. Each entry A(l,h)
+ij
+represents the attention probabilities from token i to token j. For each token i, its attention distribution
+4
+Logging Steps
+104
+103
+102
+101
+1000
+100
+101
+Perplexity Difference
+GPT-2 (124M)
+Logging Steps
+GPT-2 (355M)
+Logging Steps
+GPT-2 (774M)
+Fwd - Bwd
+Fwd - Perm
+Bwd - Perm
+Figure 1: Average validation perplexity differences across across model sizes and training
+directions. Forward and backward text training yields similar perplexities, though forward models
+consistently achieve lower values (difference below zero). This gap widens slightly with model size.
+Permuted text training yields much higher perplexity than both forward and backward models, with
+similar differences to each, causing the curves to overlap. Shaded regions indicate one standard
+deviation over the mean across three random initializations.
+Table 2: Comparison of Statistical Metrics Across GPT-2 Model and Directions Across Three
+Initializations (∗∗∗indicates p < 0.001)
+Model
+Direction
+Pearson r
+t-stat
+Cohen’s d
+124M
+Fwd vs Bwd
+0.995 ± 0.000∗∗∗
+−18.486 ± 8.795∗∗∗
+0.191 ± 0.091
+Fwd vs Perm
+0.889 ± 0.001∗∗∗
+−230.581 ± 2.081∗∗∗
+2.377 ± 0.021
+Bwd vs Perm
+0.888 ± 0.003∗∗∗
+−230.148 ± 2.022∗∗∗
+2.372 ± 0.021
+355M
+Fwd vs Bwd
+0.995 ± 0.000∗∗∗
+−40.788 ± 1.958∗∗∗
+0.420 ± 0.020
+Fwd vs Perm
+0.930 ± 0.004∗∗∗
+−199.889 ± 1.077∗∗∗
+2.060 ± 0.011
+Bwd vs Perm
+0.930 ± 0.004∗∗∗
+−198.720 ± 1.040∗∗∗
+2.048 ± 0.011
+774M
+Fwd vs Bwd
+0.995 ± 0.000∗∗∗
+−64.484 ± 1.459∗∗∗
+0.665 ± 0.015
+Fwd vs Perm
+0.957 ± 0.001∗∗∗
+−208.686 ± 0.935∗∗∗
+2.151 ± 0.010
+Bwd vs Perm
+0.958 ± 0.001∗∗∗
+−207.833 ± 0.675∗∗∗
+2.142 ± 0.007
+is defined over the preceding tokens and itself (j ≤i), denoted a(l,h)
+i
+= (A(l,h)
+i1
+, A(l,h)
+i2
+, . . . , A(l,h)
+ii
+)
+with Pi
+j=1 A(l,h)
+ij
+= 1. The entropy for the attention distribution of token i is then H(a(l,h)
+i
+) =
+−Pi
+j=1 A(l,h)
+ij
+ln A(l,h)
+ij
+. For i = 1, we define H(a(l,h)
+1
+) = 0. To account for varying context
+sizes, we normalize this entropy by the maximum possible entropy for a distribution over i tokens,
+which corresponds to a uniform distribution (pj = 1/i for j = 1, . . . , i). The maximum entropy
+is: Hmax(i) = −Pi
+j=1
+1
+i ln 1
+i = ln i. For i = 1, Hmax(1) = ln 1 = 0. The normalized entropy for
+token i is then: ˆH(a(l,h)
+i
+) = H(a(l,h)
+i
+)
+Hmax(i) = H(a(l,h)
+i
+)
+ln i
+for i > 1, and ˆH(a(l,h)
+1
+) = 0.
+We compute the normalized entropy by averaging across all heads and 64 text sequences per context
+size, resulted in a scalar value representing the variation of attention for each context size for each
+model layer. Sequences are sampled from the validation split of twenty years of neuroscience
+publications, each fully spanning the model’s context window with a BOS token prepended.
+We observe that models trained on forward and backward token orders show similar entropy patterns,
+while the model trained on permuted token order exhibits much higher and more divergent entropy,
+especially in early to middle layers (Fig. 2). We attribute this to disrupted grammatical dependencies
+caused by consistent token permutation. Although attention entropy across models tends to converge
+in the later layers, earlier discrepancies likely cascade, leading to overall divergence in perplexity
+despite theoretical equivalence. Results for different initializations and model sizes are in the
+Appendix F.
+Attention Weights Are Biased by Token Positions
+We complement our entropy analysis by
+examining how attention weights vary across token pairs within a sequence based on the distance
+5
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+0
+1000
+Context Size
+Layer 8
+0
+1000
+Context Size
+Layer 9
+0
+1000
+Context Size
+Layer 10
+0
+1000
+Context Size
+Layer 11
+0
+1000
+Context Size
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure 2: Attention entropy across three data orders (GPT-2 124M). Normalized attention entropy
+(min = 0, max = 1) is measured across layers averaged over heads and sampled text sequences for
+varying context sizes. Models trained on forward, backward, and permuted token orders show distinct
+patterns despite using the same data. Forward and backward models exhibit similar trends, with
+larger differences at early layers. The model trained with permuted token order displays substantially
+higher and more divergent entropy, particularly in early to middle layers, suggesting distinct learning
+dynamics driven by unnatural local and long-range dependencies. Models at initialization (Init) are
+shown for reference and display near-maximal entropy.
+of their relative positions. To understand the relative importance of tokens within this context, we
+compute the rank of each attention weight A(l,h)
+ij
+within the set a(l,h)
+i
+. Let R(A(l,h)
+ij
+|a(l,h)
+i
+) denote
+the rank of A(l,h)
+ij
+among the i weights in a(l,h)
+i
+, where ranks range from 0 (for the smallest weight)
+to i −1 (for the largest weight). We normalize these ranks to a [0, 1] scale to account for the varying
+context size i. The normalized rank for the attention weight A(l,h)
+ij
+is ˆR(l,h)
+ij
+=
+R(A(l,h)
+ij
+|a(l,h)
+i
+)
+i−1
+for
+i > 1 and ˆR(l,h)
+11
+= 0.
+We analyze how normalized ranks relate to the distance d = |i −j| between the query token i and
+the key token j, for each possible distance d ∈{0, 1, . . . , T −1}. We aggregate normalized ranks by
+averaging them across all valid token pairs (i, j) such that j ≤i and |i −j| = d, across all heads in a
+layer, and across 64 randomly sampled text sequences from the same neuroscience dataset.
+We observe that, compared to models at initialization (Init), both forward and backward trained
+models exhibit strong biases toward both adjacent tokens and those at the maximum context length,
+with the strength of bias varying across layers. In contrast, the model trained on permuted text shows
+a distinct trend, with positional bias generally decreasing as token distance increases across most
+layers.
+We confirm that biases toward nearby tokens and those at maximal distances are a general phenomenon
+across pre-trained models (e.g., GPT-2, Pythia, and Llama-2) when evaluated on general text corpora
+like The Pile [Gao et al., 2020] (see Appendix F; Fig. S.3, S.4, S.5). While the exact form of the
+bias varies, we attribute these differences to factors such as the greater diversity and scale of the
+pre-training data, which likely support more nuanced learning across token distances. Full results
+across different initializations and model sizes are provided in Appendix F.
+3.3
+Representational Divergence Across Token Orderings
+Having established differences in attention strategies, we trace out how such differences across
+models affect downstream representational semantics, focusing on how identical text sequences are
+represented in different models. Specifically, we compare hidden state representations from each
+self-attention block of same-sized models [Kornblith et al., 2019].
+For layer l, hidden states H(l) ∈RT ×D (T: sequence length, D: hidden dimension) are extracted
+from 64 randomly sampled sequences. Hidden states are reordered to forward sequence order.
+Representational Dissimilarity Matrices (RDMs) are computed as RDM(l)
+i,j = 1 −
+H(l)
+i
+·H(l)⊤
+j
+||H(l)
+i
+||·||H(l)
+j
+||. For
+6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+0
+1000
+Token Distance
+Layer 8
+0
+1000
+Token Distance
+Layer 9
+0
+1000
+Token Distance
+Layer 10
+0
+1000
+Token Distance
+Layer 11
+0
+1000
+Token Distance
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure 3: Positional bias in self-attention varies with training directions and layers (GPT-2
+124M). Normalized attention rank (min = 0, max = 1) is plotted as a function of token distance
+within the context, averaged across heads, sampled sequences, and layers. Compared to models
+at initialization (Init), forward (Fwd) and backward (Bwd) trained models show strong positional
+biases toward both nearby tokens and tokens at maximal distance, with the degree of bias varying
+across layers. In contrast, the model trained on permuted text (Perm) displays distinct patterns, with
+positional bias generally decreasing as token distance increases across most layers.
+two models, RSA is the Spearman’s rank correlation coefficient of the upper triangular elements of
+their RDMs. RSA is aggregated by averaging across batches and sampled sequences per layer.
+We observe that as layers advance, representational alignment decreases across all direction pairs.
+Semantic alignment is significantly higher between forward- and backward-trained models than with
+permuted models. This mirrors our earlier observations on attention strategies, where forward and
+backward models exhibited more similar attention patterns to each other than to the permuted model
+(Fig. 2, 3), underscoring fundamental differences in learning dynamics.
+0
+5
+10
+Layer
+0.0
+0.5
+1.0
+RSA (spearman)
+GPT-2 (124M)
+0
+10
+20
+Layer
+GPT-2 (355M)
+0
+10
+20
+30
+Layer
+GPT-2 (774M)
+Fwd vs Bwd
+Fwd vs Perm
+Bwd vs Perm
+Figure 4: Representational similarities across training directions. Forward- and backward-trained
+models show higher representational similarity to each other than to the model trained on permuted
+text. Across all comparisons, similarity declines in deeper layers, with the permuted model’s
+representations becoming increasingly orthogonal (toward zero correlation) to the others, indicating a
+diverging semantic structure from models trained on forward and backward orderings.
+3.4
+BrainBench Evaluations
+To provide an external performance measure of evaluation, we extend our analysis beyond perplexity
+inconsistencies to include downstream benchmark performance. We assess both forward- and
+backward-trained models on BrainBench, a recognized benchmark task requiring differentiation of
+original experimental results from altered versions, compared against human-expert performance
+(details in Appendix E), as utilized by Luo et al. [2024a]. This evaluation is critical, as our work
+rigorously follows specified protocols to ensure perfect comparability between forward- and backward-
+trained models, correcting experimental errors in Luo et al. [2024b] and enabling a robust reassessment
+of their results and interpretations. We exclude permuted-text models, which converged during
+training (Fig. S.2), but cannot be evaluated on BrainBench, as its items do not always span the full
+context window and become invalid under the training permutation.
+7
+Forward and Backward-Trained Models Perform Similarly on BrainBench
+We made similar
+observation as Luo et al. [2024a] that GPT-2 models pre-trained on neuroscience rival or exceed
+human expert performance (Fig. S.24). As model size increased, both forward and backward-trained
+models improved in BrainBench performance (F = 133.397, p = 1.53e −08). However, we found
+no advantage in backward-trained models over forward-trained ones (F = 1.868, p = 0.1933)
+and the interaction between direction and model size was not significant (F = 4.035, p = 0.0643;
+Appendix E).
+Forward and Backward-Trained Models Align with Human Judgements Similarly
+Following
+Luo et al. [2024a], we examined whether forward-trained and backward-trained models, alongside
+human experts, identified the same BrainBench items as difficult. Difficulty was quantified for
+humans by calculating mean accuracy across 200 test cases and for GPT-2 models by computing
+signed perplexity differences between incorrect and correct abstracts per test case.
+Consistent with Luo et al. [2024a], we found that regardless of training direction, model judgments
+correlated more strongly with each other (M = 0.74, SD = 0.08) than with human judgments
+(M = 0.11, SD = 0.04; Fig. S.25, S.26). In contrast to Luo et al. [2024a], however, correlations
+between forward-trained (M = 0.12, SD = 0.03) and backward-trained (M = 0.10, SD =
+0.04) model judgments and human expert judgments were comparable (t(8) = 1.009, p = 0.342;
+Fig. S.25). This differs from Luo et al. [2024a], who reported significantly lower alignment for
+backward-trained models with human judgments. This difference stems from corrections we made to
+their experimental setup: we ensured that forward- and backward-trained models shared identical
+initialization conditions, were trained on exactly the same data sequences fully spanning the context
+window with a BOS token prepended, and used consistent tokenizations. This divergence in findings
+has important implications for model-human alignment and the design of effective model-human
+teaming systems [Yáñez et al., 2025].
+4
+Discussion
+In this contribution, we formally prove that sequence perplexity is theoretically invariant to factoriza-
+tion order under the chain rule of probability, establishing a mathematical benchmark for evaluating
+how consistent LLMs are at approximating conditional probabilities. Empirically, however, models
+trained on forward, backward, and permuted token orders exhibit systematic deviations from this
+equivalence. Forward and backward models achieve similar (but not identical) perplexities, with
+forward models consistently outperforming backward models, while permuted training yields sig-
+nificantly higher losses. Attention analysis reveals that forward/backward models develop strong
+positional biases—favoring adjacent and long-range tokens—whereas permuted models exhibit
+distinct attention patterns. Representational alignment is higher between forward and backward
+models but degrades with depth, diverging sharply for permuted models. Finally, evaluation on the
+BrainBench benchmark shows that both forward and backward models match human expert perfor-
+mance but align poorly with human judgment patterns, contradicting prior claims about the inferior
+alignment of backward models. Together, these findings reveal how architectural and data-driven
+biases disrupt theoretical equivalence and shape LLM learning dynamics.
+Understanding the discrepancies between the way models learn in practice and how they might be
+expected to learn in theory has significant implications. Although we identified errors in prior work
+that need correction, we acknowledge their contributions in revealing interesting implications of
+such asymmetries. For instance, Yu et al. [2025] suggested alternative sequence learning directions
+based on different factorizations could reveal unique insights about data distributions and potentially
+indicate data quality. Papadopoulos et al. [2024] and Zhang et al. [2025] proposed theoretical
+frameworks explaining why discrepancies occur, informing our understanding of language model
+learning dynamics. We also see connections to Wu et al. [2025], who identified position bias in self-
+attention—leading us to suspect this bias may contribute to asymmetric perplexities that challenge
+theoretical equivalence.
+Beyond theoretical considerations, researchers have found practical utility in backward training
+approaches. Pfau et al. [2023] trained backward models to identify adversarial prompts for detecting
+toxic responses. Zhang et al. [2018] optimized bidirectional agreement at sequence-level in machine
+translation. Nguyen et al. [2023] jointly optimized forward and backward autoregressive language
+models, maximizing token-level agreement to provide denser supervision signals.
+8
+Our findings on causal self-attention biases connect with and extend prior work, such as attention
+sinks [Xiao et al., 2024, Yu et al., 2024, Gu et al., 2025] and the lost-in-the-middle phenomenon
+[Liu et al., 2023]. One observed bias is consistent with attention sinks [Xiao et al., 2024], where
+initial tokens dominate attention. This manifests in our analysis (Fig. 3) as high attention from final
+tokens towards initial tokens, reflected by the increased normalized attention at the far right of the
+axis. Additionally, we identify a pronounced locality bias, consistent with prior studies on vanilla
+transformers [Qin et al., 2022] and bidirectional models like BERT [Clark et al., 2019, Kovaleva
+et al., 2019], where attention tends to concentrate on nearby tokens.
+Notably, our work highlights a more comprehensive view of causal self-attention biases across all
+token distances irrespective of context size, unlike the focus on only the first few tokens in Xiao
+et al. [2024] (cf. Yu et al. 2024). By using normalized ranked attention, we avoid the dilution of raw
+probabilities caused by softmax in longer contexts, in contrast to Xiao et al. [2024]’s reliance on raw
+probabilities, which treats attention as a limited resource. While Xiao et al. [2024] attributed sinks to
+early token visibility under masked self-attention, our results with permuted models suggest sinks
+might not arise under different data factorizations.
+Furthermore, our findings offer an empirical explanation for the lost-in-the-middle effect [Liu et al.,
+2023], where information at the start or end of the context is retrieved best. The strong attention
+observed for both local tokens and long-range (initial-final) token pairs (Fig. 3) directly accounts for
+why intermediate information might receive less focus and be harder to retrieve.
+In hindsight, it may seem unsurprising that architectural biases toward specific token positions lead
+to discrepancies in the theoretical equivalence we established. However, prior work on positional
+biases and forward-backward inconsistencies developed largely independently, and the connections
+between them remained unexplored. While Kallini et al. [2024] speculated that locality bias might
+contribute to forward-backward differences, a systematic analysis linking attention patterns to these
+discrepancies had not been conducted until now.
+While more tangential to our focus, we note connections to bidirectional language modeling literature.
+Models like BERT [Devlin et al., 2019] produce symmetric probabilities by design through their
+attention mechanism, though they do not optimize joint probabilities as masked tokens are predicted
+independently. Yang et al. [2020] optimizes autoregressive loss across sequence permutations but
+faces scalability challenges. These representational learning models do not eliminate the need to
+investigate asymmetric joint probabilities in autoregressive models. A promising future direction
+could compare modernized bidirectional models (e.g., ModernBERT; Warner et al. 2024) with
+unidirectional LMs to determine if bidirectional learning’s theoretical advantage in capturing joint
+probabilities translates to downstream performance.
+Studying the discrepancies between theoretical expectations and practical implementations offers
+valuable insights into learning dynamics and biases in transformer architectures, which dominate
+today’s AI landscape. We suspect that deviations from proper probability distributions may contribute
+to thorny problems like hallucination and unpredictable out-of-distribution behaviors in LLMs. These
+deviations could potentially serve as diagnostic metrics for identifying and modeling unexpected
+behaviors. While this connection requires further exploration, our current work highlights the need for
+robust theoretical benchmarks in experimental design to deepen our understanding of these powerful
+yet often opaque models. Future research in this area holds significant promise for developing more
+reliable and interpretable LLMs, with the potential to transform how we diagnose and mitigate model
+limitations.
+Code and Data Availability
+All computer code associated with this work including model training, evaluation, data processing
+and analyses are publicly available at https://github.com/braingpt-lovelab/backwards. Model weights
+are available at https://huggingface.co/llm-probability.
+Acknowledgement
+Research presented in this article was supported by the Laboratory Directed Research and Develop-
+ment program of Los Alamos National Laboratory under project number 20250637DI; Microsoft
+9
+(Accelerate Foundation Models Research Program); an AI safety grant from the Foresight Institute to
+B.C.L.
+References
+F. Barbero, A. Banino, S. Kapturowski, D. Kumaran, J. G. M. Araújo, A. Vitvitskyi, R. Pascanu, and P. Veliˇckovi´c.
+Transformers need glasses! Information over-squashing in language tasks, Oct. 2024. URL http://arxiv.
+org/abs/2406.04267. arXiv:2406.04267 [cs].
+Y. Bondarenko, M. Nagel, and T. Blankevoort. Quantizable Transformers: Removing Outliers by Helping
+Attention Heads Do Nothing, Nov. 2023. URL http://arxiv.org/abs/2306.12929. arXiv:2306.12929
+[cs].
+Y. Chen, J. Benton, A. Radhakrishnan, J. Uesato, C. Denison, J. Schulman, A. Somani, P. Hase, M. Wagner,
+F. Roger, V. Mikulik, S. Bowman, J. Leike, J. Kaplan, and E. Perez. Reasoning Models Don’t Always Say
+What They Think. Anthropic, 2025.
+K. Clark, U. Khandelwal, O. Levy, and C. D. Manning. What Does BERT Look At? An Analysis of BERT’s
+Attention, June 2019. URL http://arxiv.org/abs/1906.04341. arXiv:1906.04341 [cs].
+J. Devlin, M.-W. Chang, K. Lee, and K. Toutanova. BERT: Pre-training of Deep Bidirectional Transformers for
+Language Understanding, May 2019. URL http://arxiv.org/abs/1810.04805. arXiv:1810.04805 [cs].
+P. Gage. A new algorithm for data compression. The C Users Journal archive, 12:23–38, 1994. URL
+https://api.semanticscholar.org/CorpusID:59804030.
+L. Gao, S. Biderman, S. Black, L. Golding, T. Hoppe, C. Foster, J. Phang, H. He, A. Thite, N. Nabeshima,
+S. Presser, and C. Leahy. The Pile: An 800GB Dataset of Diverse Text for Language Modeling, 2020. URL
+https://arxiv.org/abs/2101.00027. _eprint: 2101.00027.
+X. Gu, T. Pang, C. Du, Q. Liu, F. Zhang, C. Du, Y. Wang, and M. Lin. When Attention Sink Emerges in Language
+Models: An Empirical View, Mar. 2025. URL http://arxiv.org/abs/2410.10781. arXiv:2410.10781
+[cs].
+L. Huang, W. Yu, W. Ma, W. Zhong, Z. Feng, H. Wang, Q. Chen, W. Peng, X. Feng, B. Qin, and T. Liu. A
+Survey on Hallucination in Large Language Models: Principles, Taxonomy, Challenges, and Open Questions.
+ACM Transactions on Information Systems, 43(2):1–55, Mar. 2025. ISSN 1046-8188, 1558-2868. doi:
+10.1145/3703155. URL http://arxiv.org/abs/2311.05232. arXiv:2311.05232 [cs].
+J. Kallini, I. Papadimitriou, R. Futrell, K. Mahowald, and C. Potts. Mission: Impossible Language Models, Jan.
+2024. URL http://arxiv.org/abs/2401.06416. arXiv:2401.06416 [cs].
+S. Kornblith, M. Norouzi, H. Lee, and G. Hinton. Similarity of Neural Network Representations Revisited, 2019.
+URL https://arxiv.org/abs/1905.00414. _eprint: 1905.00414.
+O. Kovaleva, A. Romanov, A. Rogers, and A. Rumshisky. Revealing the Dark Secrets of BERT, Sept. 2019.
+URL http://arxiv.org/abs/1908.08593. arXiv:1908.08593 [cs].
+A. K. Lampinen, S. C. Y. Chan, and K. Hermann. Learned feature representations are biased by complexity, learn-
+ing order, position, and more, Sept. 2024. URL http://arxiv.org/abs/2405.05847. arXiv:2405.05847
+[cs].
+T. Lanham, A. Chen, A. Radhakrishnan, B. Steiner, C. Denison, D. Hernandez, D. Li, E. Durmus, E. Hubinger,
+J. Kernion, K. Lukosiute, K. Nguyen, N. Cheng, N. Joseph, N. Schiefer, O. Rausch, R. Larson, S. McCandlish,
+S. Kundu, S. Kadavath, S. Yang, T. Henighan, T. Maxwell, T. Telleen-Lawton, T. Hume, Z. Hatfield-Dodds,
+J. Kaplan, J. Brauner, S. R. Bowman, and E. Perez. Measuring Faithfulness in Chain-of-Thought Reasoning.
+Anthropic, 2023.
+P. Latuske, O. Toader, and K. Allen. Interspike Intervals Reveal Functionally Distinct Cell Populations in the
+Medial Entorhinal Cortex. Journal of Neuroscience, 35(31):10963–10976, Aug. 2015. ISSN 0270-6474,
+1529-2401. doi: 10.1523/JNEUROSCI.0276-15.2015. URL https://www.jneurosci.org/lookup/doi/
+10.1523/JNEUROSCI.0276-15.2015.
+J. Lindsey, W. Gurnee, E. Ameisen, B. Chen, A. Pearce, N. L. Turner, C. Citro, D. Abrahams, S. Carter,
+B. Hosmer, J. Marcus, M. Sklar, A. Templeton, T. Bricken, C. McDougall, H. Cunningham, T. Henighan,
+A. Jermyn, A. Jones, A. Persic, Z. Qi, T. B. Thompson, S. Zimmerman, K. Rivoire, T. Conerly, C. Olah,
+and J. Batson. On the Biology of a Large Language Model. Transformer Circuits Thread, 2025. URL
+https://transformer-circuits.pub/2025/attribution-graphs/biology.html.
+10
+N. F. Liu, K. Lin, J. Hewitt, A. Paranjape, M. Bevilacqua, F. Petroni, and P. Liang. Lost in the Middle:
+How Language Models Use Long Contexts, Nov. 2023. URL http://arxiv.org/abs/2307.03172.
+arXiv:2307.03172 [cs].
+I. Loshchilov and F. Hutter. Decoupled Weight Decay Regularization, Jan. 2019. URL http://arxiv.org/
+abs/1711.05101. arXiv:1711.05101 [cs, math].
+X. Luo, M. Ramscar, and B. C. Love. Beyond Human-Like Processing: Large Language Models Perform
+Equivalently on Forward and Backward Scientific Text, Nov. 2024a. URL http://arxiv.org/abs/2411.
+11061. arXiv:2411.11061 [cs].
+X. Luo, A. Rechardt, G. Sun, K. K. Nejad, F. Yáñez, B. Yilmaz, K. Lee, A. O. Cohen, V. Borghesani,
+A. Pashkov, D. Marinazzo, J. Nicholas, A. Salatiello, I. Sucholutsky, P. Minervini, S. Razavi, R. Rocca,
+E. Yusifov, T. Okalova, N. Gu, M. Ferianc, M. Khona, K. R. Patil, P.-S. Lee, R. Mata, N. E. Myers, J. K.
+Bizley, S. Musslick, I. P. Bilgin, G. Niso, J. M. Ales, M. Gaebler, N. A. Ratan Murty, L. Loued-Khenissi,
+A. Behler, C. M. Hall, J. Dafflon, S. D. Bao, and B. C. Love. Large language models surpass human
+experts in predicting neuroscience results. Nature Human Behaviour, Nov. 2024b. ISSN 2397-3374. doi:
+10.1038/s41562-024-02046-9. URL https://www.nature.com/articles/s41562-024-02046-9.
+X. Luo, G. Sun, and B. C. Love. Matching domain experts by training from scratch on domain knowledge, May
+2024c. URL http://arxiv.org/abs/2405.09395. arXiv:2405.09395 [cs, q-bio].
+A. Nguyen, N. Karampatziakis, and W. Chen. Meet in the Middle: A New Pre-training Paradigm, Mar. 2023.
+URL http://arxiv.org/abs/2303.07295. arXiv:2303.07295 [cs].
+V. Papadopoulos, J. Wenger, and C. Hongler. Arrows of Time for Large Language Models, July 2024. URL
+http://arxiv.org/abs/2401.17505. arXiv:2401.17505 [cs].
+J. Pfau, A. Infanger, A. Sheshadri, A. Panda, J. Michael, and C. Huebner. Eliciting Language Model Behaviors
+using Reverse Language Models. In Socially Responsible Language Modelling Research, 2023. URL
+https://openreview.net/forum?id=m6xyTie61H.
+Z. Qin, W. Sun, H. Deng, D. Li, Y. Wei, B. Lv, J. Yan, L. Kong, and Y. Zhong. cosFormer: Rethinking Softmax
+in Attention, Feb. 2022. URL http://arxiv.org/abs/2202.08791. arXiv:2202.08791 [cs].
+A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, and I. Sutskever. Language Models are Unsupervised
+Multitask Learners. OpenAI, 2019.
+R. Sennrich, B. Haddow, and A. Birch. Neural Machine Translation of Rare Words with Subword Units, June
+2016. URL http://arxiv.org/abs/1508.07909. arXiv:1508.07909 [cs].
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin. Attention
+Is All You Need, Aug. 2023. URL http://arxiv.org/abs/1706.03762. arXiv:1706.03762 [cs].
+B. Warner, A. Chaffin, B. Clavié, O. Weller, O. Hallström, S. Taghadouini, A. Gallagher, R. Biswas, F. Ladhak,
+T. Aarsen, N. Cooper, G. Adams, J. Howard, and I. Poli. Smarter, Better, Faster, Longer: A Modern
+Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference, Dec. 2024.
+URL http://arxiv.org/abs/2412.13663. arXiv:2412.13663 [cs].
+X. Wu, Y. Wang, S. Jegelka, and A. Jadbabaie. On the Emergence of Position Bias in Transformers, Feb. 2025.
+URL http://arxiv.org/abs/2502.01951. arXiv:2502.01951 [cs].
+G. Xiao, Y. Tian, B. Chen, S. Han, and M. Lewis. Efficient Streaming Language Models with Attention Sinks,
+Apr. 2024. URL http://arxiv.org/abs/2309.17453. arXiv:2309.17453 [cs].
+Z. Yang, Z. Dai, Y. Yang, J. Carbonell, R. Salakhutdinov, and Q. V. Le. XLNet: Generalized Autoregres-
+sive Pretraining for Language Understanding, Jan. 2020. URL http://arxiv.org/abs/1906.08237.
+arXiv:1906.08237 [cs].
+S. Yu, Y. Xu, C. Du, Y. Zhou, M. Qiu, Q. Sun, H. Zhang, and J. Wu. Reverse Modeling in Large Language
+Models, Feb. 2025. URL http://arxiv.org/abs/2410.09817. arXiv:2410.09817 [cs].
+Z. Yu, Z. Wang, Y. Fu, H. Shi, K. Shaikh, and Y. C. Lin. Unveiling and Harnessing Hidden Attention Sinks:
+Enhancing Large Language Models without Training through Attention Calibration, June 2024. URL
+http://arxiv.org/abs/2406.15765. arXiv:2406.15765 [cs].
+F. Yáñez, X. Luo, O. V. Minero, and B. C. Love. Confidence-weighted integration of human and machine
+judgments for superior decision-making, 2025. URL https://arxiv.org/abs/2408.08083. _eprint:
+2408.08083.
+11
+Y. Zhang, R. Bai, Z. Gu, R. Zhang, J. Gu, E. Abbe, S. Bengio, and N. Jaitly. Reversal Blessing: Thinking
+Backward May Outpace Thinking Forward in Multi-choice Questions, Mar. 2025. URL http://arxiv.
+org/abs/2502.18435. arXiv:2502.18435 [cs].
+Z. Zhang, S. Wu, S. Liu, M. Li, M. Zhou, and T. Xu. Regularizing Neural Machine Translation by Target-
+bidirectional Agreement, Nov. 2018. URL http://arxiv.org/abs/1808.04064. arXiv:1808.04064
+[cs].
+N. Zucchet, J. Bornschein, S. Chan, A. Lampinen, R. Pascanu, and S. De. How do language models learn
+facts? Dynamics, curricula and hallucinations, Mar. 2025. URL http://arxiv.org/abs/2503.21676.
+arXiv:2503.21676 [cs].
+A
+Existing Work’s Misalignment with Theory
+Studies (Table 1) which have noted discrepancies of joint probabilities of forward and backward
+factorizations of the same text sequence often deviate from the theoretical premise due to subtle
+experimental design or data handling issues. Consequently, when they compared joint probabilities
+of sequences with different factorization orders, they were in fact inadvertently analyzing distinct text
+sequences.
+These deviations from the theoretical setup weaken confidence in empirical findings, highlighting the
+need for rigorous adherence to the proof’s conditions to ensure valid interpretations.
+A.1
+Missing Begin-of-sequence and/or Final Tokens
+Kallini et al. [2024] and Luo et al. [2024a] omitted a begin-of-sequence (BOS) token dur-
+ing tokenization when training and testing models on forward and reversed text.
+This over-
+sight, though seemingly minor, makes the perplexity of forward and backward factoriza-
+tions of the same sequence incomparable [Pfau et al., 2023].
+For a sequence of tokens
+X1, X2, . . . , Xn, without a BOS token, the forward factorization computes the joint probabil-
+ity as P(X2|X1)P(X3|X1, X2) . . . P(Xn|X1, . . . , Xn−1), missing P(X1), while the backward
+factorization computes P(Xn−1|Xn)P(Xn−2|Xn−1, Xn) . . . P(X1|X2, . . . , Xn), missing P(Xn).
+This results in inequivalent factorizations of P(X1, X2, . . . , Xn). Including a BOS token ensures
+consistent factorizations, with P(X1|BOS) and P(Xn|BOS), aligning the forward and backward
+probabilities as equivalent, as supported by the proof. In Section 4 (RQ3) of Yu et al. [2025],
+when comparing step-wise loss differences between forward and reversed-trained models, the
+first and last tokens of text sequences are excluded. For a sequence X1, X2, . . . , Xn, this corre-
+sponds to comparing the probabilities: P(X2|X1)P(X3|X1, X2) . . . P(Xn−1|X1, . . . , Xn−2) and
+P(Xn−1|Xn)P(Xn−2|Xn, Xn−1) . . . P(X2|Xn, . . . , X3), which is inconsistent with the theoreti-
+cal comparison.
+A.2
+Retraining Tokenizer on Backward Text
+Both Luo et al. [2024a] and Papadopoulos et al. [2024] explored retraining tokenizers on reversed
+text. While Papadopoulos et al. [2024] did so for thoroughness and reported limited impact compared
+to reusing the original tokenizer, this approach is conceptually flawed for precisely testing theoretical
+forward-backward equivalence. As Luo et al. [2024a] demonstrated, retraining a Byte Pair Encoding
+(BPE) tokenizer [Radford et al., 2019, Gage, 1994] on character-reversed text necessarily generates a
+different vocabulary and tokenization compared to the original forward text. Consequently, the for-
+ward and backward passes effectively process distinct sequences, negating the theoretical foundation
+for comparing them.
+A.3
+Mixing Logical Reversal with Token Reversal
+Papadopoulos et al. [2024] and Zhang et al. [2025] investigated theoretical reasons for the observed
+discrepancy between forward and backward model perplexities, a deviation from theoretical predic-
+tions. Both employed controlled experiments targeting computational asymmetry, such as Zhang
+et al. [2025]’s analysis of multiplication (p×q=m vs. m=p×q). However, these experimental setups
+are flawed because they model logical reversal rather than the strict token sequence reversal required
+by the underlying theoretical proof. Papadopoulos et al. [2024]’s prime factorization study suffered
+12
+from the same issue. Since the forward and backward tasks in these experiments do not operate on
+true token reversals, they fail to meet the conditions for theoretical equivalence, thereby invalidating
+the authors’ explanations for the perplexity asymmetry observed in language models.
+B
+Proof of Perplexity Equivalence in Sequences of Forward and Backward
+Orderings
+The general result (Sec. 2) encompasses perplexities of forward and backward factorized sequences
+as special cases. Forward perplexity (PPfwd), corresponds to the natural token order, σ(i) = i with
+definition
+PPfwd = exp
+ 
+−1
+n
+n
+X
+i=1
+ln P(Xi|X0, X1, . . . , Xi−1)
+!
+.
+As a direct instance of PPσ for the identity permutation, PPfwd immediately simplifies to the form in
+Equation (1)
+PPfwd = exp
+
+−1
+n ln P(X0, X1, . . . , Xn)
+
+.
+Similarly, backward perplexity (PPbwd) corresponds to the permutation σ(i) = n −i + 1, processing
+tokens in reverse order (Xn, Xn−1, . . . , X1), with each token conditioned on X0 and subsequent
+tokens:
+PPbwd = exp
+ 
+−1
+n
+n
+X
+i=1
+ln P(Xσ(i)|X0, Xσ(1), . . . , Xσ(i−1))
+!
+,
+where Xσ(i) = Xn−i+1. This also simplifies to
+PPbwd = exp
+
+−1
+n ln P(X0, X1, . . . , Xn)
+
+.
+The proof shows the theoretical equivalence of perplexity regardless of the factorization order chosen
+for the sequence, provided the underlying probability model is consistent and adheres to the chain
+rule of probability.
+C
+Intuitive Example with Three Variables
+To make the generalization to arbitrary orderings more intuitive, consider a joint probability distribu-
+tion over three random variables A, B, and C. The joint probability P(A, B, C) can be factorized in
+several equivalent ways using the chain rule:
+Forward Order (A, B, C)
+P(A, B, C) = P(A) · P(B|A) · P(C|A, B)
+Backward Order (C, B, A)
+P(A, B, C) = P(C) · P(B|C) · P(A|B, C)
+Other Permutations
+P(A, B, C) = P(B) · P(A|B) · P(C|A, B)
+P(A, B, C) = P(B) · P(C|B) · P(A|B, C)
+P(A, B, C) = P(C) · P(A|C) · P(B|A, C)
+P(A, B, C) = P(A) · P(C|A) · P(B|A, C)
+These factorizations correspond to the six possible orderings of three variables: (A, B, C), (A, C, B),
+(B, A, C), (B, C, A), (C, A, B), and (C, B, A). If we calculate the perplexity using any of these
+orderings, we should arrive at the same value:
+PPσ = exp
+
+−1
+3 ln P(A, B, C)
+
+13
+D
+Training Setups
+Building on the theoretical proof and experimental deviations we identify in prior work, we re-
+evaluate [Luo et al., 2024a] using theory-aligned experimental protocols. We highlight key training
+and evaluation details to specify the conditions required for assessing perplexity equivalence across
+sequence factorizations.
+D.1
+Tokenization Direction
+We adopt GPT-2’s tokenization strategy [Radford et al., 2019], based on Byte Pair Encoding (BPE)
+[Gage, 1994] for word segmentation [Sennrich et al., 2016]. The tokenizer, trained on neuroscience
+publications (1.3 billion tokens) in the forward direction with a vocabulary of 50,257 tokens, is used
+for all models. Importantly, the same tokenizer is used for both backward and permuted models,
+contrasting prior work [Luo et al., 2024a]. For backward models, forward text is tokenized into token
+IDs and reversed within the context window. For permuted models, the tokenized forward text is
+rearranged in a fixed order within the context window.
+D.2
+Special Tokens
+To align with the proof of perplexity equivalence, all training and validation sequences fully span the
+GPT-2 context window (1,024 tokens), each prefixed with a begin-of-sequence token [Papadopoulos
+et al., 2024], excluding document separators (unlike the original GPT-2; Radford et al. 2019 and
+padding tokens). This ensures the sequence of different factorizations whose joint probabilities are
+comparable, as the first real token is not excluded from the joint probability factorization due to the
+shifted-by-one calculation in next-token prediction loss, maintaining consistency across factorizations,
+unlike previous work [Pfau et al., 2023]. In addition, during loss computation, the starting token’s
+probability is masked out in the softmax operation to align closely with the proof.
+D.3
+Model Variants
+We train GPT-2 models of varying sizes using three data orders: forward, backward, and permuted.
+All models are optimized with standard autoregressive loss. To ensure consistency, all models
+are trained on identical data sequences with all randomness sources fixed, differing only in the
+arrangement of data within the context window or the random seed.
+D.4
+Training Data
+We trained GPT-2 variants from scratch using data collected by Luo et al. [2024b], comprising 1.3
+billion tokens from neuroscience publications (abstracts and full articles) spanning 2002–2022. The
+dataset was split randomly, with 90% allocated for training and 10% for validation. To align with the
+proof of perplexity equivalence, all training and validation sequences fully span the GPT-2 context
+window (1,024 tokens), each prefixed with a begin-of-sequence token, excluding document separators
+and padding tokens. The last sequences of training and validation sets shorter than 1,023 tokens were
+discarded, yielding 995,270 training sequences and 9,413 validation sequences.
+D.5
+Training details
+We trained variants of GPT-2 models using Huggingface implementations. We used a batch size of
+16 for GPT-2 124M (8 for GPT-2 355M and 4 for GPT-2 774M) and a chunk size of 1024. Training
+involved the use of the AdamW optimizer [Loshchilov and Hutter, 2019] with a learning rate of
+2e-5 and a cosine learning rate scheduler (i.e., learning rate decays following a cosine schedule
+over training epochs). We applied gradient accumulation steps set at 8. Five training epochs were
+performed, along with a warm-up step of 0.03 and a weight decay rate of 0.001. bf16 mixed precision
+training and data parallelism were employed. We used 4 Nvidia A100 (80GB) GPUs hosted on
+Microsoft Azure.
+14
+E
+Evaluation Setups
+E.1
+BrainBench
+BrainBench [Luo et al., 2024b] is a benchmark consists of 200 test cases from abstracts in the
+Journal of Neuroscience published in 2023. These abstracts are categorized into five sections:
+Behavioral/Cognitive, Systems/Circuits, Neurobiology of Disease, Development/Plasticity/Repair,
+and Cellular/Molecular.
+Each test case contains a published abstract and an altered version crafted by neuroscientists (see
+details in Luo et al. [2024b]). These modifications, though minimal, significantly change the
+results—for instance, by changing the roles of brain regions or reversing a result’s direction (e.g.,
+from “decreases" to “increases"). The altered abstracts remain logically coherent despite the changes.
+The BrainBench task is to identify the correct study outcome by choosing between the original
+abstract and its altered counterpart.
+E.2
+BrainBench Model Evaluation
+Two versions of the abstracts from each test case were presented to models separately. We measured
+the perplexity of both passages and used perplexity as the indicator of whether models favor one
+abstract or the other.
+Perplexity measures the degree of uncertainty of a model when generating a particular sequence of
+text and is defined as the exponentiated average negative log-likelihood of a tokenized sequence. If
+we have a tokenized abstract sequence X = (X0, X1, . . . , Xt), then the perplexity of X, given a
+model parameterized by θ is,
+PP(X) = exp
+(
+−1
+t
+t
+X
+i
+ln pθ(Xi|X<i)
+)
+(2)
+where ln pθ(Xi|X<i) is the log-likelihood of the ith token conditioned on the preceding tokens
+X<i according to the model. Given both the original and the altered abstracts, we used the abstract
+with lower perplexity as the model’s decision and evaluated the overall accuracy across the entire
+BrainBench dataset accordingly.
+E.3
+BrainBench Human Evaluation
+Previous work [Luo et al., 2024b] collected human judgements from 171 neuroscience experts on
+BrainBench. These data are publicly available1 and provide a useful comparison to LLM performance.
+E.4
+Statistical Testing
+To test the effects of model size and training direction on prediction accuracy, we conducted a repeated-
+measures Analysis of Variance (ANOVA). The dependent variable was prediction correctness for each
+BrainBench item. Model size and direction were included as fixed factors, with model size coded as
+a continuous variable and direction binary-coded as a categorical variable. Model was treated as a
+within-subjects factor to account for repeated measurements. The analysis was implemented using
+the aov() function in R, with the Error term specified to accommodate the repeated-measures design.
+Both main effects and the interaction between model size and direction were examined.
+F
+Additional Results
+1https://github.com/braingpt-lovelab/BrainBench
+15
+Table S.1: Comparison of Statistical Metrics for Fwd and Bwd Directions Across GPT-2 Models
+Across Three Initializations. Significance denoted by *** indicates p < 0.001.
+Model
+Direction
+Pearson r
+t-stat
+Cohen’s d
+124M
+Fwd
+0.999 ± 0.000∗∗∗
+30.185 ± 11.349∗∗∗
+0.311 ± 0.117
+Bwd
+0.999 ± 0.000∗∗∗
+10.930 ± 28.250∗∗∗
+0.113 ± 0.291
+355M
+Fwd
+0.999 ± 0.000∗∗∗
+−3.561 ± 1.476∗∗∗
+0.037 ± 0.015
+Bwd
+0.999 ± 0.000∗∗∗
+1.597 ± 3.837∗∗∗
+0.016 ± 0.040
+774M
+Fwd
+0.999 ± 0.000∗∗∗
+−13.640 ± 6.063∗∗∗
+0.141 ± 0.062
+Bwd
+0.999 ± 0.000∗∗∗
+−9.885 ± 3.716∗∗∗
+0.102 ± 0.038
+Table S.2: Comparison of Statistical Metrics for Perm Direction Across GPT-2 Models Across Three
+Initializations. Significance denoted by *** indicates p < 0.001.
+Model
+Direction
+Pearson r
+t-stat
+Cohen’s d
+124M
+Perm
+0.995 ± 0.000∗∗∗
+106.154 ± 83.993∗∗∗
+1.094 ± 0.866
+355M
+Perm
+0.995 ± 0.000∗∗∗
+44.731 ± 23.499∗∗∗
+0.461 ± 0.242
+774M
+Perm
+0.994 ± 0.000∗∗∗
+30.051 ± 17.785∗∗∗
+0.310 ± 0.183
+Logging Steps
+104
+103
+102
+101
+1000
+100
+101
+Perplexity Difference
+GPT-2 (124M)
+Logging Steps
+GPT-2 (355M)
+Logging Steps
+GPT-2 (774M)
+Fwd - Bwd
+Fwd - Perm
+Bwd - Perm
+Figure S.1: Training perplexity differences across model sizes and training directions.
+100
+102
+104
+Train
+perplexity
+GPT-2 (124M)
+GPT-2 (355M)
+GPT-2 (774M)
+Fwd
+100
+102
+104
+Validation
+perplexity
+GPT-2 (124M)
+GPT-2 (355M)
+GPT-2 (774M)
+Fwd
+100
+102
+104
+Train
+perplexity
+Bwd
+100
+102
+104
+Validation
+perplexity
+Bwd
+Logging Steps
+100
+102
+104
+Train
+perplexity
+Logging Steps
+Logging Steps
+Perm
+Logging Steps
+100
+102
+104
+Validation
+perplexity
+Logging Steps
+Logging Steps
+Perm
+Figure S.2: Training and Validation perplexities across model sizes and training directions.
+16
+0
+500
+1000
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 1
+0
+500
+1000
+0
+0.5
+1
+Layer 2
+0
+500
+1000
+0
+0.5
+1
+Layer 3
+0
+500
+1000
+0
+0.5
+1
+Layer 4
+0
+500
+1000
+0
+0.5
+1
+Layer 5
+0
+500
+1000
+0
+0.5
+1
+Layer 6
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 7
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 8
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 9
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 10
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 11
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 12
+Pre-trained
+Figure S.3: Self-attention is biased toward adjacent and long-range tokens (GPT-2 124M Pre-
+trained). Normalized attention rank (0–1) is plotted as a function of token distance within the context,
+averaged across heads, sampled sequences, and layers. Sequences are all 1,024 tokens with BOS
+prepended, sampled from the first 10K entries from the Pile [Gao et al., 2020].
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 1
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 2
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 3
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 4
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 5
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 6
+Pre-trained
+Figure S.4: Self-attention is biased toward adjacent and long-range tokens (Pythia 70M Pre-
+trained). Normalized attention rank (0–1) is plotted as a function of token distance within the context,
+averaged across heads, sampled sequences, and layers. Sequences are all 1,024 tokens with BOS
+prepended, sampled from the first 10K entries from the Pile [Gao et al., 2020].
+0
+500
+1000
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 1
+0
+500
+1000
+0
+0.5
+1
+Layer 2
+0
+500
+1000
+0
+0.5
+1
+Layer 3
+0
+500
+1000
+0
+0.5
+1
+Layer 4
+0
+500
+1000
+0
+0.5
+1
+Layer 5
+0
+500
+1000
+0
+0.5
+1
+Layer 6
+0
+500
+1000
+0
+0.5
+1
+Layer 7
+0
+500
+1000
+0
+0.5
+1
+Layer 8
+0
+500
+1000
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 9
+0
+500
+1000
+0
+0.5
+1
+Layer 10
+0
+500
+1000
+0
+0.5
+1
+Layer 11
+0
+500
+1000
+0
+0.5
+1
+Layer 12
+0
+500
+1000
+0
+0.5
+1
+Layer 13
+0
+500
+1000
+0
+0.5
+1
+Layer 14
+0
+500
+1000
+0
+0.5
+1
+Layer 15
+0
+500
+1000
+0
+0.5
+1
+Layer 16
+0
+500
+1000
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 17
+0
+500
+1000
+0
+0.5
+1
+Layer 18
+0
+500
+1000
+0
+0.5
+1
+Layer 19
+0
+500
+1000
+0
+0.5
+1
+Layer 20
+0
+500
+1000
+0
+0.5
+1
+Layer 21
+0
+500
+1000
+0
+0.5
+1
+Layer 22
+0
+500
+1000
+0
+0.5
+1
+Layer 23
+0
+500
+1000
+0
+0.5
+1
+Layer 24
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Attention Weight
+(Norm Rank)
+Layer 25
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 26
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 27
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 28
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 29
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 30
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 31
+0
+500
+1000
+Token Distance
+0
+0.5
+1
+Layer 32
+Pre-trained
+Figure S.5: Self-attention is biased toward adjacent and long-range tokens (Llama-2 7B Pre-
+trained). Normalized attention rank (0–1) is plotted as a function of token distance within the context,
+averaged across heads, sampled sequences, and layers. Sequences are all 1,024 tokens with BOS
+prepended, sampled from the first 10K entries from the Pile [Gao et al., 2020].
+17
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+0
+1000
+Context Size
+Layer 20
+0
+1000
+Context Size
+Layer 21
+0
+1000
+Context Size
+Layer 22
+0
+1000
+Context Size
+Layer 23
+0
+1000
+Context Size
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.6: Attention entropy across three data orders (GPT-2 355M, seed1).
+18
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 31
+0
+1000
+Context Size
+Layer 32
+0
+1000
+Context Size
+Layer 33
+0
+1000
+Context Size
+Layer 34
+0
+1000
+Context Size
+Layer 35
+0
+1000
+Context Size
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.7: Attention entropy across three data orders (GPT-2 774M, seed1).
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+0
+1000
+Context Size
+Layer 8
+0
+1000
+Context Size
+Layer 9
+0
+1000
+Context Size
+Layer 10
+0
+1000
+Context Size
+Layer 11
+0
+1000
+Context Size
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure S.8: Attention entropy across three data orders (GPT-2 124M, seed2).
+19
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+0
+1000
+Context Size
+Layer 20
+0
+1000
+Context Size
+Layer 21
+0
+1000
+Context Size
+Layer 22
+0
+1000
+Context Size
+Layer 23
+0
+1000
+Context Size
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.9: Attention entropy across three data orders (GPT-2 355M, seed2).
+20
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 31
+0
+1000
+Context Size
+Layer 32
+0
+1000
+Context Size
+Layer 33
+0
+1000
+Context Size
+Layer 34
+0
+1000
+Context Size
+Layer 35
+0
+1000
+Context Size
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.10: Attention entropy across three data orders (GPT-2 774M, seed2).
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+0
+1000
+Context Size
+Layer 8
+0
+1000
+Context Size
+Layer 9
+0
+1000
+Context Size
+Layer 10
+0
+1000
+Context Size
+Layer 11
+0
+1000
+Context Size
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure S.11: Attention entropy across three data orders (GPT-2 124M, seed3).
+21
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+0
+1000
+Context Size
+Layer 20
+0
+1000
+Context Size
+Layer 21
+0
+1000
+Context Size
+Layer 22
+0
+1000
+Context Size
+Layer 23
+0
+1000
+Context Size
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.12: Attention entropy across three data orders (GPT-2 355M, seed3).
+22
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Context Size
+0
+0.5
+1
+Attention
+Norm Entropy
+Layer 31
+0
+1000
+Context Size
+Layer 32
+0
+1000
+Context Size
+Layer 33
+0
+1000
+Context Size
+Layer 34
+0
+1000
+Context Size
+Layer 35
+0
+1000
+Context Size
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.13: Attention entropy across three data orders (GPT-2 774M, seed3).
+23
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+0
+1000
+Token Distance
+Layer 20
+0
+1000
+Token Distance
+Layer 21
+0
+1000
+Token Distance
+Layer 22
+0
+1000
+Token Distance
+Layer 23
+0
+1000
+Token Distance
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.14: Self-attention biases (GPT-2 355M, seed1).
+24
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 31
+0
+1000
+Token Distance
+Layer 32
+0
+1000
+Token Distance
+Layer 33
+0
+1000
+Token Distance
+Layer 34
+0
+1000
+Token Distance
+Layer 35
+0
+1000
+Token Distance
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.15: Self-attention biases (GPT-2 774M, seed1).
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+0
+1000
+Token Distance
+Layer 8
+0
+1000
+Token Distance
+Layer 9
+0
+1000
+Token Distance
+Layer 10
+0
+1000
+Token Distance
+Layer 11
+0
+1000
+Token Distance
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure S.16: Self-attention biases (GPT-2 124M, seed2).
+25
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+0
+1000
+Token Distance
+Layer 20
+0
+1000
+Token Distance
+Layer 21
+0
+1000
+Token Distance
+Layer 22
+0
+1000
+Token Distance
+Layer 23
+0
+1000
+Token Distance
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.17: Self-attention biases (GPT-2 355M, seed2).
+26
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 31
+0
+1000
+Token Distance
+Layer 32
+0
+1000
+Token Distance
+Layer 33
+0
+1000
+Token Distance
+Layer 34
+0
+1000
+Token Distance
+Layer 35
+0
+1000
+Token Distance
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.18: Self-attention biases (GPT-2 774M, seed2).
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+0
+1000
+Token Distance
+Layer 8
+0
+1000
+Token Distance
+Layer 9
+0
+1000
+Token Distance
+Layer 10
+0
+1000
+Token Distance
+Layer 11
+0
+1000
+Token Distance
+Layer 12
+Init
+Fwd
+Bwd
+Perm
+Figure S.19: Self-attention biases (GPT-2 124M, seed3).
+27
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+0
+1000
+Token Distance
+Layer 20
+0
+1000
+Token Distance
+Layer 21
+0
+1000
+Token Distance
+Layer 22
+0
+1000
+Token Distance
+Layer 23
+0
+1000
+Token Distance
+Layer 24
+Init
+Fwd
+Bwd
+Perm
+Figure S.20: Self-attention biases (GPT-2 355M, seed3).
+28
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 1
+Layer 2
+Layer 3
+Layer 4
+Layer 5
+Layer 6
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 7
+Layer 8
+Layer 9
+Layer 10
+Layer 11
+Layer 12
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 13
+Layer 14
+Layer 15
+Layer 16
+Layer 17
+Layer 18
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 19
+Layer 20
+Layer 21
+Layer 22
+Layer 23
+Layer 24
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 25
+Layer 26
+Layer 27
+Layer 28
+Layer 29
+Layer 30
+0
+1000
+Token Distance
+0
+0.5
+1
+Attention
+Norm Rank
+Layer 31
+0
+1000
+Token Distance
+Layer 32
+0
+1000
+Token Distance
+Layer 33
+0
+1000
+Token Distance
+Layer 34
+0
+1000
+Token Distance
+Layer 35
+0
+1000
+Token Distance
+Layer 36
+Init
+Fwd
+Bwd
+Perm
+Figure S.21: Self-attention biases (GPT-2 774M, seed3).
+0
+5
+10
+Layer
+0.0
+0.5
+1.0
+RSA (spearman)
+GPT-2 (124M)
+0
+10
+20
+Layer
+GPT-2 (355M)
+0
+10
+20
+30
+Layer
+GPT-2 (774M)
+Fwd vs Bwd
+Fwd vs Perm
+Bwd vs Perm
+Figure S.22: Representational similarities across model training directions (seed2)
+29
+0
+5
+10
+Layer
+0.0
+0.5
+1.0
+RSA (spearman)
+GPT-2 (124M)
+0
+10
+20
+Layer
+GPT-2 (355M)
+0
+10
+20
+30
+Layer
+GPT-2 (774M)
+Fwd vs Bwd
+Fwd vs Perm
+Bwd vs Perm
+Figure S.23: Representational similarities across model training directions (seed3)
+GPT-2 (124M)
+GPT-2 (355M)
+GPT-2 (774M)
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+Accuracy
+Human
+experts
+GPT-2 (124M) (Fwd)
+GPT-2 (124M) (Bwd)
+GPT-2 (355M) (Fwd)
+GPT-2 (355M) (Bwd)
+GPT-2 (774M) (Fwd)
+GPT-2 (774M) (Bwd)
+Figure S.24: BrainBench performance of GPT-2 models trained forward and backward. GPT-2
+models, trained from scratch on two decades of neuroscience literature, rival or exceed human expert
+performance, demarcated by the blue dashed line. Models trained on the same data reversed at the
+token level performed similarly to their forward-trained counterparts. Error bars are standard errors
+of the mean.
+Model-Model
+Model-Human
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+Correlation
+GPT2 (124M)
+vs Human
+GPT2 (355M)
+vs Human
+GPT2 (774M)
+vs Human
+Fwd
+Bwd
+Figure S.25: Comparison of model and human judgments on BrainBench difficulty. Model
+judgments (both forward and backward-trained) correlate more strongly with each other than with
+human expert judgments. Backward-trained models show similar correlation to human judgments
+compared to forward-trained models. Error bars are one standard deviations of the mean.
+30
+GPT2-124M (Fwd seed1)
+GPT2-124M (Fwd seed2)
+GPT2-124M (Fwd seed3)
+GPT2-124M (Bwd seed1)
+GPT2-124M (Bwd seed2)
+GPT2-124M (Bwd seed3)
+GPT2-355M (Fwd seed1)
+GPT2-355M (Fwd seed2)
+GPT2-355M (Fwd seed3)
+GPT2-355M (Bwd seed1)
+GPT2-355M (Bwd seed2)
+GPT2-355M (Bwd seed3)
+GPT2-774M (Fwd seed1)
+GPT2-774M (Fwd seed2)
+GPT2-774M (Fwd seed3)
+GPT2-774M (Bwd seed1)
+GPT2-774M (Bwd seed2)
+GPT2-774M (Bwd seed3)
+GPT2-124M (Fwd seed2)
+GPT2-124M (Fwd seed3)
+GPT2-124M (Bwd seed1)
+GPT2-124M (Bwd seed2)
+GPT2-124M (Bwd seed3)
+GPT2-355M (Fwd seed1)
+GPT2-355M (Fwd seed2)
+GPT2-355M (Fwd seed3)
+GPT2-355M (Bwd seed1)
+GPT2-355M (Bwd seed2)
+GPT2-355M (Bwd seed3)
+GPT2-774M (Fwd seed1)
+GPT2-774M (Fwd seed2)
+GPT2-774M (Fwd seed3)
+GPT2-774M (Bwd seed1)
+GPT2-774M (Bwd seed2)
+GPT2-774M (Bwd seed3)
+Human experts
+0.89
+0.89 0.85
+0.67 0.73 0.65
+0.69 0.78 0.69 0.83
+0.7
+0.72 0.67 0.84 0.87
+0.73 0.78 0.72 0.65 0.67 0.63
+0.77
+0.8
+0.76 0.68 0.68 0.67 0.91
+0.72 0.78
+0.7
+0.65 0.67 0.66 0.88 0.88
+0.69 0.72 0.69 0.75 0.77 0.72 0.76
+0.8
+0.8
+0.75 0.78 0.71 0.74 0.77 0.75 0.77 0.84 0.79 0.87
+0.65
+0.7
+0.65 0.73 0.71
+0.7
+0.78 0.76 0.78 0.87 0.83
+0.6
+0.65 0.62 0.61 0.62
+0.6
+0.8
+0.78 0.81 0.76 0.74 0.73
+0.63 0.67 0.62 0.67 0.67 0.66
+0.8
+0.82 0.84 0.79 0.78 0.75
+0.9
+0.63 0.69 0.62 0.65 0.65 0.64 0.81 0.78 0.85 0.82
+0.8
+0.8
+0.89 0.88
+0.65 0.67 0.62 0.67 0.72 0.65 0.75 0.73 0.79
+0.8
+0.77 0.81 0.77
+0.8
+0.79
+0.63 0.63 0.62 0.65 0.63 0.64 0.75 0.75 0.73
+0.8
+0.8
+0.81 0.77
+0.8
+0.79 0.86
+0.64 0.66 0.63 0.71 0.72 0.69 0.75 0.73 0.76 0.82 0.78 0.87 0.75 0.77 0.79 0.88 0.83
+0.082 0.11 0.14 0.0820.0830.024 0.15
+0.1
+0.17
+0.1 0.063 0.11 0.13 0.0990.084 0.14 0.13 0.16
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+Figure S.26: Comparison of model and human judgments on BrainBench difficulty. Model
+judgments (both forward and backward-trained) correlate more strongly with each other than with
+human expert judgments. Backward-trained models show similar correlation to human judgments
+compared to forward-trained models.
+31

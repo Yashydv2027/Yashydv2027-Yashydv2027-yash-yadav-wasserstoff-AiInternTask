@@ -1,0 +1,1147 @@
+Contrastive Normalizing Flows for Uncertainty-Aware
+Parameter Estimation
+Ibrahim Elsharkawy
+Department of Physics
+University of Illinois Urbana-Champaign
+Urbana, IL, USA
+ie4@illinois.edu
+Yonatan Kahn
+Department of Physics, University of Toronto
+and Vector Institute
+Toronto, ON, Canada
+yf.kahn@utoronto.ca
+Abstract
+Estimating physical parameters from data is a crucial application of machine
+learning (ML) in the physical sciences. However, systematic uncertainties, such as
+detector miscalibration, induce data distribution distortions that can erode statistical
+precision. In both high-energy physics (HEP) and broader ML contexts, achieving
+uncertainty-aware parameter estimation under these domain shifts remains an open
+problem. In this work, we address this challenge of uncertainty-aware parameter
+estimation for a broad set of tasks critical for HEP. We introduce a novel approach
+based on Contrastive Normalizing Flows (CNFs), which achieves top performance
+on the HiggsML Uncertainty Challenge dataset. Building on the insight that a
+binary classifier can approximate the model parameter likelihood ratio, we address
+the practical limitations of expressivity and the high cost of simulating high-
+dimensional parameter grids by embedding data and parameters in a learned CNF
+mapping. This mapping yields a tunable contrastive distribution that enables robust
+classification under shifted data distributions. Through a combination of theoretical
+analysis and empirical evaluations, we demonstrate that CNFs, when coupled with
+a classifier and established frequentist techniques, provide principled parameter
+estimation and uncertainty quantification through classification that is robust to
+data distribution distortions.
+1
+Introduction
+A critical application of machine learning (ML) in the physical sciences is parameter estimation. Given
+a model of a physical system (for example, a high-energy collider experiment) that depends on certain
+parameters (such as the masses and interaction strengths of the colliding particles), it is generally
+straightforward to perform forward modeling and make predictions for experiments. However, the
+inverse problem — reliably estimating model parameters from observed data — is generically much
+more difficult. A key complication of this inverse problem is the combined effect of systematic error,
+such as calibration inaccuracies or variations in some measurement apparatus’s response, which
+induce deformations in the observed data. These systematic uncertainties can be modeled with
+nuisance parameters in the data distribution and must either be estimated or marginalized over to
+extract the parameters of interest.
+In a broad set of problems in high-energy physics (HEP), the parameter of interest is the fraction
+of events drawn from a signal distribution in a mixture of signal and background. A precise signal-
+fraction estimate enables the measurement of physical parameters (like coupling strengths or particle
+masses) and the reliable assessment of a particle discovery significance, given proper uncertainty
+quantification. To address this need, we present a novel method to extract the signal fraction of
+a dataset with principled uncertainty estimates from data deformed by systematic error. The key
+features of this method are (a) the use of contrastive normalizing flows (CNFs) to both model and
+Preprint. Under review.
+arXiv:2505.08709v1  [physics.data-an]  13 May 2025
+distinguish the signal and background distributions, and (b) a deep neural network (DNN) classifier
+which takes as input the learned CNF probabilities evaluated on data perturbed by a variety of
+nuisance parameters. We demonstrate that our approach is robust to the effects of nuisance parameters
+perturbing the signal/background boundary, and furthermore, that it can provide reliable confidence
+intervals on the signal strength parameter even in the presence of unknown systematic error. The
+potential of this method is demonstrated by its performance on the recent HiggsML Uncertainty
+Challenge dataset, the first benchmark for uncertainty-aware parameter estimation methodologies in
+HEP [1]. Our specific contributions can be summarized as follows:
+• We apply CNFs to binary classification under domain shift task and develop a novel loss,
+architecture, and training procedure to ensure stable and accurate learning (Sec. 4).
+• Using an analysis of the contrastive loss, we show that on a toy problem, classifiers trained
+on CNF features provide robust classification accuracy under domain shift (Sec. 5).
+• We develop a novel parameter estimation method with CNFs and a DNN classifier to estimate
+the signal fraction with accurate 1σ confidence intervals under nuisance-parameter induced
+systematic shifts (Sec. 6).
+• We demonstrate the efficacy of the CNF-based parameter estimation method on the Higgs
+ML Uncertainty Challenge dataset and show that it outperforms alternative approaches.
+2
+Related Works
+Systematic uncertainties in HEP describe distribution mismatches between simulation (training) and
+real data, and thus are directly analogous to domain shifts in ML. [2–4]. Techniques such as invariant
+risk minimization and distributionally robust optimization [5, 6] or adversarial domain adaptation
+and uncertainty-aware inference [7, 8] have direct counterparts in HEP —e.g. adversarial pivots
+and end-to-end optimization—to mitigate nuisance effects [9–12]. Although numerous techniques
+exist across both fields, each entails different assumptions and tradeoffs. Methods that enforce
+invariance to nuisance parameters often sacrifice raw discriminative power, whereas methods that
+condition explicitly on nuisance parameters must trust the precise form of the parameterization [9–11].
+Empirically, no single approach has reliably emerged as optimal for systematically perturbed data.
+This is a primary reason for the development of the Higgs ML challenge, which could serve as a
+benchmark for such methods in the HEP community and possibly the broader ML community [1].
+Normalizing flows (NFs) [13–15] offer a powerful generative framework capable of density esti-
+mation and invertible transformations. However, it has been shown that flows are unreliable for
+out-of-distribution detection if used naively [16]. In response, a line of work has proposed us-
+ing multiple learned distributions to improve normalizing flow performance for anomaly detection
+[17, 18]. Notably, CNFs [18] have been shown to emphasize density differences between in-and
+out-of-distribution data, mitigating a known pitfall of likelihood-based anomaly detection. In parallel,
+generative-discriminative hybrid models [19] illustrate the promise of invertible densities with classi-
+fication objectives to handle distribution shifts. On the HEP side, this manifests as simulation-to-data
+reweighting (i.e. OmniFold [20]), adversarial training to remove nuisance parameter dependence [10],
+and network parameterization to incorporate uncertain physics [9, 11].
+Our approach aims to merge these two lines of work by introducing a method using CNFs designed for
+robust parameter estimation under systemic shifts. By leveraging a contrastive training objective, we
+learn to disentangle relevant features from systematic variations, producing well-calibrated parameter
+estimates in the presence of domain shifts.
+3
+Problem Setup and Motivation
+Binary classifiers for parameter estimation
+For any general estimation problem, a binary classi-
+fier has been shown to be capable of parameter estimation in the limit of infinite data and infinite
+expressivity [21]. Suppose x ∼P(x|{Θi, νi}) where {Θi} are a set of model parameters to be
+estimated and {νi} are a set of nuisance parameters. One can feed the classifier this event x, the
+parameters it was drawn from {Θi, νi} and some other set of incorrect parameters {Θ′
+i, ν′
+i}, with
+the binary classification task of identifying which set of parameters x was drawn from. Given many
+different observations {xi} drawn from many different choices of parameters, the classifier will learn
+2
+to be monotonic in the likelihood ratio of any arbitrary combination of parameters:
+r(x, {Θi, νi}, {Θ′
+i, ν′
+i}) ∝∼
+P(x|{Θi, νi})
+P(x|{Θ′
+i, ν′
+i}).
+(1)
+Maximum likelihood estimation can thus be used to find the most probable set of parameters along
+with uncertainty estimates [21].
+Despite this theoretical guarantee, in many practical cases, classifiers empirically fall short for
+parameter estimation. If the number of model parameters kΘ or nuisance parameters kν is large, the
+curse of dimensionality prevents sufficient sampling of parameter space, as generating a training set
+for each choice of {Θi, νi} may be prohibitively expensive. In addition, the effect of the model and
+nuisance parameters on individual data points is often minor.
+Problem setup
+We focus on a situation where data x ∈Rm is drawn from a mixture of two
+distributions, a signal distribution ps(x|{νi}) and a background distribution pb(x|{νi}), where
+both distributions may depend on a set of unknown nuisance parameters {νi} parameterizing some
+systematic error. The task is to estimate some model parameter Θ proportional to the signal fraction
+fs ≡
+Ns
+Ns+Nb where Ns and Nb are the number of signal and background events in some test set. In
+many cases of relevance, fs is much smaller than 1. In the HiggsML Uncertainty Challenge, the
+motivating example for our method, fs ∼10−4 −10−3, and the rarity of the signal is such that
+a 20% increase in fs may lead to an increase of fewer than 20 signal events in a dataset of 106
+events [1]. Thus, a classifier must learn to detect the subtle effect of a 20% increase in fs by training
+on individual, unlabeled events drawn from many large datasets with varying fs and ν.
+Signal fraction parameter estimation
+In this case where Θ ∝fs, we can simplify the classifier
+task by replacing model parameters Θi, Θ′
+i in Eq. (1) with signal and background labels. That is, we
+train a classifier to distinguish signal events drawn from ps(x|{νi}) from background events drawn
+from pb(x|{ν′
+i}). In the limit of infinite data and expressivity, this classifier will approximate
+r(x, {νi}, {ν′
+i}) ∝∼
+ps(x|{νi})
+pb(x|{ν′
+i})
+(2)
+and given proper calibration, this likelihood ratio can be used to estimate Θ ∝fs. To remedy the
+issue of high dimensionality kν ≫1, the potential degeneracies between nuisance parameters νi
+and parameters distinguishing ps and pb, and the need for high precision in estimation, we propose
+the introduction of signal and background discrimination functions Φs,b[x; {νi}], which implicitly
+depend on the nuisance parameters νi through their effect on ps,b(x|{νi}). Using Φs,b as inputs to
+the classifier instead of the raw nuisance parameters, the classifier approximates
+r(x, {νi}, {ν′
+i}) ∝∼
+ps(x|Φs[x; {νi}])
+pb(x|Φb[x; {ν′
+i}]).
+(3)
+If Φs[x; {νi}] takes very different values when x ∼ps compared to x ∼pb (and likewise for Φb), and
+this discrimination ability is relatively unaffected by varying the nuisance parameters {νi}, the task
+of approximating the likelihood ratio in Eq. (3) will be easier than learning either the full likelihood
+ratio in Eq. (1) or the specialized likelihood ratio in Eq. (2), allowing data-efficient training.
+Motivation for CNFs
+In this work, we choose the discrimination functions Φs,b to be monotonic
+functions of the learned probabilities of CNFs trained on unperturbed data, and take the classifier r
+to be a DNN trained on perturbed data drawn from distributions where the nuisance parameters take
+a variety of values. As we will demonstrate, the robustness of the learned CNF distributions to the
+nuisance parameters allows successful classification with just 1000 choices of nuisance parameters
+from a fairly high-dimensional set kν = 6, efficiently sampling the nuisance parameter space with
+just 10001/6 ≈3 choices of each nuisance parameter value.
+4
+Contrastive Normalizing Flows
+We begin by describing the setup of traditional NFs, and then introduce our modification to obtain
+CNFs. The standard loss used to train NFs maximizes the log-likelihood of a set of data D,
+L =
+1
+|D|
+X
+x∈D
+−log(pθ(x)) ≡
+1
+|D|
+X
+x∈D
+−
+h
+log pz(fθ(x)) + log |det Jfθ(x)|
+i
+,
+(4)
+3
+where pz(x) is the base distribution of the NF (usually taken to be a multivariate Gaussian
+N(0, Im×m)), fθ(x) is the transformation with learnable parameters θ which maps pz to the learned
+distribution pθ, and the Jacobian of the transformation is Jfθ.
+In our case, D is a mixture of signal and background events such that D = {(xs, xb) | xs ∼
+ps(x), xb ∼pb(x)}. To learn a discrimination function which can distinguish between the two
+distributions ps and pb, we propose the introduction of a contrastive term in the loss:
+Ls =
+1
+|D|
+X
+D
+n
+−log p(s)
+θ (xs) + c log p(s)
+θ (xb)
+o
+≡
+1
+|D|
+X
+D
+
+−
+
+log pz(fθ(xs)) + log
+ det J(xs)
+
++ c
+
+log pz(fθ(xb)) + log
+ det J(xb)
+ (5)
+where c ∈R+ is the hyperparameter governing the strength of the contrastive loss, and p(s)
+θ (x) is
+the learned distribution. The training objective which defines the CNF for Ls is to simultaneously
+maximize the log-likelihood of S while minimizing the log-likelihood of B on training data with
+signal/background labels. Note that Ls breaks the symmetry between signal and background; we
+would obtain a different learned distribution p(b)
+θ
+from the same dataset D by reversing the roles
+of xs and xb in the loss function, which we would denote Lb when c penalizes xs rather than xb.
+In the notation of Sec. 3, we will take the discrimination functions to be Φs(x) =
+p(s)
+θ
+(x)
+1+p(s)
+θ
+(x) and
+Φb(x) =
+p(b)
+θ
+(x)
+1+p(b)
+θ
+(x), which are monotonic in p(s,b) but bounded between 0 and 1.
+In practice, training a CNF can be challenging due to mode collapse and sharp boundaries in the
+contrastive distribution. We develop a specialized training procedure and architecture, which we find
+empirically necessary to achieve accurate and stable learning, and are described in detail in App. A.
+4.1
+Analytic minimization of the contrastive loss
+In the limit of infinite data and an equal mixture of signal and background in D, our loss can be
+approximated via integration over the signal and background distributions:
+Ls = 1
+2
+h
+−E[log p(s)
+θ (x)] + c E[log p(s)
+θ (x)]
+i
+(6)
+= 1
+2
+
+−
+Z
+ps(x) log p(s)
+θ (x) dx + c
+Z
+pb(x) log p(s)
+θ (x) dx
+
+.
+(7)
+Minimizing the loss becomes a functional optimization problem for the learned distribution p(s)
+θ (x):
+min
+p(s)
+θ
+(x)≥0
+
+−
+Z
+ps(x) log p(s)
+θ (x) dxs + c
+Z
+pb(x) log p(s)
+θ (x) dx
+
+subject to
+Z
+pθ(x) dx = 1.
+(8)
+Imposing the constraint with a Lagrange multiplier λ entails the minimization of the functional
+L
+
+p(s)
+θ (x), λ
+
+= −λ +
+Z
+dx
+n
+(−ps(x) + cpy(x)) log p(s)
+θ (x) + λ p(s)
+θ (x)
+o
+.
+(9)
+Taking the functional derivative with respect to p(s)
+θ , we find the learned distribution that minimizes
+the loss,
+p(s)
+θ∗(x) = 1
+λc
+max
+n
+[ps(x) −c pb(x)], 0
+o
+,
+(10)
+where λc is now interpreted as a (c-dependent) normalization factor for p(s)
+θ∗(x). By construction,
+p(s)
+θ∗(x) vanishes in any portion of data-space where the likelihood ratio is less than c:
+ps(x)
+pb(x) ≤
+c. Eq. (10) represents a contrastive distribution, with the degree of contrast between signal and
+background controlled by c. A value of c = 1 ensures that the boundary where p(s)
+θ∗(x) vanishes,
+c pb(x) = ps(x), corresponds to the unit contour of the log-likelihood ratio.
+4
+Figure 1: Randomly sampled signal (blue) and background (red) points with contours overlaid. CNF
+loss-minimizing distribution contour p(s)
+θ∗(x) for c = 1 (left), learned CNF distribution contour for
+c = 1 (center), and DNN classifier score contour (right) for two 2-dimensional Gaussian distributions.
+The DNN decision boundary r = 0.5 (dashed black, right panel) closely matches the zero contour of
+the CNF distributions.
+4.2
+CNFs for robust classification
+We now explore why the CNF’s learned probabilities are suitable for constructing discrimination
+functions Φs,b[x; {νi}] in Eq. (3). Compared to a classifier, which learns a decision boundary between
+two classes, the CNF models a probability distribution p(s,b)
+θ∗
+(x) which contains information about
+the distribution of each class. The boundary where p(s,b)
+θ∗
+(x) vanishes corresponds to a contour
+of the likelihood ratio (the Bayes-optimal discrimination boundary for a binary classifier), but the
+nonvanishing parts of the distribution also capture the underlying structure of each class. Tuning
+the hyperparameter c redistributes the learned probability mass to emphasize certain class features
+differently. This is distinct from simply reweighting classes or choosing different score cuts in a
+binary cross-entropy (BCE) classifier, where only the decision boundary is shifted but the learned
+feature representation is essentially unchanged. Due to this holistic view of the data distribution, we
+expect CNFs to be more robust to systematic uncertainties. If correlations among the input features
+shift due to nuisance parameters, a model that has learned the entire distribution is less likely to
+fail catastrophically than one that focuses primarily on class boundaries. We validate this intuition
+on a toy example in the following Sec. 5, and demonstrate the efficacy of our approach on the full
+HiggsML Uncertainty Challenge in Sec. 6. Another major difference between CNFs and a classifier
+is the CNFs generative capability. Although not used for the method, CNFs provide a method to
+generate samples from one distribution most unlike another (controllably with c). We provide visual
+examples of CNFs trained on MNIST for classification and generative cases in Appendix C.
+5
+Toy Example: Two Gaussian Distributions
+To illustrate the efficacy of CNFs, we train a CNF on a toy problem of data drawn from two Gaussian
+distributions, one we call signal and one we call background. For ease of visualization, we start with
+2-dimensional Gaussians and later generalize to higher dimensions.
+Fig. 1 shows 30,000 samples from ps = N(µs, Σs) (blue) and pb = N(µb, Σb) (red) where
+µs =
+
+−3.25
+2.50
+
+, Σs =
+
+2.58
+2.19
+2.19
+13.06
+
+µb =
+
+−0.09
+5.00
+
+, Σb =
+
+3.30
+2.63
+2.63
+14.23
+
+.
+(11)
+The left panel shows a density plot of the loss-minimizing CNF distribution p(s)
+θ∗from Eq. (10) for
+c = 1. The sharp cutoff p(s)
+θ∗= 0 is visible for points sufficiently far from µs in the direction of µb.
+The center panel shows the same samples with a density plot of p(s)
+θ
+as learned by a trained CNF
+with c = 1 (with the architecture described in App. A), which matches our analytic expectations well.
+Finally, we train a 3-layer, width-32 DNN classifier with ReLU activation and cross-entropy loss on
+an equal mixture of samples, and overlay a density plot of the classifier score r in the right panel. We
+see the DNN decision boundary r = 0.5 matches the boundary p(s)
+θ
+= 0 learned by the c = 1 CNF,
+as expected. Appendix B shows the results of training with different values of c.
+With this example in mind, suppose we distort the data with a rotation in the x1 −x2 plane, as
+illustrated in Fig. 2. It is clear that the DNN decision boundary (left), which extends well beyond the
+region of high signal or background density, is more prone to mis-classification under this distortion;
+for the DNN classifier, a background point is rotated into the signal region, while for the CNF (right),
+5
+Figure 2: A rotation of the data (black arrows) can move points across the DNN decision boundary
+(dashed black, left), but remain in the p(s)
+θ
+= 0 region of the CNF distribution (right).
+Table 1: Four approaches to the 10D toy problem; experimental results are shown in Fig. 3.
+Network
+Training Setup
+Predicted Performance
+(i) DNN classifier
+Unperturbed data (ϕ = 0)
+Bayes-optimal classifier
+(ii) CNF (c = 1)
+Unperturbed data to learn p(s)
+θ (x)
+Loss-minimizing p(s)
+θ∗(x) (Eq. 10)
+(iii) DNN classifier
+10,000 perturbed samples (100 per ϕ
+across grid)
+Full likelihood ratio with νi (Eq. 2)
+(iv) DNN with Φs,b(x)
+Perturbed data and Φs,b from (ii)
+Full likelihood ratio with νi (Eq. 2)
+the background is still in a background region with p(s)
+θ
+≈0 after rotation. To validate this intuition,
+we generalize to a 10-dimensional example. We construct
+µext
+s =
+
+µs
+08
+
+,
+µext
+b
+=
+
+µb
+08
+
+,
+Σext
+s =
+Σs
+0
+0
+BB⊤
+
+,
+Σext
+b
+=
+Σb
+0
+0
+BB⊤
+
+with µs,b and Σs,b as in Eq. (11), but µext
+s,b ∈R10 and B a random 8 × 8 matrix with entries drawn
+from N(0, 1). We then choose a random 10 × 10 matrix A with the same Gaussian distribution of
+entries and perform a QR decomposition A = QR, Q ∈O(10) so that our final 10-dimensional
+signal and background distributions have mean and variance given by
+µfinal
+s
+= Qµext
+s ,
+µfinal
+b
+= Qµext
+b ,
+Σfinal
+s
+= QΣext
+s Q⊤,
+Σfinal
+b
+= QΣext
+b Q⊤.
+(12)
+We study two types of nuisance parameters:
+1. A rotation of the data in the 2D subspace (applying R(ϕ) ∈SO(2) to µs, µb, Σs , Σb)
+2. A continuous deformation of the embedding subspace, by generating another 10×10 random
+Gaussian matrix eA and taking the QR decomposition of A + ϕ eA to obtain Q in Eq. (12)
+where the size of the deformation is parameterized by nuisance parameter ϕ. For both scenarios, we
+train four networks, and for scenario (1.) we compute three corresponding predictions as described in
+Tab. 1.
+From our arguments in Sec. 3, we expect case (iv) to be the most robust to deformations of the
+data as it should approximate the full likelihood ratio including nuisance parameters. To evaluate
+performance, in Fig. 3 we plot the four networks’ accuracies (fraction of events correctly classified) as
+a function of the nuisance parameter ϕ which characterizes the test set, setting the decision boundary
+for the DNN at .5 and for the CNF in case (ii) at p(s)
+θ (x) > 10−11. In each panel, the range of ϕ used
+for training is the entire range of ϕ in the plot: 0 ≤ϕ ≤π/2 for the left panel and −π/5 ≤ϕ ≤π/5
+for the center panel. We see in Fig. 3 that case (i) (blue) matches the Bayes-optimal prediction well,
+as does case (ii) (maroon) for the CNF. Case (iv) (yellow) matches the DNN with CNF features for
+large nuisance parameters (left panel), but interestingly, not for small ϕ (center panel). Regardless,
+in all nuisance parameter scenarios we studied, the simple DNN classifier performs best at small
+values of the nuisance parameter, while the DNN classifier with CNF features surpasses all the other
+classifiers at larger nuisance parameters.
+6
+Figure 3: Accuracy as a function of nuisance parameter ϕ for three different types of nuisance
+parameter deformations: a large 2D subspace rotation (left), a small 2D subspace rotation (center),
+and a subspace deformation (right). See text for details.
+6
+Performance on the HiggsML Uncertainty Challenge Dataset
+In this section we validate the performance of our DNN classifier with CNF features on the HiggsML
+Uncertainty Challenge Dataset [1], designed to resemble a true uncertainty quantification task in
+high-energy physics.
+6.1
+Dataset and challenge description
+We briefly summarize the setup and challenge here, with more details in Appendix D. The data
+consists of simulated high-energy proton-proton particle collision events at the Large Hadron Collider
+(LHC). Events originating from Higgs boson decays are labeled as signal, and events generated
+by a diverse set of non-Higgs processes are labeled as background. The goal of the challenge is
+to estimate the “signal strength parameter” µ ∝fs in a dataset which is a mixture of signal and
+background events with µ ∈[0.1, 3], where µ = 1 corresponds to fs ∼10−3 so that there is typically
+a large class imbalance in the data. The data consists of 28 features Fi which are various functions of
+particle momenta. Most of the 1D marginal distributions have poor discrimination between signal and
+background (see Fig. 4, left for an example); the optimal discriminating observable likely exploits
+the full high-dimensional structure of ps and pb, making this problem an excellent test case for
+ML techniques. The data may be distorted or “biased” by 6 nuisance parameters {νi} selected to
+emulate realistic experimental conditions such as mis-measurement or mis-calibration. Participants
+can generate training data corresponding to particular choices of νi, but do not have access to the
+νi used to generate the test data. The challenge is to correctly estimate µ along with a 1σ (68.27%)
+confidence interval, such that in N different pseudo-experiments each generated with different {νi},
+the confidence interval will cover the true value of µ in 0.6827N pseudo-experiments. An example
+“coverage plot” for N = 100 is shown in Fig. 4, right.
+6.2
+Method overview
+Our approach, schematically illustrated in Fig. 5, proceeds as follows:
+1. Event selection and preprocessing.
+We partition the dataset D into three categories of events
+depending on the jet multiplicity. Jets are sprays of collimated particles that accompany LHC events
+but in this case are not directly related to the signal process; empirically, we find that 0-jet events are
+detrimental to accurate µ estimation, but 1- and 2-jet events can change the proportion of background
+sub-processes in a useful way. We replace F →log F for any feature F with a marginal distribution
+that peaks toward zero and we then standardize all 28 features across D by rescaling them so they
+have zero mean and unit variance. The resulting feature vector x ∈R28 describes each event.
+2. CNF training.
+Next, we train CNFs on a training set from each jet category consisting of an
+equal mixture of signal and background with all νi set to their “unperturbed” values (0 for additive
+distortions and 1 for multiplicative distortions, see Tab. 3 in App. D). We extract p(s)
+θ
+and p(b)
+θ
+from
+CNFs with c = 2 and c = 0.5 for 1-jet and 2-jet events, for a total of 8 flows. The effect of different
+values of c on the learned distribution can be visualized in Fig. 6 (left) for p(s)
+θ . As c increases, the
+CNF picks out more signal-rich regions. Due to this fact, we chose one CNF with c > 1 to be more
+robust to nuisance parameters, and another with c < 1 to capture more of the total signal density.
+7
+Figure 4: Setup of the HiggsML Uncertainty Challenge. The left panel shows an example of the
+marginal distribution of one of the 28 features (note the log scale, demonstrating a signal fraction
+fs ≪1), and the right panel shows an example coverage plot.
+Figure 5: Flow chart for our CNF-based method of estimating µ and 1σ confidence intervals.
+3. DNN training.
+We create an augmented training set composed of 1000 sub-datasets, each
+generated using a different combination of νi and with an equal fraction of signal and background.
+For each event x, we then compute the discrimination functions Φ(s,b)(x) =
+p(s,b)
+θ
+(x)
+1+p(s,b)
+θ
+(x) and append
+them to the list of features x. A two-headed DNN classifier (one head per jet category) trained
+with binary cross-entropy loss then uses both the original kinematic features x and the CNF-based
+discriminating functions Φ to differentiate signal from background.
+4. Neyman construction for confidence intervals.
+After training, we create two sets of fine-binned
+histograms (one for signal events and one for background events) of the DNN classifier scores r,
+where each set is composed of histograms corresponding to a dense grid of values of the two nuisance
+parameters αjes, and αtes which we empirically find affect the signal/background discrimination the
+most. We show the effect of varying αtes on the background and signal classifier scores in Fig. 6;
+note that αtes > 1 pushes background probability mass toward a classifier score of 1, indicating
+mis-classification of background as signal, but the signal classifier is much more robust to variations
+in αtes. Using these histograms, we build, with spline interpolation, a binned likelihood function
+L({rk}|µ, αjes, αtes) that depends on µ and the two nuisance parameters αjes and αtes. We can thus
+obtain point estimates ˆµ, ˆαjes, and ˆαtes by likelihood maximization on a set of data with classifier
+scores {rk}.
+Using the point estimates ˆµ, we build a confidence belt (Fig. 6, right) using the Neyman construc-
+tion [22] by computing the distribution of ˆµ for various values of real µ given many test sets generated
+using random draws of all six nuisance parameters. This construction implicitly profiles over the
+nuisance parameters, and inverting the confidence belt provides a 1σ confidence interval of µ given ˆµ
+that should cover the true µ 68.27% of the time.
+Given a test set, we evaluate the pre-trained CNF discrimination functions on the set, append these to
+the data, and pass the test data through the pre-trained DNN to build a histogram of scores {rk}. We
+then determine the ˆµ that maximizes the binned likelihood function L({rk}|µ, αjes, αtes), and then
+extract the confidence interval at that value of ˆµ from the previously-constructed Neyman bands.
+8
+Figure 6: Illustration of the CNF+DNN method for uncertainty-aware parameter estimation. The left
+panel plots normalized CNF distributions for the feature shown in Fig. 4 for various c, the two center
+panels show DNN score histograms for signal and background varying the nuisance parameter αtes,
+and the right panel shows the Neyman confidence belt.
+6.3
+Results
+The performance of our method is summarized in Tab. 2. On a test set comprised of 10 × 100
+pseudo-experiments, with 10 values of µ and 100 datasets of varying νi per value of µ, we compare 1)
+our method, 2) a purely likelihood based method (common in HEP analyses) to learn Eq. (2) described
+in detail in App. E, and 3) a baseline method using a DNN classifier trained on perturbed data and
+MLE for µ only. All three procedures employ a Neyman construction for confidence intervals (CI).
+The reported metrics are a score defined in App. D (log scale; larger is better), the average size of the
+confidence interval (smaller is better), the coverage fraction, i.e the fraction of events where µ resides
+in the predicted CI (for 1σ this should be close to .6827), the root-mean-square error (RMSE) of ˆµ vs
+µ, and the run time of each method on a 4xA100 node at the Perlmutter supercomputer [23]. Our
+method achieves the best performance among the three strategies.
+Table 2: Comparison of the three methods for 10 × 100 pseudo-experiments.
+Method
+Score
+Interval
+Coverage Fraction
+RMSE
+Runtime (min)
+CNF+DNN (this paper)
+0.823
+0.438
+0.672
+0.191
+5.0
+MLE with νi
+0.001
+0.998
+0.701
+0.575
+41.0
+Baseline MLE for µ only
+-11.152
+1.34
+0.431
+1.575
+3.0
+We also report for our method the metrics with a 100 × 100 (i.e 100 values of µ) pseudo-experiments
+bootstrapped 1000 times for precision. In this case, we achieve a coverage of 0.6689 and an interval
+length of 0.4947, only marginally different than above [1]. These results emphasize the importance
+of CNF features; with them, we can achieve half the CI size with the same coverage and a runtime
+∼10× faster as compared to a likelihood-based method. We emphasize that our method is capable
+of picking out the 100 −3000 signal events among a dataset of 106 events, with such a precision that
+the 1σ error bar spans just 150 −500 events, despite the degenerate effects of systematic errors.
+7
+Conclusion
+We have introduced a novel method for estimating model parameters proportional to rare signal
+fractions in the presence of systematic uncertainties. Our method combines contrastive normalizing
+flows (CNFs) with a DNN classifier trained on features derived from the CNF. Our method shows
+robustness to nuisance-parameter–induced deformations compared to traditional classifiers, which we
+have illustrated on a toy example of Gaussian data. We further demonstrated the performance of our
+method in the HiggsML Uncertainty Challenge, where we obtain calibrated frequentist confidence
+intervals on the signal strength that remain reliable even under significant systematics/domain shifts.
+In addition to future studies on the generative capacity of a CNF, we leave the task of finding an
+optimal c for a parameter estimation problem for future work. We also plan to investigate the
+physical interpretation of the learned features in either the CNFs or DNN for the Higgs decay process
+underlying the challenge, for which analytic distributions may be calculated using quantum field
+theory.
+9
+Acknowledgments and Disclosure of Funding
+We thank Ben Hooberman and Joshua Foster for enlightening discussions. IE especially thanks
+the organizers of the HiggsML Uncertainty Challenge — Wahid Bhimji, Ragansu Chakkappai,
+Sascha Diefenbacher, David Rousseau, Benjamin Nachman, Shih-Chieh Hsu, Po-Wen Chang, Chris
+Harris, Ihsan Ullah, and Yulei Zhang — for the organization of the challenge and workshops, many
+fruitful conversations, and ample technical support. This material is based upon work supported
+by the U.S. Department of Energy, Office of Science, Office of High Energy Physics, under Award
+Number DE-SC0023704. This work used the TAMU FASTER cluster at Texas A&M University
+through allocation 240449 from the Advanced Cyberinfrastructure Coordination Ecosystem: Services
+& Support (ACCESS) program [24], which is supported by National Science Foundation grants
+#2138259, #2138286, #2138307, #2137603, and #213829.
+References
+[1] W. Bhimji, P. Calafiura, R. Chakkappai, P.-W. Chang, Y.-T. Chou, S. Diefenbacher et al., FAIR
+Universe HiggsML Uncertainty Challenge Competition, 2410.02867.
+[2] G. Louppe, J. Hermans and K. Cranmer, Adversarial variational optimization of
+non-differentiable simulators, 1707.07113.
+[3] Y. Ovadia, E. Fertig, J. Ren, Z. Nado, D. Sculley, S. Nowozin et al., Can You Trust Your
+Model’s Uncertainty? Evaluating Predictive Uncertainty Under Dataset Shift, 1906.02530.
+[4] P. W. Koh, S. Sagawa, H. Marklund, S. M. Xie, M. Zhang, A. Balsubramani et al., Wilds: A
+benchmark of in-the-wild distribution shifts, in Proceedings of the 38th International
+Conference on Machine Learning (M. Meila and T. Zhang, eds.), vol. 139 of Proceedings of
+Machine Learning Research, pp. 5637–5664, PMLR, 18–24 Jul, 2021.
+[5] M. Arjovsky, L. Bottou, I. Gulrajani and D. Lopez-Paz, Invariant risk minimization,
+1907.02893.
+[6] S. Sagawa, P. W. Koh, T. B. Hashimoto and P. Liang, Distributionally robust neural networks
+for group shifts: On the importance of regularization for worst-case generalization,
+1911.08731.
+[7] A. Malinin and M. Gales, Predictive uncertainty estimation via prior networks, 1802.10501.
+[8] Z. C. Lipton, The mythos of model interpretability, 1606.03490.
+[9] P. Baldi, K. Cranmer, T. Faucett, P. Sadowski and D. Whiteson, Parameterized neural networks
+for high-energy physics, The European Physical Journal C 76 (Apr., 2016) .
+[10] G. Louppe, M. Kagan and K. Cranmer, Learning to pivot with adversarial networks,
+1611.01046.
+[11] A. Ghosh, B. Nachman and D. Whiteson, Uncertainty-aware machine learning for high energy
+physics, Physical Review D 104 (Sept., 2021) .
+[12] T. Dorigo, A. Giammanco, P. Vischia, M. Aehle, M. Bawaj, A. Boldyrev et al., Toward the
+end-to-end optimization of particle physics instruments with differentiable programming: a
+white paper, 2203.13818.
+[13] L. Dinh, J. Sohl-Dickstein and S. Bengio, Density estimation using Real NVP, 1605.08803.
+[14] D. P. Kingma and P. Dhariwal, Glow: Generative Flow with Invertible 1 × 1 Convolutions,
+1807.03039.
+[15] G. Papamakarios, E. Nalisnick, D. J. Rezende, S. Mohamed and B. Lakshminarayanan,
+Normalizing flows for probabilistic modeling and inference, 1912.02762.
+[16] E. Nalisnick, A. Matsukawa, Y. W. Teh and B. Lakshminarayanan, Detecting
+out-of-distribution inputs to deep generative models using typicality, 1906.02994.
+10
+[17] J. Ren, P. J. Liu, E. Fertig, J. Snoek, R. Poplin, M. A. DePristo et al., Likelihood ratios for
+out-of-distribution detection, 1906.02845.
+[18] R. Schmier, U. Köthe and C.-N. Straehle, Positive difference distribution for image outlier
+detection using normalizing flows and contrastive data, 2208.14024.
+[19] S. Cao and Z. Zhang, Deep hybrid models for out-of-distribution detection, in 2022 IEEE/CVF
+Conference on Computer Vision and Pattern Recognition (CVPR), pp. 4723–4733, 2022. DOI.
+[20] A. Andreassen and B. Nachman, Neural networks for full phase-space reweighting and
+parameter tuning, Physical Review D 101 (May, 2020) .
+[21] K. Cranmer, J. Pavez and G. Louppe, Approximating likelihood ratios with calibrated
+discriminative classifiers, 1506.02169.
+[22] J. Neyman, Outline of a theory of statistical estimation based on the classical theory of
+probability, Philosophical Transactions of the Royal Society of London. Series A, Mathematical
+and Physical Sciences 236 (1937) 333–380.
+[23] National Energy Research Scientific Computing Center, “Perlmutter system architecture.”
+https://docs.nersc.gov/systems/perlmutter/architecture/.
+[24] T. J. Boerner, S. Deems, T. R. Furlani, S. L. Knuth and J. Towns, ACCESS: Advancing
+Innovation: NSF’s Advanced Cyberinfrastructure Coordination Ecosystem: Services &
+Support, in Practice and Experience in Advanced Research Computing 2023: Computing for
+the Common Good, PEARC ’23, (New York, NY, USA), p. 173–176, Association for
+Computing Machinery, 2023. DOI.
+A
+Architecture and Training of a CNF
+Training a Contrastive Normalizing Flow (CNF) builds on a standard normalizing flow (NF) architec-
+ture, which itself is composed of a sequence of invertible coupling transformations. Below, we first
+review the structure of a typical NF with affine coupling layers, then describe the modifications that
+are required to train a CNF.
+A.1
+Normalizing flow with coupling layers
+A normalizing flow learns a target density pX(x) by applying an invertible mapping fθ to a simple
+base distribution pz(z), typically a standard Gaussian. The mapping is defined as
+x = fθ(z) = fL ◦fL−1 ◦· · · ◦f1(z),
+(13)
+where each coupling layer fi is chosen to admit a tractable Jacobian determinant. In the popular
+affine coupling scheme [13], each layer partitions its input u ∈Rd into two complementary subsets
+u = (ua, ub) via a binary mask M ∈{0, 1}d such that ua = M ⊙u,
+ub = (1 −M) ⊙u. The
+affine coupling transformation defines
+ya = ua ⊙exp
+ s(ub))
+
++ t(ub),
+yb = ub,
+(14)
+where s(ub) (the scale) and t(ub) (the translation) are outputs of a small neural network (in our
+case a DNN) given ub as input. Masks M are alternated between layers so that each dimension is
+transformed. The transformed variables (ya, yb) denote, respectively, the updated subset and the
+pass-through (identity) subset at each layer.
+Our DNN architecture has 5 hidden layers, 64 neurons per layer, and GELU activations. All training
+uses the Adam optimizer with a learning rate of 1 × 10−3 and default β coefficients (0.9, 0.999).
+11
+(a) c = 0.1
+(b) c = 0.5
+(c) c = 1
+(d) c = 2
+(e) c = 10
+(f) c = 20
+Figure 7: Contours of the loss-minimizing p(s)
+θ (x) from Eq. (10) on the toy example of 2-dimensional
+Gaussians from Sec. 5, for various values of c.
+A.2
+Modifications for contrastive normalizing flow
+Due to CNF’s contrastive objective, training a CNF in practice is complicated by two factors. The
+first is the existence of a local minimum of the loss where the CNF rejects all samples by letting
+the contrastive term c log p(s)
+θ (xb) →−∞faster than the rate that log p(s)
+θ (xs) →−∞. To prevent
+this mode collapse, a clamping procedure is required to bound the loss by some number k. That
+is, at each step in gradient descent, if the loss decreases below some value k we set the loss to k.
+We find k = −50 to be a reasonable setting for various problems, as also noted in Ref. [18]. The
+second difficulty in is the sharp boundary that exists at cp(s)
+θ (xb) = p(s)
+θ (xs) in the distribution the
+CNF attempts to approximate, Eq. (10). Due to this, a simple flow composed only of the affine
+coupling layers described in Eq. 14 will have instabilities in training, as affine-coupling flows have
+an inductive bias toward smooth functions. An empirical solution we find ensures stable training is
+the introduction of an alternating coupling architecture, where even coupling layers are given by a
+standard affine transformation with the addition of a gating mechanism,
+ya = g(ub) ⊙
+
+ua ⊙exp
+ s(ub)
+
++ t(ub)
+
++
+ 1 −g(ub)
+
+⊙ua,
+yb = ub,
+(15)
+12
+Figure 8: Samples from a NF trained on just MNIST zeros (left), compared to a CNF trained with
+zeros (Ds) in contrast to eights (Db) (right).
+where again s(ub) and t(ub) are scale and translation functions, and g(ub) ∈[0, 1]d is a gating
+function, all given as outputs of our DNN. We apply a sigmoid to the outputs corresponding to gθ to
+ensure values in [0, 1]. For odd coupling layers, a quadratic transformation is used,
+ya = 1
+2 α(ub) u2
+a + β(ub) ua + γ(ub),
+yb = ub,
+(16)
+where α(ub), β(ub), and γ(ub) are functions parameterized by a small DNN. We stack L = 30
+coupling layers (15 gated affine and 15 quadratic, interleaved) with one DNN corresponding to each
+coupling layer.
+B
+Varying c in the Toy Example
+Figure 7 is a visualization of different values of c on the toy problem of 2-dimensional Gaussians
+from Sec. 5. As expected, larger values of c reject more background at the expense of cutting out
+more of the signal.
+C
+Illustrative Example of CNFs: MNIST
+To make the abstract discussion in Secs. 5 and 6 more concrete, we train Contrastive Normalizing
+Flows on MNIST. The architecture follows App. A: each flow has 30 affine coupling layers, the
+coupling-layer DNNs are depth-5 MLPs with hidden dimension 64 and GELU activations, and we
+train with Adam (learning rate 10−3, β1,2 = (0.9, 0.999)) with loss clamping at k = −50. We also
+train a standard NF (with the same architecture but with no contrastive loss) for comparison. This
+architecture is not ideal for image generation, but our goal is simply to illustrate visually the effect of
+the contrastive loss. We do not attempt to make any quantitative statements in this appendix.
+C.1
+Generative example: 0 vs. 8
+We first fit a single CNF to the pair of classes Ds = { all zeros } and Db = { all eights }, using c = 2.
+We also train a train a NF on just Ds = { all zeros } with the same architecture. After training, we
+draw samples from p(s)
+θ (x) by drawing a latent z ∼N(0, 1) and inverting the flow. Figure 8 shows a
+random grid of 4 × 4 samples from both the NF and the CNF. Comparing the two, visually, it seems
+the CNF samples are perhaps slightly sharper, and more samples seem to be round circles as opposed
+to oblong ovals. This hints at the possibility of the improved sample generation in specific use cases
+from training CNFs, which we intend to explore in future work.
+C.2
+Classification examples: 9 vs. 4 and 8 vs. 0
+For a discriminative test, we train two CNFs, one with Ds = { all eights } and Db = { all zeros }, and
+one trained with Ds = { all nines } and Db = { all fours }, both with c = 2. For each, we compute
+13
+Figure 9: MNIST images correctly classified (left) and misclassified (right) with a CNF trained on
+eights in contrast to zeros.
+Figure 10: MNIST images correctly classified (left) and misclassified (right) with a CNF trained on
+nines in contrast to fours.
+the discrimination function Φ =
+p(s)
+θ
+1+p(s)
+θ
+on the test portion of the Ds dataset and let Φ > .5 be our
+boundary for classification. We plot correctly classified events with the highest scores and incorrectly
+classified events with the lowest scores in Figure 9 for the CNF trained with eights and zeros, and
+in Figure 10 for the CNF trained with nines and fours. Since the CNF learns the entire distribution
+of one class of images, we can interpret classified/misclassified images as most like or least like the
+contrastive class. As seen in Figure 9, eights that are least like zeros (i.e have the highest values of Φ)
+tend to have two equaly-sized lobes, and ones that are most like zeros have asymmetric lobes, with
+some visually approaching a zero as one of the lobes becomes very small. For Figure 10, the nines
+that are least like fours are generally closed on the top, while the nines that are most like fours are
+generally more open on the top, some closely resembling fours.
+D
+Details on the HiggsML Uncertainty Challenge
+Here we summarize the relevant physics, the features that compose events in the dataset, the set of
+nuisance parameters, and the scoring for the FAIR Universe – HiggsML Uncertainty Challenge as
+described in Ref. [1], to which we refer the reader for further details.
+D.1
+Relevant physics background
+The challenge is based on high-energy proton–proton collisions at the Large Hadron Collider (LHC)
+and the subsequent classification of Higgs boson decays in the ATLAS detector.
+Proton–proton collisions and Higgs production
+At the LHC, beams of protons are accelerated
+to near the speed of light and made to collide at a center-of-mass energy of 13 TeV. Each collision
+(“event”) can produce a variety of particles, including the Higgs boson, through the conversion of
+kinetic energy into mass, as described by Einstein’s relation E = mc2. Once produced, the Higgs
+bosons decay almost immediately through many decay channels. The challenge focuses on the decay
+channel H →τ +τ −where one τ particle decays leptonically (τ →ℓνν) and the other hadronically
+(τ →hadron + ν). Here, the lepton ℓand the hadron are visible in the detector, but the neutrinos ν
+are invisible; as a result, the full kinematic features of the event are unavailable to the experiment.
+14
+The events may also be accompanied by 0, 1, or 2 “jets,” sprays of collimated particles which are
+unrelated to the Higgs boson production but are produced as a result of secondary processes during
+the collision. The dataset for the challenge is composed of millions of simulated collision events,
+containing both signal H →τ +τ −events and a variety of background events with the same visible
+final states.
+The detector and the data features
+The ATLAS detector records the energy and direction of
+leptons, hadrons, and jets, which may be summarized by a momentum 3-vector ⃗p for each visible
+particle. Neutrinos escape detection, but their presence is inferred from the conservation of momentum
+in the direction transverse to the beams, via the computation of the missing transverse momentum
+vector
+⃗P miss
+T
+= ⃗0 −
+X
+i
+⃗P i
+T ∈R2,
+(17)
+where the sum runs over all reconstructed objects in the event. The kinematic information for each
+event (8 momentum coordinates for 0-jet events, 11 momentum coordinates for 1-jet events, and
+14 momentum coordinates for 2-jet events), plus the number of jets and the sum of the transverse
+momenta for all jets in the event, comprise the primary features. Various nonlinear combinations of
+the primary features (described in detail in [1]), corresponding to physically-motivated observables
+which have proved useful in collider physics analyses, bring the total to at most 28 features Fi per
+event. These features are the only data accessible to participants; importantly, participants do not
+have access to the true momentum vectors of the un-detected neutrinos.
+Scientific motivation
+Precise measurement of the Higgs boson’s properties – such as the production
+rate (i.e., the signal strength µ) and its couplings to other particles –tests the Standard Model and can
+be used to search for new physics. The τ +τ −channel is specifically important because it meausres
+the coupling strength of the Higgs to the heaviest lepton. The large simulated dataset and realistic
+detector effects the benchmark provides enable the development of methods that can robustly extract
+the rare signal in the presence of complex backgrounds, laying the groundwork for future precision
+studies at the LHC and beyond [1].
+D.2
+Nuisance parameters
+The challenge introduces six nuisance parameters, αtes, αjes, αsoft_met, αttbar_scale, αdiboson_scale and
+αbkg_scale, which model systematic distortions in the data. In each pseudoexperiment, each of these
+parameters is drawn the distribution in Tab. 3.
+Table 3: Nuisance parameters: Gaussian (or log-normal) priors and clipping ranges.
+Parameter
+Prior mean
+Prior width σ
+Clipping range
+αtes
+1.00
+0.01
+[0.90, 1.10]
+αjes
+1.00
+0.01
+[0.90, 1.10]
+αsoft_met
+0.00
+1.00
+[0.00, 5.00]
+αttbar_scale
+1.00
+0.02
+[0.80, 1.20]
+αdiboson_scale
+1.00
+0.25
+[0.00, 2.00]
+αbkg_scale
+1.00
+0.001
+[0.99, 1.01]
+Effects on kinematic features
+Because the particle collisions take place at relativistic speeds, the
+fundamental objects which govern the signal and background distributions are relativistic 4-vectors
+P = (E, ⃗P) where E and ⃗P are the particle energy and momentum, respectively. A massless particle
+must satisfy E2 = ⃗P · ⃗P, but nuisance parameters in the form of mis-measurement can distort this
+relationship. The first three nuisance parameters αtes, αjes, and αsoft_met parameterize these distortions.
+For each event,
+P biased
+had
+= αtes Phad,
+P biased
+jet
+= αjes Pjet
+(18)
+model mis-calibration of the hadronic and jet energy scales, respectively. These rescalings also shift
+the missing transverse momentum via
+⃗P miss, biased
+T
+= ⃗P miss
+T
++
+ 1 −αtes
+⃗PT, had +
+ 1 −αjes
+ ⃗PT, jet,1 + ⃗PT, jet,2
+
+,
+(19)
+15
+and all changes propagate to the non-linear transformations that define the 28 features. Finally,
+αsoft_met smears the missing transverse momentum measurement by adding random Gaussian noise
+N(0, αsoft_met) to ⃗P miss
+T
+.
+Impact on event weights
+The parameters αbkg_scale, αttbar_scale and αdiboson_scale modify the event
+weights (i.e. the frequency of some event) of the three sub-processes which comprise the background
+distribution:
+w′ = αbkg_scale × w
+(for Z →ττ background),
+w′ = αbkg_scale × αttbar_scale × w
+(for t¯t background),
+w′ = αbkg_scale × αdiboson_scale × w
+(for diboson background)
+(20)
+altering the composition of overall background distribution without changing kinematic distributions.
+D.3
+Metrics and scoring
+Participants submit a method that, for each test set, returns a 68.27% Confidence Interval (CI) for
+the Higgs signal strength µ. The performance is evaluated over Ntest independent test sets, each
+generated with random values of µ and the six systematic biases.
+Precision and coverage
+Two criteria are used for computing the performance of a method. The
+first is precision, quantified by the average CI width
+w =
+1
+Ntest
+Ntest
+X
+i=1
+µ84,i −µ16,i
+ ,
+(21)
+The second is coverage, the fraction of experiments in which µtrue lies within the CI:
+c =
+1
+Ntest
+Ntest
+X
+i=1
+[1 if
+ µtrue,i ∈[µ16,i, µ84,i]
+
+else 0].
+(22)
+Deviations of c from the nominal 68.27% are penalized via a piecewise function f(c), where
+σ68 =
+p
+(1 −0.68) × 0.68/Ntest :
+f(c) =
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1,
+0.68 −2σ68 ≤c ≤0.68 + 2σ68,
+1 +
+
+c −(0.68 −2σ68)
+σ68
+
+4
+,
+c < 0.68 −2σ68,
+1 +
+
+c −(0.68 + 2σ68)
+σ68
+
+3
+,
+c > 0.68 + 2σ68.
+(23)
+The cubic scaling for over-covering vs the quartic scaling for under-covering reflects the conservative
+preference for overestimating uncertainties as opposed to underestimating them.
+Final Score
+The overall coverage score used to benchmark the method combines precision and
+coverage as
+score = −ln
+
+(w + ε) f(c)
+
+,
+(24)
+where ε = 10−2 regularises against vanishing intervals. A higher score indicates both coverage at the
+correct rate while achieving as small an interval as possible.
+E
+Alternative likelihood-based method
+Here we describe a different method we developed that attempts to learn directly the likelihood in Eq.
+2. In this procedure, the event selection and pre-processing are identical to the procedure described
+in Sec. 6.2 as is the Neyman Construction once ˆµ is estimated. The main differences reside in the
+training and evaluation portion of our method.
+16
+E.1
+Training: DNN training with embedded nuisance parameters.
+Instead of training contrastive normalizing flows (CNFs), we pass the nuisance information directly
+to the same DNN classifier:
+1. Given a data point x, let νtrue ∈Rkν and νfake ∈Rkν be two sets of different full 6D
+nuisance-parameter vectors, where only νtrue is the true set s.t x ∼ps/b(x|νtrue).
+2. During training, we append both copies to each training event, and let the ordering depend
+on the label:
+˜x =
+ x, νtrue, νfake
+if the event is signal,
+ x, νfake, νtrue
+if the event is background
+(25)
+3. The same two-headed DNN (one head for 1-jet, one for 2-jet events) with binary
+cross-entropy loss is trained on this augmented input. Thus, the network implicitly learns
+how variations of ν shift the score distribution for each class.
+E.2
+Evaluation
+In this procedure, training is simpler, replaced with complexity in the evaluation procedure.
+Nuisance-parameter optimization
+At test time, we exploit the fact that all test data is overwhelm-
+ingly background (i.e., fs ≪1). We freeze the signal nuisance block in the input to a reference value
+νref (for example, the mean setting of ν) and vary the background block νtrue to minimize the sum
+of DNN scores (i.e., to classify everything as background). That is, we first let:
+˜x =
+ x, νref, νtest
+(26)
+for all test points and we scan over νtest to find
+ˆν = arg min
+νtest
+X
+k∈test
+rk(xk; νtest),
+(27)
+where rk is the network output for event k. This is an unbinned MLE under the (accurate) assumption
+that almost all events are background.
+Template construction with perturbed data.
+Using ˆν we perturb a susbet of training events to
+obtain two score templates, Ssig(r |ˆν) and Sbg(r |ˆν), that reflect the best-fit nuisances.
+Signal-strength extraction.
+We create a histogram of scores {rk} by giving all inputs the same set
+ˆν for both the signal and background blocks, i.e.:
+˜xk =
+ xk, ˆν, ˆν
+
+(28)
+and, given the signal and background templates from above for the best fit ˆν we can compute the
+MLE estimate for µ.
+This strategy replaces the CNF-based likelihood construction with a purely classifier-driven loop:
+nuisance parameters are absorbed as explicit inputs, profiled by maximizing the network’s global
+response, and finally used to perturb the score templates that enable a fit for the signal strength µ and
+ˆν. A Neyman construction is once again used to generate confidence intervals.
+17

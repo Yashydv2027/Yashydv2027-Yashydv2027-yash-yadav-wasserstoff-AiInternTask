@@ -1,0 +1,379 @@
+Prepared for submission to JINST
+Strategy for Bayesian Optimized Beam Steering at
+TRIUMF-ISAC’s MEBT and HEBT Beamlines.
+O. Hassan,𝑎,𝑏O. Shelbaya,𝑎W. Fedorko,𝑎and O. Kester𝑎,𝑏
+𝑎TRIUMF,
+4004 Wesbrook Mall, Vancouver BC, V6T 2A3, Canada
+𝑏Department of Physics and Astronomy, University of Victoria,
+Victoria BC, V8W 2Y2, Canada
+E-mail: oshelb@triumf.ca
+Abstract: For the preparation of the operation of multiple Rare Isotope Beams (RIBs) when
+the Advanced Rare Isotope Laboratory (ARIEL) becomes operational, TRIUMF embarked on a
+program of advanced beam tuning applications and machine learning tools. The strategy for the
+application of Bayesian Optimization for beam steering purposes is being developed. A previously
+reported Bayesian optimization algorithm is used to tune accelerated charged particle beams at
+TRIUMF’s ISAC postaccelerator facility. We present findings and results from multiple machine
+development experiments conducted between October and November 2024, as part of a pivot
+toward semi-automated machine tuning methods. These findings were instrumental in shaping the
+tuning strategy for the medium and high energy beam transport (MEBT, HEBT) lines at ISAC, by
+sequentially optimizing sub-sections of the beamlines.
+Keywords: Accelerator Applications; Accelerator modelling and simulations; Accelerator Sub-
+systems and Technologies; Beam dynamics; Beam Optics
+arXiv:2505.08767v1  [physics.acc-ph]  13 May 2025
+Contents
+1
+Introduction
+1
+2
+Bayesian Optimization for Ion Steering
+3
+2.1
+Bayesian Optimization
+3
+2.2
+Optimizing the Acquisition Function
+3
+3
+Tuning Sequences
+3
+4
+Results
+4
+4.1
+MEBT Corner and DTL
+4
+4.2
+HEBT to HEBT2
+5
+4.3
+Combining Sequences 2-5
+7
+4.4
+Tuning Time Estimates
+7
+4.5
+Further Tests
+8
+4.6
+Summary
+8
+5
+Future Work
+8
+1
+Introduction
+The Isotope Separator and Accelerator (ISAC) facility [1] is built around a post-accelerator chain:
+An initial step Radio-Frequency Quadrupole (RFQ) [2] accelerator linked to a Drift Tube Linac
+(DTL) [3] by a medium energy section with a 90◦corner, enabling charge beam mass-to-charge
+(𝐴/𝑞) selection. The RFQ accelerates beam from 2.04 keV/u to an output energy of 153 keV/u,
+which is then injected into the DTL. The separated function [4] DTL allows for a fully variable
+energy output, starting at 153 keV/u to a maximum of 1.53 MeV/u. These linac properties divide
+the ISAC facility into three energy regimes:
+• Low Energy Beam Transport (LEBT): 2.04 keV/u
+• Medium Energy Beam Transport (MEBT): 153 keV/u
+• High Energy Beam Transport (HEBT): 0.153-1.53 MeV/u
+In the past, tuning the ISAC beamlines was entirely done by manual adjustment of quadrupoles
+and corrective steerers, with a singular focus on the beam current transmission. This was a time-
+consuming procedure which led to highly variable tuning times to experiments, especially due to
+the limited availability of operators and the simultaneous delivery of rare and stable isotope beams.
+Furthermore, higher availability of rare isotope beams is expected once TRIUMF’s ARIEL facility
+comes online.
+– 1 –
+Consequently, a philosophical change in the operational tuning methodology used for beam
+delivery at ISAC is required, with a switch to more automated and model-based tuning techniques.
+Significant effort has been placed on simplifying the process of beam tuning and delivery to exper-
+iments, using a mixture of parallel modeling [5, 6] and optimization software [7, 8]. By utilizing
+knowledge of the beam dynamics at ISAC and a speedy beam envelope code (TRANSOPTR [9]), a
+complement of control room applications have been developed to augment the operators’ capabili-
+ties and minimize tuning times to experiments. This will allow the facility to run more efficiently
+and help prepare the operators for the arrival of ARIEL.
+Rare isotope beam experiments can last anywhere from a few hours to several weeks. Since the
+required beam energy, mass-to-charge ratio, and species continually change between experiments,
+beam tuning at ISAC is carried out using a start-to-end model of the machine to calculate the
+necessary tune for achieving the desired beam parameters. This process is managed operationally
+through the Model Coupled Accelerator Tuning (MCAT) control room application [10]. However,
+obtaining the initial beam conditions at various operational sources (such as initial centroid posi-
+tion and divergence) can be challenging, which necessitates adjustments using corrective steering
+elements (see Figure 1).
+This report outlines significant upgrades to the operational tuning strategy for rare isotope
+beam delivery at TRIUMF’s RIB postaccelerator. Over a two-month testing period, four distinct
+machine development tests were conducted, using several different beam species, with a focus on
+the medium and high-energy sections. The report discusses the optimal tuning strategies identified
+from the MEBT corner to the HEBT2 sections, including results from the machine development
+experiments. The optimal steerer setpoints, which ensure improved beam transmission through the
+linac and beamlines, are determined through Bayesian optimization [8]. It also presents the time
+required for tuning, along with recommendations for faster optimization. Finally, the report outlines
+plans for future work to address both pre-existing and newly identified issues.
+Figure 1.
+The MEBT to HEBT2 sections at the ISAC rare isotope beam facility, with the relevant steerers
+and Faraday cups highlighted.
+– 2 –
+2
+Bayesian Optimization for Ion Steering
+2.1
+Bayesian Optimization
+Owing to diagnostic availability, finding the steerer values that maximize transmission is treated as
+a black box problem where each evaluation is costly. Bayesian optimization is well suited for this
+problem, where the goal is to build a probabilistic model which accurately represents the objective
+function. This can be done by defining a surrogate model based on prior information, typically
+a Gaussian process (GP) [11].
+With a zero mean prior, a Gaussian process becomes entirely
+defined by the kernel. The kernel calculates the similarity between pairs of input data points to
+find the covariance matrix, which allows for the calculation of the posterior distribution. Bayesian
+Optimization for Ion Steering (BOIS) was developed at TRIUMF to optimize the corrective steerer
+problem at ISAC, with majority testing in the low energy beam transport (LEBT) section [8]. The
+kernel used in BOIS is the Matérn Kernel [12]. BOIS has an initial sampling stage where the
+inputs are randomly selected based on their mid-points, followed by the training stage where the
+optimization is carried out.
+2.2
+Optimizing the Acquisition Function
+The acquisition function (AF) determines the selection of the next best input values to test. Op-
+timizing the AF is a critical step for the Bayesian Optimization approach. Typically there is a
+hyperparameter which controls the balance of exploration vs exploitation. Focusing on exploration
+biases the AF to find areas in the input space with high uncertainties, whereas exploitation focuses
+on areas presently known to produce high objective function value (and thus potentially missing
+a global optimum). A good balance is required to avoid getting stuck in a local maxima while
+ensuring efficient sampling of the input space.
+3
+Tuning Sequences
+Since Bayesian optimization is typically most effective for problems with smaller dimensions [13],
+beamline segments for optimization must be carefully selected to keep the number of optimization
+variables manageable, typically under 20. By dividing the full machine optimization into several
+smaller segments, each overlapping with the previous one, greater efficiency and reliable operation
+are achieved. These segments are selected based on the availability of diagnostics and the typical
+operator tuning procedures. Each sequence includes steering elements and beam current monitors,
+such as Faraday Cups (FC), although some sequences, such as the MEBT section, also incorporate
+quadrupoles to account for modeling uncertainties, which are being separately investigated. Further
+discussion of this necessity is presented in [14, 15], however the determined bounds for BOIS’s
+quadrupole adjustments are ±10% of the MCAT computed quadrupole gradients.
+The first sequence starts in the MEBT corner and goes through the DTL to the start of HEBT
+(Fig. 1, MEBT:FC5 to HEBT:FC5). This is the only sequence where quadrupoles are tuned due
+to disagreements between the model and the observed tune. None of the DTL or HEBT elements
+are tuned in this sequence, it is purely a DTL injection optimization problem. Sequences 2-5 cover
+HEBT and HEBT2, sequence 2 is found to be trivial for the optimizer and will likely be combined
+with sequence 3 in the future.
+– 3 –
+4
+Results
+4.1
+MEBT Corner and DTL
+The beam species was 84Kr15+ from the multicharge ion source (MCIS) terminal at OLIS, accelerated
+by the DTL to E/A=461 keV/u. This development period was focused on testing different sequence
+definitions and optimizing through the MEBT corner.
+The objective was to maximize beam
+transmission as measured from one Faraday cup to the next.
+The optimizations were performed using the Upper Confidence Bound (UCB) [16] acquisition
+function where the exploration vs exploitation hyperparameter (𝛽1) was kept at 𝛽= 3. The initial
+tests excluded all quadrupoles, which failed to exceed 65% transmission across the DTL. Figure
+2 shows the relevant tests where quadrupoles were included in the optimizations. Keeping them
+unbounded was unsuccessful, producing 5% transmission across DTL. Bounding the quadrupoles
+to ±10% of the MCAT values yielded a DTL transmission of 100%. Finally, note:
+1. Operators noticed one of the MEBT corrective steerers tripped repeatedly during the tests,
+which could be related to unipolar power-supply and polarity switch operation [17].
+2. Current entering the MEBT section fell from 6.2nA at the start of testing to 5.5nA by the end,
+likely due to ion source output current variation.
+Figure 2.
+Top: Optimization with unbounded quadrupole values. Bottom: Bounding quadrupoles to
+±10% of the MCAT value.
+1In this work, 𝛽refers exclusively to this hyperparameter.
+– 4 –
+4.2
+HEBT to HEBT2
+Tests were carried out using both Expected Improvement (EI) [18] and UCB, it was found that
+EI generally converges faster but is less consistent.
+Transmission optimization was achieved
+using sequences 2-5. The Bayesian optimizer was run with EI and 𝛽=10, which produced high
+transmission for Sequence 2. However, note that this is a straight beamline segment featuring a
+relatively large aperture (2.54 cm beampipe radius) and an absence of notable constrictions. High
+transmission is found initially during the random sampling stage, before an acquisition function is
+even used.
+Sequence 3 was more challenging due to the presence of bunching cavities, which remained
+unpowered, whose drift tubes possess a 1 cm aperture radius [19], compared to the 2.54 cm beampipe
+radius. Figure 3 shows the explored input space with expected improvement for 𝛽= 1.
+Figure 3. Explored input space during optimization for EI with 𝛽= 1.
+In this case, the BOIS algorithm failed with significant over-exploration. As a result, transmis-
+sion was at a minimum, in the ≈1 −5% range. This issue was later found to be with the BoTorch
+package [20]: The previously employed version was 0.11.3, however upgrading to version 0.13
+fixed this issue. A future investigation will look at these acquisition functions and the issues en-
+countered in more detail, however it is noted that strict version adherence will be necessary to avoid
+functionality problems. As a result, it was resolved to employ UCB for this section with 𝛽= 3.
+This configuration proved the most reliable, delivering a measured transmission of 93% through
+this section. Figure 4 shows the expected input space exploration.
+– 5 –
+Figure 4. Explored input space during optimization for UCB with 𝛽= 3.
+Sequences 4-5 were optimized with UCB, shown in Figure 5. Total tuning time was ≈42
+minutes. This can be reduced with future development, as the maximum transmission is often
+found very early during the optimization. Implementing an early stoppage option will address
+this. A full implementation of early stoppage requires two critera: 1) Beam transmission reaches
+a pre-determined threshold. 2) No improvement in beam transmission after a given number of
+iterations. It is also possible to set the hyperparameter 𝛽= 0 to maximally exploit the best inputs
+for ∼5 iterations after a condition is met.
+Figure 5.
+4 separate optimization problems from HEBT:FC0 to HEBT2:FC4. Sequences 2-5 are covered
+with the best transmission shown for each sequence.
+– 6 –
+4.3
+Combining Sequences 2-5
+Figure 6. Single optimization problem where Sequences 2-5 are combined.
+To demonstrate the inefficacy of optimizing long stretches of the beamline with a large optimiza-
+tion problem, a test was conducted where Sequences 2-5 were combined into a single optimization
+problem, involving 14 corrective steerers. Figure 6 illustrates the results, with the most noticeable
+observation being the lack of improvement over iterations. The best point reached during random
+sampling was never exceeded, and the final transmission from HEBT:FC0 to HEBT2:FC4 was 68%,
+significantly lower than the 86% achieved using smaller sequences.
+4.4
+Tuning Time Estimates
+With a beam species of 12C3+ (Table 2, Test 1) at 464 keV/u, another test was carried out with the
+goal of recording a time-estimate of BOIS transmission optimizations from Sequences 1-5. Manual
+stoppage was used when transmission reached 90-95% or ceased to improve. Table 1 shows the
+tuning times per sequence. Sequence 3 was again more challenging for BOIS to optimize. Matching
+through the HEBT bunchers is a likely cause for the transmission difficulties due to the aperture
+restrictions of the HEBT bunchers [19]. Further scrutiny of this section will be carried out in the
+future to better understand and address this.
+Table 1. Tuning Times per Sequence
+Sequence No.
+# of Elements
+Tuning Duration (min)
+#1
+14
+9
+#2
+4
+1
+#3
+6
+6
+#4
+6
+5
+#5
+4
+2
+Total
+28
+∗Recorded optimization times.
+– 7 –
+4.5
+Further Tests
+Two final tests were carried out, first using 12C3+ (Table 2, Test 2) at 464 keV/u, and then 133Cs21+
+at 254 keV/u, both from the MCIS source. The carbon beam test suffered from current degradation
+due to an ion source failure, leading to a reduction in available beam for testing. The caesium
+beam also suffered from similar source issues. In both cases, significant (>20%) beam current
+fluctuations were recorded at irregular intervals. Testing proceeded during periods of relative beam
+stability.
+4.6
+Summary
+BOIS consistently achieves high transmission rates across the medium and high energy sections
+while maintaining a short tuning time, provided the problem is suitably divided into appropriate
+sub-sections for optimization. This has been tested with multiple beam compositions, mass to
+charge ratios and final energies. These results, listed in Table 2, will inform the development of
+BOIS as a control room application for operator use when tuning the ISAC postaccelerator for beam
+delivery. With the aforementioned methodology, tuning from the MEBT corner to HEBT2 takes
+28 minutes, which is comparable to the tuning times achieved by the operators.
+Table 2. Current transmission attained by BOIS across different sequences for various beam species and
+final energies.
+Species
+Energy (keV/u)
+Section 1
+Section 2
+Section 3
+Section 4
+Section 5
+84Kr15+
+461
+100%
+93%
+91%
+97%
+95%
+12C3+ [Test 1]
+464
+89%
+100%
+90%
+94%
+97%
+12C3+ [Test 2]
+464
+76%
+98%
+78%
+82%
+92%
+133Cs21+
+254
+100%
+100%
+97%
+91%
+97%
+5
+Future Work
+While these results are very promising, there are several improvements required for fully reliable
+operation, with some requiring machine development shifts for testing:
+• Implement early stoppage as a part of BOIS, this will be especially useful once the control
+room application is deployed.
+• Minimize steering by bounding the inputs, this has been developed with boundBOIS, reported
+in [8], but not extensively tested in the medium to high energy beamlines.
+• Include the best input values from previous runs in the initial sampling stage, which are scaled
+for beam 𝐴/𝑞for the present species. Currently, initial sampling uses a random process which
+calculates test values from the midpoint of the bounds.
+• The beam current as measured on the Faraday cup is averaged over 20 measurements, this is
+redundant as the wait time between each measurement (0.01s) is far quicker than the response
+time for the control room application webserver (0.2s). It is best to average over a smaller
+number of measurements and provide the proper wait times between the measurements.
+– 8 –
+Acknowledgments
+Thanks to Chris Charles for providing beam time after the ASPIRE [21] experiment finished early.
+Credit to Thomas Planche and Rick Baartman for helping determine the procedure and assisting
+with analysis. Thanks to all the RIB operators for their support during development. An LLM was
+used to refine the writing in certain sections. TRIUMF is located on the traditional, ancestral, and
+unceded territory of the Musqueam People, who for millennia have passed on their culture, history,
+and traditions from one generation to the next on this site.
+We acknowledge the support of the Natural Sciences and Engineering Research Council of
+Canada (NSERC), [funding reference number SAPPJ-2023-00038].
+Cette recherche a été financée par le Conseil de recherches en sciences naturelles et en génie
+du Canada (CRSNG), [numéro de référence SAPPJ-2023-00038].
+References
+[1] G.C. Ball, G. Hackman and R. Krücken, The triumf-isac facility: two decades of discovery with rare
+isotope beams, Physica Scripta 91 (2016) 093002.
+[2] S. Koscielniak, R. Laxdal, R. Lee and L. Root, Beam dynamics studies on the ISAC RFQ at TRIUMF,
+in Proceedings of the 1997 Particle Accelerator Conference (Cat. No.97CH36167), vol. 1,
+pp. 1102–1104 vol.1, 1997, DOI.
+[3] R. Laxdal, G. Dutto, K. Fong, G. Mackenzie, M. Pasini, R. Poirier et al., Beam commissioning and
+first operation of the ISAC DTL at TRIUMF, in PACS2001. Proceedings of the 2001 Particle
+Accelerator Conference (Cat. No.01CH37268), vol. 5, pp. 3942–3944 vol.5, 2001, DOI.
+[4] R. Laxdal, P. Bricault, T. Reis and D. Gorelov, A separated function drift-tube linac for the isac
+project at triumf, in Proceedings of the 1997 Particle Accelerator Conference (Cat. No. 97CH36167),
+vol. 1, pp. 1194–1196, IEEE, 1997.
+[5] O. Shelbaya, R. Baartman and O. Kester, Fast radio frequency quadrupole envelope computation for
+model based beam tuning, Phys. Rev. Accel. Beams 22 (2019) 114602.
+[6] O. Shelbaya, T. Angus, R. Baartman, P.M. Jung, O. Kester, S. Kiy et al., Autofocusing drift tube linac
+envelopes, Phys. Rev. Accel. Beams 24 (2021) 124602.
+[7] O. Shelbaya, R. Baartman, P. Braun, P. Jung, O. Kester, T. Planche et al., Tuning methods for multigap
+drift tube linacs, Review of Scientific Instruments 95 (2024) .
+[8] E. Ghelfi, A. Katrusiak, R. Baartman, W. Fedorko, O. Kester, G. Kogler Anele et al., Bayesian
+optimization for ion beam centroid correction, Review of Scientific Instruments 96 (2025) 023304.
+[9] R. Baartman, TRANSOPTR: Changes since 1984, Tech. Rep. TRI-BN-16-06, TRIUMF (2016).
+[10] O. Shelbaya, Model Coupled Accelerator Tuning Software, Tech. Rep. TRI-DN-25-01, TRIUMF
+(January, 2025).
+[11] C.E. Rasmussen and C.K.I. Williams, Gaussian Processes for Machine Learning (Adaptive
+Computation and Machine Learning), The MIT Press (2005).
+[12] B. Matérn, Spatial Variation, Springer-Verlag, 2 ed. (1960).
+[13] P. Frazier, A tutorial on bayesian optimization, ArXiv abs/1807.02811 (2018) .
+[14] O. Shelbaya, Beam Dynamics Study of ISAC-MEBT, Tech. Rep. TRI-BN-22-29, TRIUMF (2022).
+– 9 –
+[15] O. Shelbaya, Model Coupled Accelerator Tuning, Ph.D. thesis, The University of Victoria, Dept. of
+Physics and Astronomy, 2, 2023.
+[16] N. Srinivas, A. Krause, S. Kakade and M. Seeger, Gaussian process optimization in the bandit
+setting: No regret and experimental design, pp. 1015–1022, 07, 2010.
+[17] O. Hassan, Polarity Switching at the HEBT Steerers, Tech. Rep. TRI-BN-24-12, TRIUMF (2024).
+[18] J. Mockus, V. Tiesis and A. Zilinskas, The application of bayesian methods for seeking the extremum,
+vol. 2, pp. 117–129, North-Holland (2014).
+[19] O. Shelbaya, TRANSOPTR Implementation of the HEBT Beamlines, Tech. Rep. TRI-BN-19-06,
+TRIUMF (2019).
+[20] M. Balandat, B. Karrer, D.R. Jiang, S. Daulton, B. Letham, A.G. Wilson et al., Botorch: A framework
+for efficient monte-carlo bayesian optimization, 2020.
+[21] C. Charles et al., The astrochemical and planetary materials irradiation experiment (ASPIRE) at
+TRIUMF, in 56th Lunar and Planetary Science Conference (LPSC), (Woodlands, TX), 2025.
+– 10 –

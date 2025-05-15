@@ -1,0 +1,1707 @@
+Towards Foundation Models for Experimental
+Readout Systems Combining Discrete and
+Continuous Data
+J. Giroux1,⋆, C. Fanelli1,⋆
+1 William & Mary, Department of Data Science, Williamsburg, VA 23185, USA
+⋆Author to whom any correspondence should be addressed.
+E-mail: jgiroux@wm.edu, cfanelli@wm.edu
+14 May 2025
+Abstract.
+We present a (proto) Foundation Model for Nuclear Physics, capable of
+operating on low-level detector inputs from Imaging Cherenkov Detectors at
+the future Electron Ion Collider.
+To address limitations in existing next-token
+prediction approaches—namely resolution loss from VQ-VAE tokenization and
+lack of conditional generation—we propose three key innovations: (i) separate
+vocabularies for discrete spatial features and continuous variates, combined
+via Causal Multi-Head Cross-Attention (CMHCA), (ii) continuous kinematic
+conditioning through prepended context embeddings, and (iii) scalable and simple,
+high-resolution continuous variate tokenization without joint vocabulary inflation.
+Our model enables fast, high-fidelity generation of pixel and time sequences for
+Cherenkov photons, validated through closure tests in the High Performance DIRC.
+We also show our model generalizes to reconstruction tasks such as pion and kaon
+identification, in which we show its ability to leverage fine-tuning.
+Keywords: Foundation Models, Causal Cross Attention, Transformers
+1. Introduction
+Foundation Models (FM) are beginning to emerge as powerful tools within the field of
+both Nuclear Physics (NP) and High Energy Physics (HEP), supporting the inclusion
+of multiple downstream tasks [1–4] and fine-tuning [5, 6].1 Seminal works, such as those
+in [2,3], show that relatively modest sized transformer backbones are easily generalizable
+to both reconstruction (particle identification (PID), jet tagging, etc) and simulation tasks.
+In which fine tuning from one task to another possess inherent reduction in computational
+overhead in comparison to models trained from scratch. Moreover, they show that different
+1In [2], the authors coin the term proto-Foundation Models, representing model development
+along the path to true, large-scale Foundation Models.
+arXiv:2505.08736v1  [cs.LG]  13 May 2025
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+2
+underlying mechanisms, i.e., next token prediction, masked prediction (akin to traditional
+decoder only, or encoder-decoder style language models) [1,2,6–8] or iterative refinement
+through Diffusion Transformers [9] can be equally as generalizable. In which the latter
+method [3] promotes reconstruction tasks through selective time restrictions in the diffusion
+processes (i.e., t = 0). In general, both of these approaches work with relatively high-
+level reconstructed quantities such as 4-vectors. Recently, Birk et al. [10] demonstrated
+that next-token prediction can be effectively applied to simulate calorimeter response,
+particularly for modeling photon-induced shower development using low-level features such
+as pixel positions and energy depositions. While the results are promising and represent
+an important step forward, there are two potential limitations in the current approach
+that warrant further consideration. First, given the requirements of next token prediction
+to (generally) operate in a discrete space, quantization methods must be employed
+upstream in terms of a learnable tokenization process, generally in the form of a Vector
+Quantised-Variational AutoEncoder (VQ-VAE) [11].
+VQ-VAE models provide discrete
+latent encodings, therefore allowing tokenization of continuous and multidimensional spaces
+such as location (pixel) and energy in calorimeters. While powerful, such methodologies do
+not come without significant tradeoffs in terms of resolutions - a potential degrading effect
+in physics simulations of detectors through loss of information.2 Second, their approach
+does not encompass conditional generation, and therefore generative tasks that exhibit
+explicit conditional dependence on external parameters (e.g., Cherenkov production in
+DIRC detectors) is not possible. As a result, we propose two improvements for next token
+prediction models to circumvent these potential issues in physics, in which we deploy our
+techniques to Imaging Cherenkov Detectors at the future Electron Ion Collider (EIC) -
+pixelated detectors that require both precise location, and timing information of individual
+hits.3 The main contributions of our work is as follows:
+• We introduce a (proto) Foundation Model in Nuclear Physics, operating on low level
+detector inputs. Its performance is demonstrated through a series of closure tests
+using Cherenkov detectors at the future EIC.
+• We introduce learning through split vocabularies in space and time, in which
+discretization (tokenization) in the continuous time space can be done at a fraction
+of the resolution of the detector.
+These modalities are combined through Causal
+Multi-Head Cross-Attention (CMHCA) [12, 13] to produce spatio-temporally aware
+embeddings, in which we query the pixel space given times.
+• We introduce continuous kinematic dependencies through fixed context, in which
+prepending of kinematic embeddings drives sequence generation forward in time.
+Providing kinematic aware next token prediction.
+The use of split vocabularies allows our model to retain high resolution time
+generations, without the need for excessive vocabulary size or learnable tokenization.
+2Decoded tokens inherently posses some uncontrolled smearing effect proportional to the
+codebook size.
+3We leave translation to calorimeters (see, e.g., [10]) for future works.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+3
+In fact, the resolutions capable of being deployed in our study would comprise a joint-
+vocabulary (space and time) of roughly 36 million tokens (5920 possible time values, 6144
+possible pixel values). We also note that our approximation through split vocabularies
+remains valid under most pixelated detector systems, given the one-to-many mappings
+that occur between space and the continuous variate such as time, energy or both [14].
+In this scenario, one could envision the combination of space, time, and energy through
+sequential CMHCA blocks, where time queries energy to generate a temporal-energy
+informed embedding, which is then used to query spatial indices.
+In what follows, we demonstrate the ability of our method to produce high fidelity
+fast simulation of pions and kaons in the High Performance DIRC (hpDIRC) through a
+series of closure tests, along with ability to operate under a classification scheme both with
+and without fine tuning.
+2. Dataset
+We utilize the dataset developed by Giroux et al. [15], which records Cherenkov photon
+hit patterns captured by the hpDIRC readout system comprised of photomultiplier tube
+(PMT) arrays. Each hit pattern is associated with a single charged particle track, which is
+inherently characterized by kinematic parameters. As depicted in Figure 1, an individual
+track produces a sparse and inherently stochastic subset of hits (highlighted in red).
+However, when aggregating hits from multiple tracks with identical kinematics—namely,
+momentum (|⃗p|) and polar angle (θ)—a well-defined probability density function (PDF)
+emerges. Importantly, the number of hits per track is not fixed, and dependent on the
+kinematics, resulting in a combinatorially large space of possible hit configurations. This
+variability presents a significant modeling challenge for autoregressive (AR) architectures.
+x
+y
+Figure 1: Optical box output: Individual tracks leave sparse hit patterns (red
+points) integrated over time on the hpDIRC readout plane. The denser hit pattern
+is obtained by accumulating multiple tracks with the same kinematics. Figure and
+caption taken from [15].
+As stated in [15], the generated charged tracks (both pions and kaons) are distributed
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+4
+approximately uniformly over the phase-space, spanning 1 < |⃗p| < 10 GeV/c, 25 < θ <
+160◦, providing ∼5 million tracks for each PID. We limit ourselves to a max sequence length
+of 250, corresponding to a large range in photon yields across the phase-space. In contrast
+to prior works learning information at the photon-level, in which tracks can be formed
+through aggregation, we instead directly learn to generate individual tracks (sequences of
+hits). As a result, the transformations in [15] are not needed given that we directly work
+with the discretized readout (pixel indices) and time.
+3. Methods
+Tokenization of Space and Time
+Given the pixelated nature of the readout system, no additional tokenization is required
+along the spatial dimension; each discrete pixel index corresponds uniquely to a fixed (x, y)
+coordinate in the PMT array, yielding a spatial vocabulary size of 6144. In regards to time,
+which is a continuous variate, we employ a simple linear binning strategy in which we
+discretize on the order of 1/4 the time resolution yielding a vocabulary of size 5920. While
+we employ uniform binning in this work, more sophisticated schemes—such as non-linear
+binning or function-based discretizations—could be used to capture known nonlinearities in
+the readout system. We also observed that further reducing the temporal resolution to one-
+tenth of the intrinsic resolution had negligible impact on model performance. Therefore,
+our current choice of 1/4 the timing resolution provides similar vocabulary sizes for both
+spaces
+Time Queries Space
+We first obtain time and spatial embeddings through learnable, independent projections
+from their vocabularies, in which we add positional embeddings along each dimension. We
+also embed both the momentum and angular values through independent linear projections
+(continuous spaces), and prepend our kinematics as initial context along both time and
+spatial projections, an example of which is given in Eq. 1. Each embedding dimension is
+set to 256 in our experiments.
+spatial →{|⃗p|, θ, SOSp, p1, . . . , pn, EOSp}
+time →{|⃗p|, θ, SOSt, t1, . . . , tn, EOSt}
+(1)
+We then combine information through a transformer block using CMHCA, in which
+we obtain our Query projection (Q) from the time embeddings, and the Key (K) and
+Value (V) projections from the spatial embeddings.4
+The result is a spatio-temporally
+aware embedding to be further processed by transformer blocks utilizing traditional Multi-
+Head Self-Attention (MHSA) blocks [16]. Each transformer block consists of its respective
+attention type with 8 heads, a linear projection layer, and a standard feed forward network
+with 2 linear layers and GeLU activation [17].
+Given the large combinatorial space of
+4For a given time, query the possible pixel locations of valid Cherenkov photons.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+5
+plausible tracks at a given kinematics, careful consideration must be taken within each
+attention head. Specifically, we must enforce the model to learn more focused attention
+maps given an initial context. We do not want the attention maps to simply collapse to
+the most probable configurations as aggregations over the entire phase-space. Therefore,
+we employ multiple normalization schemes, in which both pre and post norm strategies are
+used. We further augment this through normalization of the Q,K matrices [18], in which ℓ2
+normalization is applied with a learnable scale factor. This makes attention scores invariant
+to their scale - promoting stability, increased variability in our output space and direction
+focused. This being a key feature given the large combinatorial space of plausible track
+configurations mentioned prior.
+Figure 2: Architecture: Spatial and temporal sequences are first independently
+embedded via learnable projections from their respective vocabularies,
+with
+positional
+encodings
+added
+along
+each
+dimension.
+Kinematic
+information
+(momentum magnitude and polar angle) is projected from continuous space and
+prepended as contextual tokens to both sequences. The time embeddings serve as
+queries (Q), while the spatial embeddings provide keys (K) and values (V) within a
+Causal Multi-Head Cross Attention (CMHCA) mechanism. The resulting spatio-
+temporal representations are passed through transformer blocks utilizing Multi-
+Head Self Attention (MHSA). We apply both pre- and post-normalization schemes,
+including ℓ2-normalized Q and K projections with learnable scaling. For generation,
+the model outputs next-token predictions over space and time vocabularies through
+two linear heads. For classification, a CLS token is used to summarize the sequence
+and predict class scores via a final linear layer. FFNN stands for Feedforward Neural
+Network.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+6
+In the case of generation, the final output from the transformer blocks feeds two
+independent next token prediction heads operating over the space and time vocabularies.
+Each of which are represented by single linear layers.
+In the case of classification, we
+represent our output latent distributions through a single linear layer. This layer is fed
+through a traditional CLS token format, in which we place this token at the start of each
+sequence. A diagrammatic representation of our model is shown in Fig. 2.
+In our current study, we deploy two separate generative models for the two classes,
+pions and kaons (π/K), as motivated by previous works and also their high degree of
+similarity as momentum increases. The latter requiring clear separation of their modes to
+provide high fidelity, and reliable simulation. We leave their combination under one model
+for future studies.
+4. Analysis and Results
+Generative Model Evaluation
+We follow the procedure in Giroux et al. [15], validating our fast simulation approach at
+the central region in momentum (6 GeV/c) through a series of histograms and ratios, in
+which we will also compare the learned sequence length, i.e., ability to learn correct photon
+yield as a function of the phase-space. Plots for additional kinematics (e.g., 3 GeV/c and 9
+GeV/c) can be found in Appendix A and Appendix B. Note that while our model directly
+provides pixel and timing location, we convert the spatial indices into x, y coordinates
+to provide more informative visualizations. This will then be followed by a closure test
+using classifier metrics, namely the same Kernel Density Estimation (KDE) derived from
+FastDIRC [19] at fixed momentum. In which we ultimately translate the fidelity of our
+generations into a more interpretable metric of separation power.
+Histogram Level Evaluations We begin through visual comparisons of generations
+produced by our architecture to the ground truth of Geant4 at fixed momentum. We show
+generations from our model near the two ends of the bar (large, or small polar angle), along
+with the central region of the bar. As mentioned in [15], the former provides insight into our
+architectures ability to capture symmetry in ring structures at the extreme polar angles,
+while accounting for the inherent time shift that occurs due to path length differences.
+The latter provides insight into the ability of the architecture to model both direct, and
+indirect photons emitted from central regions of the bar, indicated through multi-modal
+structures in time. In general, smaller values of the polar angle provide insight into the
+ability to model both indirect and direct photons.
+However, in the central region the
+number of indirect and direct photons tends to be more similar and motivates our choice.
+While not quantitative in nature, fixed point generation comparisons are extreme stress
+tests of our model given its training on a fully continuous phase space. Moreover, these
+simple projections provide immediate cues into potential mode collapse, and deviation from
+correct rings structures.
+In the generations that follow, we employ a Nucleus Sampling [20] technique with
+p = 0.995, and a fixed temperature of T = 1.05. These generations schemes have shown
+to provide the most consistent cumulative distributions across the phase-space. It should
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+7
+also be noted that given the high degree of stochasticity within individual sequences, small
+changes in these parameters can result in significantly different outputs. In fact, the idea of
+“next token” prediction of Cherenkov photons is highly ambiguous, as shown by previous
+works in which high fidelity track-level generations can be produced through aggregations of
+individual photon generators [15,21]. In these works, the authors show treating individual
+photons as independent of one another provides no loss of coherence.
+Fig.
+3 depicts
+generations of kaons (left column of images) and pions (right column of images) for various
+polar angles (30◦top row, 95◦middle row and 150◦bottom row).
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 150
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 150
+Geant4
+FastSim.
+Figure 3: Fast Simulation at 6 GeV/c: Fast Simulation of kaons (left column of
+plots), and pions (right column of plots) at 6 GeV/c and various polar angles, using
+Nucleus sampling and fixed temperature.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+8
+From inspection of the figure, we can qualitatively assess that our model correctly
+captures kinematic dependencies in both space and time. Furthermore, we are able to
+obtain hints of geometrical effects, such as the kaleidoscopic effect [22] at angles closer
+to the expansion volumes (e.g., 30◦). Prior fast simulation methods have been unable to
+capture such details. This will be discussed in more detail in later sections. To provide
+a more qualitative assessment of our generations, we provide cumulative distributions in
+Fig. 4, for (a) kaons and (b) pions.
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+6.0 GeV/c Kaons
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(a) Kaons
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+6.0 GeV/c Pions
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(b) Pions
+Figure 4: Ratio Plots at 6 GeV/c: Ratio plots for kaons (top) and pions (bottom),
+using Nucleus sampling and fixed temperature.
+We note exceptional agreement in the spatial dimensions, in which our ratios are ∼1
+across all values. Our time distribution is in high agreement with the ground truth along
+the main population (most Cherenkov hits are within the first 100 ns), although the tails
+of the distribution tend to struggle due to low density. This is an expected outcome in the
+context of modern generative models in general.
+Unlike previous fast simulation methods for Cherenkov detectors, in which post-hoc
+modeling of the photon yield must be employed, our method directly learns this variability
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+6.0 GeV/c Kaons
+True Yield
+Generated Yield
+(a) Kaons
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+6.0 GeV/c Pions
+True Yield
+Generated Yield
+(b) Pions
+Figure 5: Photon Yield Comparison at 6 GeV/c: Comparison of generated
+photon yield for kaons (top) and pions (bottom), using Nucleus sampling and fixed
+temperature.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+9
+in sequence length as a function of the phase-space. Fig. 5 depicts a comparison between
+the generated and ground truth photon yields at 6 GeV/c, in 5◦bins of the polar angle for
+(a) kaons and (b) pions.
+We note good agreement for both generative models (pions and kaons) in terms of
+photon yield, with slight over estimation at lower values of the polar angle (e.g., θ < 100◦).
+These results are consistent at all regions of the phase-space as indicated by plots in
+Appendix A and Appendix B.
+KDE based Evaluation
+We again follow the methods devised in [15], translating fidelity
+measurements to a more interpretable metric of separation power using the KDE method
+of FastDIRC.5 This evaluation is performed at fixed momenta—specifically 3 GeV/c and
+6 GeV/c—to emphasize fidelity testing at specific kinematic points, which serves as a
+stringent stress test for our generative models trained over a fully continuous kinematic
+space. Fig. 6 depicts the performance comparison for 3 GeV/c (top) and 6 GeV/c (bottom),
+for various values of the polar angle (in bins of 5◦), with fixed sized reference populations
+of 800k, for Geant4, NF, and our proposed method (indicated in legend).
+0
+3
+6
+9
+12
+15
+Separation [s.d.]
+|p| = 3 GeV
+FastSim. (Transformer) - 
+= 9.96
+FastSim. (NF) - 
+= 9.94
+Geant4. - 
+= 10.84
+40
+60
+80
+100
+120
+140
+Polar Angle [deg.]
+0
+1
+2
+3
+4
+5
+Separation [s.d.]
+|p| = 6 GeV
+FastSim. (Transformer) - 
+= 2.57
+FastSim. (NF) - 
+= 2.91
+Geant4. - 
+= 3.72
+Figure 6: KDE Performance Comparison: Particle Identification performance
+of pions and kaons using FastDIRC KDE method with Geant4 reference
+populations, and fast simulated populations from Normalizing Flows and our method
+(Transformer-based) at 3 GeV/c (top) and 6 GeV/c (bottom) for various values of
+the polar angle.
+5More information on the exact formulation of the metric, and underlying process can be found
+in [15].
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+10
+From inspection of the figure, we initially see that our proposed method does degrade
+in performance in comparison to both Geant4, and previously proposed methods such
+as NF. As pointed out in [15], any smoothing of the underlying probability distribution
+produced by our model will incur significant performance decreases in comparison to
+Geant4 given the ring structures only differ by a few pixels spatially at higher momentum
+(eventually converging at large enough momentum). In contrast to NF, the smoothing
+effect incurred is not inherent to the method, but rather an artifact of the data itself.
+Specifically, there is approximately uniform uncertainty at each forward step in time -
+translating to a highly ambiguous space of “next token” prediction, i.e., relatively flat
+attention scores.
+Given the inherent uncertainty in our data as to which is the most
+optimal next hit, different sampling techniques possess the ability to greatly alter our
+generations - arguably more than other AR models operating in the traditional domain
+of language. In light of this, we observe that post-hoc optimization can be employed to
+further curate generated samples. While not specifically fine tuning weights, optimizing
+generation parameters (e.g., temperature, dynamic temperature, p values, etc) can improve
+fidelity and is left for future studies.6
+Geometric Effects
+As discussed earlier, given that our model operates in a discrete space,
+we are able to capture geometric effects (degree varies with angle and sampling method)
+such as the kaleidoscopic effect.
+The kaleidoscopic effect manifests as appeared “pixel
+preferences” in the readout system, with the effect being more pronounced the closer a
+track hits to the expansion volume. Fig. 7 depicts generations at the closest possible polar
+angle to the expansion volume (θ = 25◦), for both (a) NF, and (b) our AR approach in
+the figure referenced as ‘Transformer’.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 25
+Geant4
+FastSim.
+(a) Normalizing Flows
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 6 GeV/c
+= 25
+Geant4
+FastSim.
+(b) Autoregressive
+Figure 7: Geometrical Effect Comparison at 6 GeV/c: Comparison of (a)
+Normalizing Flows and (b) our Auto-regressive approach in their ability to capture
+geometrical effects.
+6We have implemented and tested a wide variety of sampling methods, see https://github.
+com/wmdataphys/FM4DIRC for more details.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+11
+While promising, further research into the capacity of our model is required to fully
+capture this effect at all regions of the phase-space.
+Particle Identification and Fine-tuning
+As shown in previous works [2,3], the flexible structure of transformer backbones supports
+various downstream tasks (primarily fast simulation and reconstruction tasks such as
+PID). In what follows, we show the performance of our model, in which we fine-tune
+our backbone structure (essentially all transformer blocks) from a generative procedure, to
+one of sequence-level classification.
+Specifically, we classify if charged tracks originate
+from pions or kaons within our detector.
+We also show that fine-tuning our models
+from generation to classification provides inherent speed ups in convergence, along with
+slight performance increases. Fig. 8 (a) shows the performance of our model in terms of
+separation power at 3 Gev/c (top), and 6 Gev/c (bottom) and various values of the polar
+angle. We also provide performance comparisons using the NF models from [15], and the
+DLL method devised in [21]. The average separation power over the polar angle is reported
+in the legends. Fig. 8 (b) shows the accuracy of our model integrated over the phase-space
+as a function of training iteration (number of batches), for both fine-tuned and models
+trained from scratch.
+0
+5
+10
+15
+20
+25
+30
+Separation [s.d.]
+|p| = 3 GeV
+Transformer - 
+= 23.65
+NF-DLL - 
+= 9.94
+40
+60
+80
+100
+120
+140
+Polar Angle [deg.]
+0
+1
+2
+3
+4
+Separation [s.d.]
+|p| = 6 GeV
+Transformer - 
+= 3.58
+NF-DLL - 
+= 3.58
+(a) Separation Power
+5
+10
+15
+20
+25
+30
+Training Iterations
+70%
+75%
+80%
+85%
+90%
+Accuracy
+×104
+Fine-tuned
+From Scratch
+(b) Fine Tuning
+Figure 8: Particle Identification Performance Comparison: PID performance
+of pions and kaons using (a) Normalizing Flow Delta-Loglikelihood (NF-DLL)
+method, and our method at 3 GeV/c (top) and 6 GeV/c (bottom) for various values
+of the polar angle, and (b) comparison of accuracy versus training iterations for
+models trained from scratch, and fine-tuned integrated over the entire phase-space.
+From inspection of Fig. 8 (a) we conclude that both NF, and our FM are able to
+surpass required separation power of 3σ at ∼6 GeV/c, as outlined in the EIC Yellow
+Report [23]. We also note the unique differences in their performance, in which our FM
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+12
+is more heavily impacted by changes in polar angle as depicted by higher non-uniformity
+(e.g., see separation power at 3 GeV/c). A potential artifact of model configuration, or
+perhaps method of kinematic conditioning. With inspection of Fig. 8 (b) we show our
+model is capable of fine-tuning, it benefits in terms of both computational efficiency (rate
+of convergence), and slightly increases in accuracy.
+We also note the algorithm’s clear
+ability to separate charged pion and kaons at 3 Gev/c, in which our separation power
+essentially doubles in contrast to NF. While impressive, the usefulness of such separation
+power at low momentum is debatable and preferred elsewhere at higher momentum where
+the particle identification becomes more challenging.
+In future studies we aim to shift
+some of the focus the model puts on this momentum region through momentum weighted
+training schemes, or trainings limited to higher impact kinematic ranges to allow increased
+performance.
+5. Summary and Conclusions
+With this work, we have introduced a (proto) Foundation Model working on low-level
+input features (i.e., pixelated readout systems) for Nuclear Physics applications. We have
+shown through a series of closure tests that our model is capable of performing both
+generative, and reconstruction tasks in which we are able to leverage fine-tuning to increase
+computational efficiency.
+In the case of generative modeling, our discretized approach in space allows potential
+for capturing low-level geometric effects seen in DIRC detectors, an advancement over prior
+methods [15]. Moreover, we have introduced a method in which we alleviate the need for
+excess quantization over continuous domains, allowing the physical sensor resolutions of
+detectors to be respected through adjacent vocabularies. Our method fuses spatial and
+temporal information through Causal Multi-Head Cross Attention (CMHCA), yielding
+temporally aware spatial embeddings that are subsequently processed using standard
+transformer blocks. We believe this architecture is both flexible and broadly applicable
+to a variety of detector systems, including calorimeters. Given the inherent stochasticity in
+physical readout systems, the concept of a many-to-many mapping approximated through
+split vocabularies may offer promising results.
+We have also demonstrated that our model achieves the desired separation power
+(3σ at 6 GeV/c) for charged pion and kaon identification, with performance comparable
+to or exceeding that of other Deep Learning methods.
+Interestingly, our Foundation
+Model exhibits greater sensitivity to variations in polar angle, which may reflect its
+internal representation of detector geometry or the nature of its kinematic conditioning.
+Additionally, we find that fine-tuning not only accelerates convergence but also yields
+slight gains in classification accuracy.
+Notably, the model demonstrates excessively
+strong discriminative power at lower momenta—though the practical importance of such
+performance may be limited. To better align model focus with experimental priorities,
+future studies will explore momentum weighted, or limited phase-space training strategies
+that emphasize high-impact kinematic regions.
+Despite the encouraging performance observed, further refinement of our method is
+necessary to enable higher-fidelity simulation and improved classification performance,
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+13
+particularly at higher momentum.
+As seen in Large Language Models, emergent
+capabilities often arise as a function of scale.
+Accordingly, we intend to investigate
+the scalability of our approach through detailed ablation studies focused on both model
+capacity and the volume of training data.
+Lastly, we aim to assess the model’s ability to fine-tune across experiments, with
+particular interest in the GlueX DIRC and the hpDIRC at the future EIC. While
+differences in production mechanisms and detector geometries exist between GlueX and
+the EIC, we hypothesize that the underlying physics governing DIRC detectors remains
+sufficiently invariant to enable effective cross-experiment fine-tuning.
+Code Availability
+The code is publicly available at https://github.com/wmdataphys/FM4DIRC.
+Acknowledgments
+We thank William & Mary for supporting the work of JG and CF through CF’s start-
+up funding. The authors acknowledge William & Mary Research Computing for providing
+computational resources and technical support that have contributed to the results reported
+within this article.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+14
+References
+[1] Finke T, Kr¨amer M, M¨uck A and T¨onshoff J Learning the language of QCD jets with
+transformers 2023 Journal of High Energy Physics 2023 1–18
+[2] Birk J, Hallin A and Kasieczka G OmniJet-α: the first cross-task foundation model for particle
+physics 2024 Machine Learning: Science and Technology 5 035031
+[3] Mikuni V and Nachman B OmniLearn: A method to simultaneously facilitate all jet physics
+tasks 2024 arXiv preprint arXiv:2404.16091
+[4] HEP-JEPA: A foundation model for collider physics
+[5] Vigl M, Hartman N and Heinrich L Finetuning foundation models for joint analysis
+optimization in High Energy Physics 2024 Machine Learning: Science and Technology 5
+025075
+[6] Golling T, Heinrich L, Kagan M, Klein S, Leigh M, Osadchy M and Andrew Raine J Masked
+particle modeling on sets: towards self-supervised high energy physics foundation models
+2024 Machine Learning: Science and Technology 5 035074
+[7] Huang A, Melkani Y, Calafiura P, Lazar A, Murnane D T, Pham M T and Ju X A language
+model for particle tracking 2024 arXiv preprint arXiv:2402.10239
+[8] Butter A, Huetsch N, Schweitzer S P, Plehn T, Sorrenson P and Spinner J Jet diffusion versus
+JetGPT – Modern networks for the LHC 2025 SciPost Phys. Core 8 026
+[9] Peebles W and Xie S 2023 Scalable diffusion models with transformers Proceedings of the
+IEEE/CVF international conference on computer vision pp 4195–4205
+[10] Birk J, Gaede F, Hallin A, Kasieczka G, Mozzanica M and Rose H OmniJet-{αC}: Learning
+point cloud calorimeter simulations using generative transformers 2025 arXiv preprint
+arXiv:2501.05534
+[11] Van Den Oord A, Vinyals O et al. Neural discrete representation learning 2017 Advances in
+neural information processing systems 30
+[12] Lin H, Cheng X, Wu X and Shen D 2022 CAT: Cross Attention in Vision Transformer 2022
+IEEE international conference on multimedia and expo (ICME) (IEEE) pp 1–6
+[13] Fei J, Li D, Deng Z, Wang Z, Liu G and Wang H Video-ccam: Enhancing video-language
+understanding with causal cross-attention masks for short and long videos 2024 arXiv
+preprint arXiv:2408.14023
+[14] Ameli F, Battaglieri M, Berdnikov V V, Bond´ı M, Boyarinov S, Brei N, Celentano A, Cappelli
+L, Chiarusi T, De Vita R et al. Streaming readout for next generation electron scattering
+experiments 2022 The European Physical Journal Plus 137 958
+[15] Giroux J, Martinez M and Fanelli C 2025 Generative Models for Fast Simulation of Cherenkov
+Detectors at the Electron-Ion Collider (arXiv:2504.19042)
+[16] Vaswani A, Shazeer N, Parmar N, Uszkoreit J, Jones L, Gomez A N, Kaiser  L and Polosukhin
+I Attention is all you need 2017 Advances in neural information processing systems 30
+[17] Hendrycks D and Gimpel K Gaussian error linear units (GeLUs) 2016 (arXiv:1606.08415)
+[18] Henry A, Dachapally P R, Pawar S and Chen Y Query-key normalization for transformers
+2020 (arXiv:2010.04245)
+[19] Hardin J and Williams M FastDIRC: a fast Monte Carlo and reconstruction algorithm for
+DIRC detectors 2016 J. Instrum. 11 P10007 (arXiv:1608.01180)
+[20] Holtzman A, Buys J, Du L, Forbes M and Choi Y The curious case of neural text degeneration
+2019 (arXiv:1904.09751)
+[21] Fanelli C, Giroux J and Stevens J Deep (er) reconstruction of imaging Cherenkov detectors
+with swin transformers and normalizing flow models 2025 Machine Learning: Science and
+Technology 6 015028
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+15
+[22] Dey B et al. Design and performance of the Focusing DIRC detector 2015 Nucl. Instrum.
+Methods Phys. Res. A 775 112–131 (arXiv:1410.0075)
+[23] Khalek R A et al. Science requirements and detector concepts for the electron-ion collider: EIC
+yellow report 2022 Nuclear Physics A 1026 122447
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+16
+Appendix A. Evaluation at 3 GeV/c
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 150
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 3 GeV/c
+= 150
+Geant4
+FastSim.
+Figure A1: Fast Simulation at 3 GeV/c: Fast Simulation of kaons (left column
+of plots), and pions (right column of plots) at 3 GeV/c and various polar angles,
+using Nucleus sampling and fixed temperature.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+17
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+3.0 GeV/c Kaons
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(a) Kaons
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+3.0 GeV/c Pions
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(b) Pions
+Figure A2: Ratio Plots at 3 GeV/c: Ratio plots for kaons (top) and pions
+(bottom), using Nucleus sampling and fixed temperature.
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+3.0 GeV/c Kaons
+True Yield
+Generated Yield
+(a) Kaons
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+3.0 GeV/c Pions
+True Yield
+Generated Yield
+(b) Pions
+Figure A3: Photon Yield Comparison at 3 GeV/c: Comparison of generated
+photon yield for kaons (top) and pions (bottom), using Nucleus sampling and fixed
+temperature.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+18
+Appendix B. Evaluation at 9 GeV/c
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 30
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 95
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Kaon Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Kaon Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 150
+Geant4
+FastSim.
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Y (mm)
+Pion Fast Simulated Hit Pattern
+0
+100
+200
+300
+X (mm)
+0
+50
+100
+150
+200
+Pion Geant4 Hit Pattern
+0
+50
+100
+150
+Time (ns)
+10
+5
+10
+3
+10
+1
+A.U.
+|p| = 9 GeV/c
+= 150
+Geant4
+FastSim.
+Figure B1: Fast Simulation at 9 GeV/c: Fast Simulation of kaons (left column of
+plots), and pions (right column of plots) at 9 GeV/c and various polar angles, using
+Nucleus sampling and fixed temperature.
+Towards Foundation Models for Experimental Readout Systems Combining Discrete and Continuous Data
+19
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+9.0 GeV/c Kaons
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(a) Kaons
+Hit Time (ns)
+10
+6
+10
+5
+10
+4
+10
+3
+10
+2
+Density
+X (mm)
+9.0 GeV/c Pions
+Y (mm)
+0
+50
+100
+150
+Time (ns)
+0.5
+1.0
+1.5
+Ratio
+0
+100
+200
+300
+X (mm)
+0
+50 100 150 200
+Y (mm)
+FastSim.
+Geant4
+(b) Pions
+Figure B2: Ratio Plots at 9 GeV/c: Ratio plots for kaons (top) and pions
+(bottom), using Nucleus sampling and fixed temperature.
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+9.0 GeV/c Kaons
+True Yield
+Generated Yield
+(a) Kaons
+20
+40
+60
+80
+100
+120
+140
+160
+Polar Angle [deg.]
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+Photon Yield [Counts]
+×105
+9.0 GeV/c Pions
+True Yield
+Generated Yield
+(b) Pions
+Figure B3: Photon Yield Comparison at 9 GeV/c: Comparison of generated
+photon yield for kaons (top) and pions (bottom), using Nucleus sampling and fixed
+temperature.

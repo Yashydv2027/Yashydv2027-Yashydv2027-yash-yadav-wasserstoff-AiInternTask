@@ -1,0 +1,864 @@
+PWC-MoE: Privacy-Aware Wireless Collaborative
+Mixture of Experts
+Yang Su∗, Na Yan∗, Yansha Deng∗, and Robert Schober †
+∗Department of Engineering, King’s College London, London, UK
+†Institute for Digital Communication, Friedrich-Alexander-Universit¨at Erlangen-N¨urnberg, Erlangen, Germany
+Abstract—Large language models (LLMs) hosted on cloud
+servers alleviate the computational and storage burdens on
+local devices but raise privacy concerns due to sensitive data
+transmission and require substantial communication bandwidth,
+which is challenging in constrained environments. In contrast,
+small language models (SLMs) running locally enhance privacy
+but suffer from limited performance on complex tasks. To balance
+computational cost, performance, and privacy protection under
+bandwidth constraints, we propose a privacy-aware wireless
+collaborative mixture of experts (PWC-MoE) framework. Specifi-
+cally, PWC-MoE employs a sparse privacy-aware gating network
+to dynamically route sensitive tokens to privacy experts located
+on local clients, while non-sensitive tokens are routed to non-
+privacy experts located at the remote base station. To achieve
+computational efficiency, the gating network ensures that each
+token is dynamically routed to and processed by only one expert.
+To enhance scalability and prevent overloading of specific experts,
+we introduce a group-wise load-balancing mechanism for the
+gating network that evenly distributes sensitive tokens among pri-
+vacy experts and non-sensitive tokens among non-privacy experts.
+To adapt to bandwidth constraints while preserving model perfor-
+mance, we propose a bandwidth-adaptive and importance-aware
+token offloading scheme. This scheme incorporates an importance
+predictor to evaluate the importance scores of non-sensitive
+tokens, prioritizing the most important tokens for transmission
+to the base station based on their predicted importance and the
+available bandwidth. Experiments demonstrate that the PWC-
+MoE framework effectively preserves privacy and maintains
+high performance even in bandwidth-constrained environments,
+offering a practical solution for deploying LLMs in privacy-
+sensitive and bandwidth-limited scenarios.
+Index Terms—Large language model, small language model,
+mixture of experts.
+I. INTRODUCTION
+Large language models (LLMs) have exhibited exceptional
+performance in understanding and generating natural language
+across a wide range of tasks, such as applications in chatbots
+and search engines [1]. However, state-of-the-art LLMs, such
+as ChatGPT, typically have billions of parameters, requiring
+substantial computational and storage resources for deploy-
+ment, which makes it challenging to run them locally on
+client devices. As a result, LLMs are primarily deployed at
+cloud servers, with client devices accessing them remotely.
+While this approach addresses the resource limitations of local
+devices, it introduces significant privacy concerns, as user data
+including sensitive information will need to be transmitted to
+and processed on external servers.
+To address the challenges of resource demand and privacy
+concerns, small language models (SLMs) [2] have been pro-
+posed as an alternative to LLMs. These smaller models are
+often derived from LLMs through techniques such as model
+distillation. For example, the authors in [3] proposed Tiny-
+BERT, a SLM distilled from BERT, which effectively transfers
+knowledge from a large “teacher” model to a smaller “student”
+model. By leveraging such distillation techniques, SLMs can
+significantly reduce computational and storage requirements
+while maintaining competitive performance. However, despite
+these advancements, there remains a noticeable performance
+gap between SLMs and their larger counterparts, particularly
+for complex tasks.
+To address the performance gap between SLMs and LLMs,
+authors in [4] introduced an LLM cascade strategy with multi-
+objective optimization, where user input queries are first pro-
+cessed by a local SLM and routed to a server-side LLM only
+when necessary. This approach takes into account multiple
+factors, such as computational cost, performance, and privacy,
+when determining whether to process a query locally or offload
+it to the server. However, while this method improves privacy
+by allowing some queries to remain on the local device,
+sensitive information may still be sent to the server when the
+local model cannot handle the query. Additionally, the binary
+nature of the decision-making process (local or server-side)
+limits the flexibility and granularity of privacy control.
+Existing cascading systems often overlook bandwidth effi-
+ciency in resource-constrained networks. For example, while
+the LLM cascade strategy in [4] reduces computational costs
+by selectively routing queries, it does not explicitly address
+the communication overhead associated with transmitting data
+between client devices and remote servers. In bandwidth-
+constrained scenarios, the transmission of large amounts of
+data can lead to significant delays, increased costs, and de-
+graded user experience.
+To address these issues, in this paper, we propose a privacy-
+aware wireless collaborative mixture of experts (PWC-MoE)
+framework, which integrates privacy preservation and band-
+width efficiency into the deployment of LLMs in wireless
+collaborative systems. The framework is built upon the MoE
+architecture [5], a scalable and efficient approach for im-
+plementing LLMs that dynamically activates only a subset
+of model parameters for each input, significantly reducing
+computational costs while maintaining high performance. The
+main contributions of this paper are summarized as follows:
+• We propose a PWC-MoE framework that incorporates
+a sparse privacy-aware gating network to dynamically
+arXiv:2505.08719v1  [cs.LG]  13 May 2025
+route tokens to the most appropriate experts. Sensitive
+tokens are processed locally by privacy experts on client
+devices, while non-sensitive tokens are handled by non-
+privacy experts at the remote base station. To ensure
+balanced utilization of privacy and non-privacy experts,
+we introduce a group-wise load balancing strategy that
+enforces uniform token distribution within each expert
+group, improving efficiency and scalability.
+• We propose a bandwidth-adaptive and importance-aware
+token offloading mechanism that leverages an importance
+predictor to evaluate and rank non-sensitive tokens based
+on their contribution to the model’s output. During de-
+ployment, the ranked tokens are dynamically selected
+for transmission according to the available bandwidth,
+ensuring that the most important tokens are sent to the
+base station with higher priority.
+• We conduct experiments using a privacy-aware MoE
+model built upon GPT-2, fine-tuned on the Banking77
+classification dataset. Our results demonstrate that the
+model achieves stable convergence during training, while
+the importance predictor-based token selection method
+outperforms baseline strategies, showing comparable ac-
+curacy with significantly fewer transmitted tokens.
+The rest of the paper is organized as follows: Section
+II introduces the system model; Section III details our
+novel privacy-aware MoE model; Section IV discusses our
+bandwidth-adaptive and importance-aware token offloading
+scheme; Section V presents the numerical results; and finally,
+Section VI concludes the paper.
+II. SYSTEM MODEL
+As shown in Fig. 1, we propose a PWC-MoE framework
+that builds on a novel privacy-aware MoE model and intro-
+duces a collaborative deployment strategy. The framework
+consists of a remote base station and a local client. When
+a query is input to the client, a privacy-aware gating network
+dynamically routes tokens based on their sensitivity. Sensitive
+tokens Ts are processed locally by privacy experts, ensuring
+private information remains on the client. Non-sensitive tokens
+Tns are filtered by selecting a subset of the most important
+tokens, I ⊆Tns, subject to bandwidth constraints. This subset
+I is transmitted to the base station, for processing by non-
+privacy experts. The base station then returns the processed
+results to the client, which aggregates outputs from both local
+privacy experts and remote non-privacy experts to generate the
+final output.
+A. Privacy-Aware MoE Training
+The proposed privacy-aware MoE model is trained at a
+cloud server, as detailed in Section III. The model features
+a sparse privacy-aware gating network that employs a Top-
+1 selection mechanism, dynamically routing each token to
+the most appropriate expert. This mechanism ensures that
+sensitive tokens Ts are directed to privacy experts, while non-
+sensitive tokens Tns are handled by non-privacy experts. To
+address potential imbalances in token distribution and prevent
+Sparse Privay-
+Aware Gating 
+Network 
+Non-privacy 
+Expert 1
+Non-privacy 
+Expert 2
+Aggregation 
+Network
+Step1: Privacy-Aware MoE Training
+Importance 
+Predictor
+Sparse Privay-
+Aware Gating 
+Network 
+Non-privacy 
+Expert 1
+Client 
+Base Station
+Step2: Privay-Aware Wireless Collaborative MoE Deployment
+Privacy 
+Expert 0
+Privacy 
+Expert 0
+Bandwidth 
+Adaptation
+Non-privacy 
+Expert 2
+Uplink
+Downlink
+Aggregation 
+Network
+Limited 
+Bandwidth
+0h
+1h
+2h
+0h
+0h
+0h
+1h
+1h
+1h
+2h
+2h
+2h
+2h
+2h
+1h
+: Sensitive Token
+: Non-Sensitive Token
+1h
+2h
+0h
+0h
+2h
+Output 
+Network
+agg
+h
+Output 
+Network
+agg
+h
+Cloud Server
+Fig. 1: PWC-MoE framework.
+overloading specific experts, the gating network incorporates
+load balancing strategies that distribute sensitive tokens among
+privacy experts and non-sensitive tokens among non-privacy
+experts, effectively managing workloads within each expert
+group. After processing by the selected experts, the outputs are
+passed to an aggregation network, which computes a weighted
+sum of the outputs from all experts. The aggregated result
+is then passed through a task-specific output network, which
+transforms the representation into the desired output format,
+such as class probabilities for classification tasks, or sequences
+for generation tasks.
+B. Collaborative Deployment in the PWC-MoE Framework
+To achieve an optimal balance between computational cost,
+performance, and privacy protection, a collaborative deploy-
+ment strategy is proposed. In this strategy, privacy experts
+from the privacy-aware MoE model are deployed locally on
+clients to process sensitive tokens, while non-privacy experts
+are hosted at the remote base station to handle non-sensitive
+tokens. To address bandwidth constraints, an importance pre-
+dictor is employed to evaluate the significance of non-sensitive
+tokens (described in Section IV), and only a subset of the
+most important tokens I, is transmitted to the base station for
+processing.
+1) Uplink Communication Model: We consider a common
+urban scenario where the client has no line-of-sight (NLoS)
+to the base station [6], the path loss is modeled as
+PL = 32.4 + 20 log10(fc) + 30 log10(dc),
+(1)
+where fc is the carrier frequency, and dc is the distance
+between the client and the base station.
+Incorporating shadowing and small-scale fading effects, the
+overall channel gain hul is given by
+hul = 10−P L/10 ψ χ,
+(2)
+where the large-scale shadowing effect is modeled as
+ψ = 10ξ/10,
+ξ ∼N(0, σ2),
+(3)
+and the small-scale rayleigh fading component is
+χ = |η|2,
+with η ∼CN(0, 1).
+(4)
+The Signal-to-Noise Ratio (SNR) for the client is given by:
+SNRul = Phul
+N0Wc
+,
+(5)
+where P is the transmit power of the client, N0 is the noise
+power spectral density (PSD), and Wc is the limited bandwidth
+allocated to client.
+The uplink transmission rate Rul for the client can be
+expressed as:
+Rul = Wc · log2
+ 1 + SNRul
+.
+(6)
+Each token requires btoken bits for representation. Given
+the uplink communication time T ul, the maximum number of
+tokens mul that can be transmitted is given by:
+mul = T ul · Rul
+btoken
+.
+(7)
+2) Downlink Communication Model:
+In the proposed
+framework, the processed results returned by the base station
+maintain the same dimensions as the input token embeddings,
+as the expert processing does not modify the size of the
+token embeddings. Given the base station’s significantly higher
+transmission power and sufficient resources, we assume that
+the downlink communication system can reliably transmit
+these results.
+C. Problem Formulation
+The objective of the proposed PWC-MoE framework is to
+maximize the overall system performance (e.g., classification
+accuracy) by selecting the most important non-sensitive tokens
+for uplink transmission to the base station, where they are
+processed by non-privacy experts. Meanwhile, the number of
+uploaded tokens must not exceed the bandwidth constraints.
+This can be formulated as the following optimization problem:
+max
+I⊆Tns f(Ts, I)
+(8)
+s.t.
+|I| ≤mul,
+(9)
+where Ts represents the set of sensitive tokens processed
+locally by privacy experts on the client. Tns represents the
+set of non-sensitive tokens, from which a subset I is selected
+for uplink transmission to the base station. |I| denotes the
+number of tokens in the subset I. mul is the maximum number
+of tokens that can be transmitted under the uplink bandwidth
+constraint. f(Ts, I) represents the system performance metric,
+which evaluates the contribution of both sensitive tokens Ts
+(processed locally) and the selected non-sensitive tokens I
+(processed at the base station) to the final prediction accuracy
+or confidence of the model.
+III. PRIVACY-AWARE MIXTURE OF EXPERTS
+In this section, we introduce our novel privacy-aware MoE
+model, along with the identification of privacy tokens, the
+design of the sparse privacy-aware gating network, and the
+loss functions employed for optimization.
+A. Identification of Privacy Tokens
+Privacy tokens are defined as tokens that represent sensitive
+information such as names, addresses, phone numbers, dates of
+birth, or other personally identifiable information (PII). In this
+work, we will use existing methods to identify privacy tokens,
+including rule-based approaches (e.g., regular expressions) or
+deep learning-based named entity recognition (NER) models
+[7]. The input sequence is represented as
+x = [x1, x2, . . . , xL],
+(10)
+where xi represents the ith token in the sequence, and L is
+the total length of the sequence. After passing through the
+embedding layer, the sequence is transformed into embeddings
+h = [h1, h2, . . . , hL],
+(11)
+where hi ∈Rd is the embedding of the ith token, and d is the
+dimensionality of the embedding space.
+A binary privacy mask m = [m1, m2, . . . , mL] is con-
+structed to indicate whether tokens in the input sequence x
+are sensitive. The mask is defined as
+mi =
+(
+1,
+if xi is sensitive,
+0,
+otherwise.
+(12)
+This mask ensures that privacy-sensitive operations are
+applied exclusively to the relevant tokens.
+B. Sparse Privacy-Aware Gating Network
+To ensure that privacy tokens and non-privacy tokens are
+routed to different sets of experts in a way that is both
+efficient and scalable, we introduce a sparse privacy-aware
+gating mechanism.
+1) Gating Logits Computation: For each token embedding
+hi ∈Rd, the gating logits gi ∈RK are computed as
+gi = Wghi + bg,
+(13)
+where Wg ∈RK×d is the gating weight matrix, bg ∈RK is
+the gating bias vector, and K is the total number of experts.
+2) Privacy Isolation Mechanism: Let the first Kp experts
+be designated as privacy experts, and the remaining Knp =
+K −Kp experts as non-privacy experts. For each token xi,
+based on the binary privacy mask mi ∈{0, 1}, the gating
+logits gi are adjusted as follows:
+g′
+i =
+(
+[gi[: Kp], −∞, . . . , −∞],
+if mi = 1,
+[−∞, . . . , −∞, gi[Kp :]],
+if mi = 0.
+(14)
+Here, for sensitive tokens, only the first Kp components of
+gi are retained, corresponding to the privacy experts, while
+the remaining Knp components are set to −∞. Similarly, for
+non-sensitive tokens, only the last Knp components of gi are
+retained, corresponding to the non-privacy experts, while the
+first Kp components are set to −∞.
+3) Gumbel-Softmax Operation: After obtaining the modi-
+fied gating logits g′
+i, we apply the Gumbel-Softmax operation
+[8] to compute the expert selection probabilities for token xi.
+Specifically, the jth component of the output zi ∈RK is
+computed as:
+zi,j =
+exp
+ (g′
+i,j + γj)/τ
+
+PK
+k=1 exp
+
+(g′
+i,k + γl)/τ
+,
+(15)
+where g′
+i,j is the jth component of the modified gating logits
+g′
+i, each γj ∼Gumbel(0, 1) is independently sampled noise,
+and τ > 0 is the temperature parameter that controls the
+smoothness of the output distribution.
+The output zi =
+[zi,1, zi,2, . . . , zi,K] is a probability vector, where zi,j ∈[0, 1]
+and PK
+j=1 zi,j = 1. To enforce discrete selection, we apply
+hard Gumbel-Softmax with the straight-through estimator: the
+output is a one-hot vector
+oi = one hot
+
+arg max
+j
+ g′
+i,j + γj
+
+,
+(16)
+while gradients are computed from the continuous zi to
+maintain differentiability.
+C. Weighted Aggregation Network
+After each token is processed by its assigned expert, the
+outputs from all tokens are collected into a sequence
+h′ = [h′
+1, h′
+2, . . . , h′
+L],
+(17)
+where h′
+i ∈Rd is the output representation of the ith token
+after being processed by routed expert.
+To produce a unified representation for the entire sequence,
+we perform a weighted aggregation of the token outputs. The
+process is divided into the following steps:
+1) Weight Calculation: For each token output h′
+i, a weight
+αi is computed to determine its contribution to the final
+aggregated representation:
+αi =
+exp
+ wT h′
+i
+
+PL
+l=1 exp (wT h′
+l)
+,
+(18)
+where w ∈Rd is a learnable parameter vector, and αi ∈[0, 1]
+ensures PL
+i=1 αi = 1.
+2) Weighted Aggregation: Using the computed weights αi,
+the token outputs are aggregated into a single representation:
+hagg =
+L
+X
+i=1
+αih′
+i.
+(19)
+3) Normalization and Final Transformation: The aggre-
+gated representation hagg is optionally normalized using Lay-
+erNorm, producing ˜hagg. The normalized representation is
+then passed through a fully connected layer with a softmax
+activation function, which outputs a probability distribution
+over the possible outcomes for the specific task.
+D. Loss Functions
+To optimize the privacy-aware MoE model, we define two
+key loss functions: the task loss and the group-wise load
+balancing loss. These losses ensure that the model achieves
+high performance on the primary task while maintaining
+balanced utilization of experts within the privacy and non-
+privacy groups.
+1) Task Loss: The task loss, denoted as Ltask, measures the
+model’s performance on the primary task. This loss is task-
+specific and can be adapted to different objectives, such as
+classification or sequence generation.
+2) Group-Wise Load Balancing Loss: To ensure balanced
+expert utilization while preserving the privacy/non-privacy
+group separation, we introduce a group-wise load balancing
+loss. This loss operates separately within each expert group,
+enforcing uniform token distribution among privacy experts
+for sensitive tokens and among non-privacy experts for non-
+sensitive tokens, thereby maintaining both group isolation and
+computational efficiency.
+To account for the separation of sensitive and non-sensitive
+tokens, we compute the expert usage separately for sensitive
+and non-sensitive tokens. Let Lp and Lnp denote the number of
+sensitive and non-sensitive tokens, respectively. The average
+usage of Kp privacy experts and non-privacy experts Knp is
+given by:
+up = 1
+Lp
+L
+X
+i=1
+zi[: Kp],
+unp =
+1
+Lnp
+L
+X
+i=1
+zi[Kp :],
+(20)
+where up ∈RKp represents the usage of privacy experts, and
+unp ∈RKnp represents the usage of non-privacy experts.
+The group-wise load balancing loss encourages uniform
+usage of experts within each group:
+Lp =
+Kp
+X
+j=1
+
+up,j −1
+Kp
+2
+, Lnp =
+Knp
+X
+j=1
+
+unp,j −
+1
+Knp
+2
+.
+(21)
+The total group-wise load balancing loss Llb is then given
+by:
+Llb = Lp + Lnp.
+(22)
+3) Total Loss: The total loss is a weighted sum of the task
+loss and the group-wise load balancing loss:
+Ltotal = Ltask + λLBLlb,
+(23)
+where λLB is a hyperparameter that controls the relative
+importance of the load balancing loss.
+IV. BANDWIDTH-ADAPTIVE AND IMPORTANCE-AWARE
+TOKEN OFFLOADING
+This section presents a bandwidth-adaptive and importance-
+aware token offloading scheme designed to address the chal-
+lenge of transmitting non-sensitive tokens Tns under bandwidth
+constraints within the PWC-MoE framework. The proposed
+scheme incorporates an importance predictor, a neural network
+that estimates the importance score of each token in Tns. Based
+on these scores, a subset of the most important tokens I is
+selected for transmission to the remote base station, thereby
+adapting to the available bandwidth.
+A. Data Collection for Importance Prediction
+To train the importance predictor, we construct a dataset
+where the goal is to predict the importance scores α =
+[α1, α2, . . . , αL] for each token in the input sequence. These
+scores, as defined in (18), represent the relative contribution
+of each token to the model’s final output. Each token is
+represented by its embedding h = [h1, h2, . . . , hL], where
+hi ∈Rd. The ground truth importance scores α are obtained
+from the weighted aggregation network of the PWC-MoE
+model. The resulting dataset consists of input-output pairs
+{(hi, αi)}L
+i=1, where hi is the token embedding and αi is the
+corresponding importance score.
+B. Architecture of the Importance Predictor
+The importance predictor takes token embeddings h =
+[h1, h2, . . . , hL] as input and predicts the corresponding im-
+portance scores ˆα. Its architecture includes an input layer that
+projects token embeddings to a lower-dimensional space to
+reduce computational complexity, a multi-layer transformer
+encoder that captures both local and long-range contextual
+relationships between tokens using multi-head self-attention
+mechanisms, and an output scoring layer with softmax nor-
+malization that produces normalized importance scores.
+C. Training Methodology
+The importance predictor is trained to minimize the
+Kullback-Leibler (KL) Divergence between the predicted im-
+portance scores ˆα and the ground truth α. The KL divergence
+loss is defined as:
+LKL =
+L
+X
+i=1
+αi log αi
+ˆαi
+,
+(24)
+where L is the length of each sequence, αi is the ground truth
+importance score for the ith token, and ˆαi is the predicted
+importance score for the same token.
+V. NUMERICAL RESULTS
+In our experiments, we develop a privacy-aware MoE model
+by augmenting the GPT-2 [9] with task-specific feedforward
+networks. In this setup, GPT-2 is used as a pre-trained
+backbone and is not updated during training. The extended
+architecture incorporates 8 expert modules (2 privacy experts
+and 6 non-privacy experts), where each expert is implemented
+as a two-layer fully-connected network. For training and evalu-
+ation, we use the Banking77 intent classification dataset [10],
+which contains 10,003 training examples and 3,080 testing
+examples. The model is fine-tuned on this dataset to adapt
+to the task-specific requirements. In our setup, any numerical
+tokens (e.g., account numbers or phone numbers) appearing
+in the dataset are treated as sensitive tokens and are handled
+exclusively by the privacy experts. The wireless simulation
+parameters are detailed in Table I.
+TABLE I: Wireless system parameters
+Parameter
+Value
+Parameter
+Value
+Carrier Freq. fc
+2.4 GHz
+Bandwidth Wc
+10 MHz
+Commu. Time T ul
+100 ms
+Client Tx Power P
+23 dBm
+PSD N0
+-174 dBm/Hz
+Std. Dev. σ
+7.8 dB
+0
+20
+40
+60
+80
+100
+Training Round
+20
+40
+60
+80
+Accuracy (%)
+Privacy-aware MoE
+Fig. 2: Accuracy with training rounds.
+Fig. 2 illustrates the accuracy convergence of the privacy-
+aware MoE model during the training process at the server
+side, reflecting the model’s performance when processing all
+tokens. The x-axis represents the training rounds, while the y-
+axis shows the accuracy on the test set. The model’s accuracy
+improves steadily with the number of training rounds and
+converges around the 40th round, eventually stabilizing at
+approximately 78% accuracy. This indicates that the model
+effectively adapts to the task requirements during training.
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+Average Number of Tokens Uploaded
+0
+20
+40
+60
+80
+100
+Accuracy (%)
+53.6
+72.5
+76.3
+77.1
+77.9
+77.9
+78.2
+78.2
+78.0
+78.3
+9.6
+18.1
+25.9
+34.6
+42.2
+49.0
+55.5
+60.8
+64.3
+67.4
+Importance Predictor based Selection
+Random Selection
+Fig. 3: Accuracy comparison with different numbers of
+uploaded tokens.
+Fig. 3 illustrates the accuracy comparison of the PWC-MoE
+framework under different token selection schemes, where
+the x-axis represents the number of tokens transmitted per
+example in the test set, constrained by the wireless channel
+conditions. The red bars represent the performance of the
+importance predictor-based selection method, while the blue
+bars correspond to the random selection method. It can be
+55
+60
+65
+70
+75
+Target Accuracy (%)
+0
+2
+4
+6
+8
+10
+12
+14
+16
+Average Number of Tokens Required
+1.07
+1.34
+1.60
+1.86
+2.67
+6.74
+8.02
+9.23
+10.88
+16.03
+Importance Predictor based Selection
+Random Selection
+(a)
+10
+50
+100
+150
+200
+Client-to-Base Station Distance (m)
+0.0
+2.5
+5.0
+7.5
+10.0
+12.5
+15.0
+17.5
+20.0
+Average Number of Tokens
+5.0
+5.0
+5.0
+4.7
+3.5
+19.4
+10.4
+6.6
+4.7
+3.5
+19.4
+10.4
+6.6
+4.7
+3.5
+Tokens Required (Importance)
+Tokens Required (Random)
+Maximum Allowable Uplink Tokens
+Accuracy (Importance)
+Accuracy (Random)
+0
+20
+40
+60
+80
+100
+Maximum Accuracy (%)
+77.6
+77.6
+77.6
+77.6
+76.9
+76.4
+69.0
+53.4
+40.0
+30.3
+(b)
+Fig. 4: (a) The number of tokens required to meet the target accuracy. (b) Minimum number of tokens required to achieve
+maximum accuracy.
+observed that the importance predictor-based method consis-
+tently outperforms the random selection method for the same
+number of uploaded tokens. Specifically, the accuracy of the
+importance predictor-based method reaches 77.9% when 5
+tokens are uploaded, and beyond this point, the accuracy sta-
+bilizes around 78% with minimal fluctuations. In contrast, the
+random selection method shows a linear increase in accuracy
+as the number of uploaded tokens increases, but even with 10
+tokens, it only achieves an accuracy of 67.4%, which is still
+lower than the performance of the importance predictor-based
+method. This demonstrates the efficiency and effectiveness of
+the importance predictor-based selection in utilizing limited
+transmission resources.
+Fig. 4 (a) illustrates the average number of tokens required
+per example in the test set to achieve the target accuracy
+for both the importance predictor-based selection method and
+the random selection method. Across all accuracy levels, the
+importance predictor-based method consistently requires fewer
+tokens to achieve the same target accuracy compared to the
+random selection method. Fig. 4 (b) illustrates the minimum
+required tokens for each selection method to achieve their
+respective maximum accuracy under varying client-to-base
+station distances, where the maximum allowable uplink tokens
+decrease as the distance increases (gray bars). Both selection
+methods are constrained by this token limit. The random
+selection method typically requires close to the maximum
+allowable tokens to reach its best performance, while the
+importance predictor-based method achieves comparable or
+higher accuracy with fewer tokens.
+VI. CONCLUSION
+In this paper, we proposed a PWC-MoE framework to
+address the challenges of privacy preservation, performance
+optimization, and bandwidth efficiency in deploying LLMs.
+The framework dynamically routes sensitive tokens to local
+privacy experts while offloading non-sensitive tokens to remote
+experts, ensuring both privacy and computational efficiency.
+We further proposed bandwidth-adaptive and importance-
+aware token offloading mechanism prioritizes the transmission
+of critical tokens based on their importance scores and avail-
+able bandwidth, effectively reducing communication costs.
+Experiments demonstrated that the framework achieves high
+accuracy, efficient resource utilization, and adaptability to
+varying bandwidth conditions, making it a practical solu-
+tion for deploying LLMs in privacy-sensitive and resource-
+constrained environments.
+REFERENCES
+[1] W. X. Zhao, K. Zhou, J. Li, T. Tang, X. Wang, Y. Hou, Y. Min, B. Zhang,
+J. Zhang, Z. Dong et al., “A survey of large language models,” arXiv
+preprint arXiv:2303.18223, Mar. 2023.
+[2] C. Van Nguyen, X. Shen, R. Aponte, Y. Xia, S. Basu, Z. Hu, J. Chen,
+M. Parmar, S. Kunapuli, J. Barrow et al., “A survey of small language
+models,” arXiv preprint arXiv:2410.20011, Oct. 2024.
+[3] X. Jiao, Y. Yin, L. Shang, X. Jiang, X. Chen, L. Li, F. Wang, and Q. Liu,
+“TinyBERT: Distilling BERT for natural language understanding,” in
+Find. Assoc. Comput. Linguist.: EMNLP 2020, Nov. 2020, pp. 4163–
+4174.
+[4] K. Zhang, L. Peng, C. Wang, A. Go, and X. Liu, “Llm cas-
+cade
+with
+multi-objective
+optimal
+consideration,”
+arXiv
+preprint
+arXiv:2410.08014, Oct. 2024.
+[5] W. Cai, J. Jiang, F. Wang, J. Tang, S. Kim, and J. Huang, “A survey
+on mixture of experts in large language models,” IEEE Trans. Knowl.
+Data Eng., Mar. 2025.
+[6] 3rd Generation Partnership Project (3GPP), “Technical specification
+group radio access network; study on channel model for frequencies
+from 0.5 to 100 ghz (release 16),” 3GPP TR 38.901 V16.1.0, Dec. 2019.
+[7] A. Akbik, T. Bergmann, and R. Vollgraf, “Pooled contextualized embed-
+dings for named entity recognition,” in Proc. Conf. North Am. Chapter
+Assoc. Comput. Linguist. (NAACL), Jun. 2019, pp. 724–728.
+[8] E. Jang, S. Gu, and B. Poole, “ Categorical Reparameterization with
+Gumbel-Softmax ,” in Proc. Intern. Conf. Learn. Represent. (ICLR),
+Apr. 2017.
+[9] A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever et al.,
+“Language models are unsupervised multitask learners,” OpenAI blog,
+vol. 1, no. 8, p. 9, Feb. 2019.
+[10] I. Casanueva, T. Temˇcinas, D. Gerz, M. Henderson, and I. Vuli´c,
+“Efficient intent detection with dual sentence encoders,” in Proc. 2nd
+Worksh. Nat. Lang. Process. Convers. AI (NLP4ConvAI), Jul. 2020, pp.
+38–45.

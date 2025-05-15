@@ -1,0 +1,1716 @@
+arXiv:2505.08639v1  [eess.SY]  13 May 2025
+1
+Robust Indoor Localization via Conformal Methods and Variational
+Bayesian Adaptive Filtering
+Zhiyi Zhou, Dongzhuo Liu*, Songtao Guo, Senior Member, IEEE, and Yuanyuan Yang, Fellow, IEEE
+Abstract—Indoor localization is critical for IoT applications,
+yet challenges such as non-Gaussian noise, environmental in-
+terference, and measurement outliers hinder the robustness
+of traditional methods. Existing approaches, including Kalman
+ﬁltering and its variants, often rely on Gaussian assumptions
+or static thresholds, limiting adaptability in dynamic environ-
+ments. This paper proposes a hierarchical robust framework
+integrating Variational Bayesian (VB) parameter learning, Hu-
+ber M-estimation, and Conformal Outlier Detection (COD) to
+address these limitations. First, VB inference jointly estimates
+state and noise parameters, adapting to time-varying uncer-
+tainties. Second, Huber-based robust ﬁltering suppresses mild
+outliers while preserving Gaussian efﬁciency. Third, COD pro-
+vides statistical guarantees for outlier detection via dynamically
+calibrated thresholds, ensuring a user-controlled false alarm
+rate. Theoretically, we prove the Semi-positive Deﬁniteness of
+Huber-based Kalman ﬁltering covariance and the coverage of
+sliding window conformal prediction. Experiments on geomag-
+netic ﬁngerprint datasets demonstrate signiﬁcant improvements:
+ﬁngerprint matching accuracy increases from 81.25% to 93.75%,
+and positioning errors decrease from 0.62–6.87 m to 0.03–0.35 m.
+Comparative studies further validate the framework’s robustness,
+showing consistent performance gains under non-Gaussian noise
+and outlier conditions.
+Index Terms—Indoor localization, variational Bayesian infer-
+ence, conformal prediction, Huber M-estimation, geomagnetic
+ﬁngerprinting.
+I. INTRODUCTION
+I
+NDOOR localization plays a pivotal role in enabling a
+wide range of applications, from autonomous robotics
+and wearable devices to smart buildings within the Internet
+of Things (IoT) ecosystem. As a foundational technology,
+accurate and reliable indoor localization is essential for ap-
+plications such as navigation, asset tracking, and environmen-
+tal monitoring. However, the inherent challenges of indoor
+environments—such as severe signal degradation caused by
+multipath effects and dynamic interference—complicate the
+design of robust localization systems [1], [2]. These factors
+introduce substantial measurement noise, making it difﬁcult to
+ensure both the accuracy and reliability of indoor positioning.
+Despite signiﬁcant progress, current indoor localization
+methods are hindered by three major limitations:
+• Reliance on simplifying Gaussian noise assumptions,
+which do not hold in many practical scenarios.
+• Fixed robustness thresholds that lack adaptability in dy-
+namic environments.
+• Absence of rigorous uncertainty quantiﬁcation for robust
+decision-making.
+Preprint.
+Traditional ﬁltering approaches, such as the Kalman Filter
+(KF) and its nonlinear variants, are optimal only under restric-
+tive assumptions of Gaussian noise and linear system dynamics
+[3]. Although the Unscented Kalman Filter (UKF) improves
+handling of nonlinearities through the unscented transform,
+it remains vulnerable to non-Gaussian noise and outliers.
+Adaptive methods, such as variational Bayesian (VB) ﬁlters
+[4] and Huber M-estimation [5], partially mitigate these issues
+by addressing time-varying noise and suppressing moderate
+outliers. However, VB ﬁlters introduce high computational
+overhead, and Huber M-estimation’s ﬁxed threshold is not
+robust to dynamically changing environments. While multi-
+sensor fusion can improve accuracy, it often inherits distribu-
+tional assumptions and model errors [6].
+To address these limitations, we propose a novel hierarchical
+framework that combines variational Bayesian learning, Huber
+robust ﬁltering, and Conformal Outlier Detection (COD). This
+framework, built on the principles of Conformal Prediction
+(CP), offers a robust solution to the challenges of adaptability
+and reliability in indoor positioning tasks. By leveraging con-
+formal inference, our approach provides statistically rigorous
+conﬁdence intervals to detect and mitigate the impact of
+outliers in real-time data, without making assumptions about
+the underlying noise distribution. This adaptability allows the
+framework to operate effectively in both Gaussian and non-
+Gaussian environments.
+At the core of Conformal Prediction is the ability to
+construct prediction sets that reﬂect the uncertainty in the
+model’s outputs. Speciﬁcally, CP quantiﬁes non-conformity
+scores to identify outliers—samples that deviate signiﬁcantly
+from the model’s expected behavior. In the context of indoor
+localization, this capability is essential for detecting anomalies
+caused by noisy or anomalous signal patterns. By incorpo-
+rating COD, our framework can dynamically adjust the size
+of the prediction set based on model conﬁdence, offering a
+transparent view of the uncertainty in each prediction.
+Our contributions are as follows:
+• Adaptive Parameter Learning: We propose a VB-UKF
+hybrid ﬁlter that simultaneously estimates state variables
+and noise covariances, enabling real-time adaptation to
+changing uncertainties.
+• Dual-Layer Outlier Detection: We integrate Huber M-
+estimation to suppress mild outliers and COD with
+sliding-window calibration to provide statistical guaran-
+tees (coverage ≥1 −α) for detecting severe anomalies.
+• Theoretical Rigor: We provide proofs of semi-positive
+deﬁniteness for Huber-weighted covariance matrices and
+ﬁnite-sample coverage bounds for non-exchangeable time
+series.
+2
+Experiments on geomagnetic ﬁngerprint datasets demon-
+strate the effectiveness of our framework. Our method im-
+proves ﬁngerprint matching accuracy from 81.25% to 93.75%,
+and reduces positioning errors from 0.62–6.87 m to 0.03–0.35
+m. Additionally, the framework remains robust in the pres-
+ence of non-Gaussian noise, achieving 95% outlier detection
+precision with controlled false alarms.
+The remainder of this paper is structured as follows: Sec-
+tion II reviews related work on localization, ﬁltering, and
+uncertainty quantiﬁcation. Section III presents the details
+of our proposed framework. Sections IV– V describe the
+experimental setup and results, followed by conclusions in
+Section V.
+II. RELATED WORK
+A. Indoor Localization Technologies
+Indoor positioning technologies primarily include Wi-Fi [7],
+Bluetooth [8], [9], geomagnetic [10], Inertial Measurement
+Units (IMU) [11], and Ultra-Wideband (UWB) [12]. Wi-
+Fi and Bluetooth-based methods rely on ﬁxed infrastructure,
+facing challenges in terms of coverage, maintenance costs, and
+security, which limit their widespread adoption [13]. UWB
+technology, with its advantages of low power consumption,
+long transmission range, and high data rate, has been widely
+applied in inertial measurement and attitude recognition. Geo-
+magnetic and IMU-based methods, leveraging built-in sensors
+for passive positioning without external signals, exhibit high
+autonomy, making them promising solutions for achieving
+high-precision and cost-effective indoor positioning. However,
+while inertial navigation systems offer strong autonomy, their
+position and velocity errors accumulate rapidly over time. Sim-
+ilarly, geomagnetic sensors suffer from limited measurement
+accuracy and are susceptible to interference from currents and
+other magnetic ﬁelds, leading to measurement anomalies.
+B. Adaptive and Robust Filtering
+Single-sensor technologies face inherent limitations. Al-
+though multi-sensor data fusion can signiﬁcantly improve
+positioning accuracy, it introduces modeling errors and typ-
+ically assumes known noise distributions. To address these
+challenges, researchers have developed various adaptive and
+robust ﬁltering techniques. Adaptive ﬁlters, such as fading
+memory ﬁlters [14], interactive multiple model ﬁlters [15],
+variational Bayesian (VB)-based ﬁlters [4], and Gaussian sum
+ﬁlters [16], excel in addressing modeling errors due to their
+strong recursive reasoning capabilities. However, these ﬁlters
+often perform poorly when measurement data contain outliers,
+as their estimates are easily contaminated, leading to error
+accumulation. Robust ﬁlters, such as those based on Huber’s
+M-estimation and federated ﬁlters [17], are designed to handle
+large measurement errors and outliers.
+For instance, Li et al. [18] proposed an adaptive ﬁlter
+combining Gaussian-Newton iteration and VB approximation,
+capable of addressing both modeling errors and outliers in
+non-Gaussian scenarios. Liu et al. [19] introduced a robust
+variational Bayesian cubature Kalman ﬁlter (VBCKF) by
+incorporating the maximum correntropy criterion, which im-
+proved robustness to some extent. Davari et al. [20] combined
+VB ﬁlters with hybrid artiﬁcial neural networks (ANN) to
+enable real-time outlier detection, but the high computational
+complexity and resource requirements limit their applicability
+in real-time scenarios. Yang et al. [21] proposed an adaptive
+robust ﬁltering framework based on generalized maximum
+likelihood estimation (GM estimation) and VB methods,
+integrating the centered error entropy (CEE) criterion into
+the framework to develop the VBCEECKF algorithm. This
+approach enhanced robustness against outliers but required
+complex iterative computations, increasing deployment costs.
+Moreover, most existing ﬁltering algorithms are optimized for
+speciﬁc noise distributions, making it challenging to maintain
+robustness across diverse noise settings.
+C. Uncertainty Quantiﬁcation and Outlier Detection
+Uncertainty quantiﬁcation (UQ) in localization systems has
+evolved signiﬁcantly over the past decade. Early approaches
+primarily relied on probabilistic methods such as entropy
+estimation and Bayesian credible intervals, which derive un-
+certainty bounds from model outputs (e.g., softmax probabil-
+ities) [22]. While these methods provide intuitive uncertainty
+representations, their calibration often fails in practice due to
+overﬁtting or distributional mismatches, leading to overconﬁ-
+dent or overly conservative predictions [23].
+The emergence of conformal prediction (CP) marked a
+paradigm shift by offering distribution-free guarantees for
+uncertainty quantiﬁcation. Unlike traditional methods, CP
+constructs prediction sets with rigorous coverage guarantees
+(1−α) without requiring explicit likelihood models [23]. This
+model-agnostic framework has been widely adopted in clas-
+siﬁcation tasks, where it quantiﬁes uncertainty by evaluating
+the ”non-conformity” of new observations against a calibra-
+tion set. However, its direct application to time-series data—
+common in localization systems—faces inherent challenges
+due to violated exchangeability assumptions. Recent advances
+address this limitation through sliding window calibration [24]
+and sequential conformal inference [25], which adaptively
+adjust thresholds to temporal dependencies while maintaining
+coverage guarantees. For instance, Xu et al. [25] demonstrated
+theoretically grounded prediction intervals for non-stationary
+time series, achieving robust performance in both simulated
+and real-world navigation tasks.
+In parallel, CP has been tailored to address outlier detec-
+tion in dynamic environments. Strawn et al. [26] integrated
+CP with reinforcement learning to design safety ﬁlters for
+collision avoidance, reducing collision rates by 80% in robotic
+navigation. Similarly, Yang et al. [27] leveraged CP to quantify
+perception uncertainty in LiDAR-based autonomous systems,
+achieving 93% safety rates under stochastic sensor noise.
+These works highlight CP’s versatility in bridging uncertainty
+quantiﬁcation with real-time decision-making.
+Beyond robotics, CP has spurred innovations in sensor
+fusion and optimization. Garcia et al. [28] proposed multi-view
+conformal models, showing superior coverage performance
+over single-sensor baselines in heterogeneous environments.
+3
+Meanwhile, Kim et al. [29] addressed model misspeciﬁcation
+in Bayesian optimization via localized conformal calibration,
+outperforming traditional Gaussian process-based methods in
+engineering design tasks.
+Despite these advancements, critical gaps persist in adapting
+CP to resource-constrained IoT localization systems. Existing
+studies often assume centralized computation or static envi-
+ronments, overlooking the challenges of real-time calibration
+in dynamic indoor settings with limited sensor bandwidth.
+Furthermore, while methods like sliding window CP [24] relax
+i.i.d. assumptions, their theoretical guarantees for non-linear
+state-space models—central to geomagnetic localization—
+remain underdeveloped.
+III. SYSTEM DESIGN
+A. Geomagnetic characteristics and data preprocessing
+Geomagnetic matching (MFM), as a passive positioning
+technology, utilizes the data of the Earth’s magnetic ﬁeld
+intensity and combines ﬁngerprint matching for positioning.
+In this section, we collect geomagnetic data from different in-
+door locations to establish a geomagnetic ﬁngerprint database,
+which is the main task in the ofﬂine phase. Then, we analyze
+its characteristics and determine the feasibility of using this
+technology for indoor positioning.
+Liu et al. [30] pointed out that under the same path, the
+geomagnetic ﬁngerprint data has a relatively high matching
+accuracy, that is, the collected geomagnetic signal time series
+has a relatively high similarity. Therefore, the path matching
+problem can be transformed into a time series matching
+problem. By collecting the geomagnetic intensity data of the
+same path from May to August 2024, we observed that the
+geomagnetic characteristics of the collected data remained
+consistent over a long period of time, even though the user
+heights and walking speeds were different, as shown in Fig-
+ure 1.
+0
+500
+1000
+1500
+2000
+2500
+3000
+3500
+4000
+Times
+200
+400
+600
+800
+1000
+1200
+1400
+1600
+Geomagnetic Strength
+May 13  v=1.0
+Jun 13  v=1.0
+Jul 23  v=1.7
+Aug 23  v=1.7
+Fig. 1. Geomagnetic strength characteristics.
+It is important to note that the geomagnetic data collection
+using geomagnetic sensors is performed in a carrier coordinate
+system (CCS), where the x-, y-, and z-axes correspond to the
+directions of the device’s right side, front, and top, respec-
+tively. Therefore, analyzing the data collected in the carrier
+coordinate system is meaningless. It is necessary to convert the
+three-axis geomagnetic data into a global coordinate system
+(GCS). Let the magnetic ﬁeld strength vector in the sensor’s
+coordinate system be denoted as MCCS. To transform it
+into the global coordinate system MGCS, we apply three
+Euler angle-based rotation matrices, corresponding to rotations
+around the x-, y-, and z-axes:
+Rx(θroll) =
+
+
+1
+0
+0
+0
+cos(θroll)
+−sin(θroll)
+0
+sin(θroll)
+cos(θroll)
+
+
+(1)
+Ry(θpitch) =
+
+
+cos(θpitch)
+0
+sin(θpitch)
+0
+1
+0
+−sin(θpitch)
+0
+cos(θpitch)
+
+
+(2)
+Rz(θyaw) =
+
+
+cos(θyaw)
+−sin(θyaw)
+0
+sin(θyaw)
+cos(θyaw)
+0
+0
+0
+1
+
+
+(3)
+Besides, geomagnetic ﬁngerprint data exhibits strong lo-
+cation dependence and is susceptible to ﬂuctuations due to
+local environmental changes. In contrast, inertial sensor data
+tends to be stable over short periods but accumulates errors
+over time. By fusing these two data types, we can effectively
+leverage the global characteristics of geomagnetic ﬁngerprints
+and the local characteristics of inertial data. This fusion sig-
+niﬁcantly reduces the errors caused by inertial drift, achieving
+high-accuracy location estimation.
+B. Variational Bayesian Adaptive Filtering Framework
+In the online phase, the system continuously updates its
+state estimate through real-time processing of Received Signal
+Strength Indicator (RSSI) ﬁngerprints, combining variational
+Bayesian learning with unscented transform to achieve robust
+nonlinear ﬁltering. We ﬁrst formalize the discrete-time state-
+space model:
+xk = f(xk−1) + wk−1,
+wk−1 ∼N(0, Qk−1)
+(4)
+zk = h(xk) + vk,
+vk ∼N(0, Rk)
+(5)
+where f(·) and h(·) are nonlinear state transition and obser-
+vation functions. Assuming both the process noise wk and
+the measurement noise vk are zero-mean Gaussian variables
+simpliﬁes the construction of the model. However, in practical
+scenarios, the measurement noise covariance matrix is often
+unknown or time-varying, which can signiﬁcantly affect the
+accuracy of the estimates and reduce the system’s robustness
+to outliers. As a result, Kalman ﬁltering and its variants, which
+are effective for solving simpliﬁed models, may no longer
+provide accurate solutions in such cases.
+To address these challenges, this paper focuses on adaptive
+ﬁltering techniques that combine the Variational Bayesian
+(VB) approximation with the Adaptive Unscented Kalman Fil-
+ter (AUKF), a method that has been demonstrated to enhance
+4
+adaptability and robustness in [18]. The speciﬁc steps of this
+framework are as follows:
+1) Sigma Point Generation: For state vector x ∈Rn,
+generate 2n + 1 sigma points:
+
+
+
+
+
+
+
+ξ0,k−1 = ˆxk−1
+ξi,k−1 = ˆxk−1 +
+p
+(n + κ)Pk−1
+
+i ,
+i = 1, . . . , n
+ξi,k−1 = ˆxk−1 −
+p
+(n + κ)Pk−1
+
+i−n ,
+i = n + 1, . . . , 2n
+(6)
+where κ controls sigma point spread.
+2) State Prediction:: Transform sigma points via f(·):
+ξi,k = f(ξi,k−1),
+i = 0, . . . , 2n
+(7)
+The predicted mean and covariance:
+ˆxk|k−1 =
+2n
+X
+i=0
+ω(m)
+i
+ξi,k,
+(8)
+Pk|k−1 =
+2n
+X
+i=0
+ω(c)
+i (ξi,k −ˆxk|k−1)(·)T + Qk−1
+(9)
+with weights ω(m)
+i
+, ω(c)
+i
+determined by κ.
+3) Variational Parameter Prediction: For measurement
+noise covariance Rk ∼IW(vk, Vk) (inverse-Wishart):
+vk|k−1 = ρ(vk−1 −n −1) + n + 1,
+(10)
+Vk|k−1 = √ρVk−1
+√ρT
+(11)
+where ρ ∈(0, 1] governs temporal correlation.
+The variational Bayesian framework aims to approxi-
+mate the true posteriorp(xk, Rk|z1:k) by maximizing the
+Kullback-Leibler (KL) divergence between the variational
+distributionq(xk, Rk) and the true posterior. This is equivalent
+to maximizing the Evidence Lower Bound (ELBO):
+ELBO = Eq [log p(zk|xk, Rk)] + Eq [log p(xk|xk−1)] −
+KL (q(Rk)∥p(Rk)) −KL (q(xk)∥p(xk|xk−1)) ,
+(12)
+where p(Rk) is the inverse-Wishart prior and q(Rk) is the
+variational posterior.
+The inverse-Wishart distribution is chosen as the conjugate
+prior for the measurement noise covariance Rk, ensuring
+closed-form updates during variational inference. This avoids
+complex numerical integration and maintains computational
+efﬁciency.
+4) Measurement Update:
+ζ(j)
+i,k = h(ξ(j)
+i,k )
+(13)
+ˆz(j)
+k
+=
+2n
+X
+i=0
+ω(m)
+i
+ζ(j)
+i,k
+(14)
+Algorithm 1 Variational Bayesian AUKF
+Require: ˆxk−1, Pk−1, zk, f(·), h(·), Qk−1, Rk−1, vk−1,
+Vk−1
+1: Generate sigma points ξi,k−1 via (6)
+2: Predict ˆxk|k−1 and Pk|k−1 using (8)-(9)
+3: Predict vk|k−1 and Vk|k−1 via (10)-(11)
+4: for j = 1 to N do
+5:
+Compute measurement sigma points ζ(j)
+i,k
+6:
+Update covariance matrices P(j)
+zz , P(j)
+xz
+7:
+Calculate Kalman gain K(j)
+k
+8:
+Update state estimate ˆx(j+1)
+k
+9:
+Update noise parameter V (j+1)
+k
+10: end for
+Ensure: ˆx(N)
+k
+, P(N)
+k
+, V (N)
+k
+5) Covariance Matrices:
+P(j)
+zz =
+2n
+X
+i=0
+ω(c)
+i
+
+ζ(j)
+i,k −ˆz(j)
+k
+ 
+ζ(j)
+i,k −ˆz(j)
+k
+T
++
+V (j)
+k
+vk −n −1,
+(15)
+P(j)
+xz =
+2n
+X
+i=0
+ω(c)
+i
+
+ξ(j)
+i,k −ˆx(j)
+k
+ 
+ζ(j)
+i,k −ˆz(j)
+k
+T
+.
+(16)
+The term
+V (j)
+k
+vk−n−1 represents the expectation of the measure-
+ment noise covariance Rk under the inverse-Wishart varia-
+tional posterior q(Rk), ensuring adaptive noise estimation.
+6) State & Covariance Update:
+K(j)
+k
+= P(j)
+xz (P(j)
+zz )−1
+(17)
+ˆx(j+1)
+k
+= ˆx(j)
+k
++ K(j)
+k (zk −ˆz(j)
+k )
+(18)
+7) Noise Parameter Update:
+V (j+1)
+k
+= V (j)
+k
++
+2n
+X
+i=0
+ω(c)
+i (zk −ζ(j)
+i,k )(·)T
+(19)
+Iterate steps 4)-7) for N cycles to approximate the joint
+posterior p(xk, Rk|z1:k).
+The framework provides three fundamental advantages:
+• Adaptive Noise Estimation: Joint state and noise covari-
+ance estimation through variational inference
+• Nonlinear Handling: Unscented transform maintains
+second-order accuracy without linearization
+• Computational Efﬁciency: Fixed iteration count ensures
+real-time operation
+C. Hierarchical Outlier Handling Mechanism
+1) Huber Robust Update: In M-estimation, the predictor
+update is often framed as a weighted least squares problem. By
+constructing a nonlinear regression measurement model and
+minimizing the generalized Huber loss function, the corrected
+measurement values can be derived.
+5
+To mitigate the impact of mild outliers on state estimation,
+a Huber loss function is adopted to construct the weighting
+matrix. The piecewise weighting function is deﬁned as:
+W(rk) =
+(
+1,
+|rk| ≤δ
+δ/|rk|,
+|rk| > δ
+(20)
+where rk = zk −Hˆxk|k−1 is the measurement residual, and
+δ denotes the robustness threshold. A recommended value is
+δ = 1.345σ, where σ represents the standard deviation of the
+observation noise.
+The Huber weighting is incorporated into the standard
+Kalman update, resulting in the modiﬁed Kalman gain:
+Kk = Pk|k−1HT  HPk|k−1HT + R/W(rk)
+−1
+(21)
+The term R/W(rk) adaptively downweights anomalous
+observations: when |rk| > δ, W(rk) < 1, thereby increasing
+the effective measurement noise covariance.
+Theorem 1 (Huber-Weighted Posterior Covariance). Given the
+Huber-modiﬁed posterior covariance matrix:
+Pk|k = (I −WkKkH)Pk|k−1(I −WkKkH)T + WkKkRKT
+k
+(22)
+where:
+• Wk ≥0 is the Huber weighting factor
+• Pk|k−1 ≻0 is the prior covariance
+• R ≻0 is the measurement noise covariance
+Then Pk|k remains positive semi-deﬁnite, i.e., Pk|k ⪰0.
+Details on the proof process are provided in Appendix A.
+Algorithm 2 Huber Robust Update Procedure
+Require: Predicted state ˆxk|k−1, predicted covariance Pk|k−1,
+measurement zk
+1: Compute residual rk ←zk −Hˆxk|k−1
+2: Calculate weight W(rt) via (20)
+3: Compute modiﬁed gain Kt via (21)
+4: Update state ˆxk|k ←ˆxk|k−1 + W(rt)Ktrt
+5: Update covariance Pk|k ←(I −W(rt)KtH)Pk|k−1 +
+W(rt)KtRKT
+t
+Ensure: Posterior state ˆxk|k, covariance Pk|k
+2) Conformal Outlier Detection: While the Huber function
+provides robustness against moderate outliers, its dependence
+on a static threshold limits adaptability to dynamic noise
+environments. To address this, we introduce a conformal
+outlier detection mechanism as a secondary defense layer,
+offering statistical guarantees for error control.
+This section begins with a formulation of the indoor posi-
+tioning problem, followed by an overview of the fundamental
+CP framework. Finally, we incorporate conformal outlier de-
+tection to enhance the robustness of the ﬁlter.
+a) Problem Formulation: The ﬁngerprint-based indoor
+localization is ﬁrst modeled as a classiﬁcation task. Given an
+ofﬂine dataset of n i.i.d. RSSI-location pairs {(Xi, Yi)}n
+i=1,
+let ˆf : X →∆K be a probabilistic predictor that outputs a
+distribution over K candidate locations, where ∆K denotes the
+probability simplex. For each test instance Xtest, we quantify
+its conformity to the training distribution through a non-
+conformity score.
+b) Conformal Prediction Framework: Deﬁne s : X ×
+Y →R as the non-conformity score:
+s(Xi, Yi) = 1 −ˆf(Xi)Yi
+(23)
+where ˆf(Xi)Yi denotes the predicted probability for the true
+class Yi.
+Compute the ⌈(n + 1)(1 −α)⌉-th quantile as conformal
+threshold:
+ˆq = inf
+
+q : |{i : si ≤q}|
+n
+≥⌈(n + 1)(1 −α)⌉
+n
+
+(24)
+Then we can build the prediction set:
+C(Xtest) = {y ∈{1, . . ., K} : s(Xtest, y) ≤ˆq}
+(25)
+This construction guarantees marginal coverage:
+P (Ytest ∈C(Xtest)) ≥1 −α
+(26)
+c) Extension to Filtering Framework: For sequential lo-
+calization tasks, we adapt the conformal framework to handle
+time-series data:
+First we maintain a sliding window of w recent samples
+Ck = {sk−w, . . . , sk−1} to build a dynamic calibration set.
+Then deﬁne the non-conformity score as Filter-Aware Scor-
+ing using normalized innovation:
+sk = ∥zk −Hˆxk|k−1∥S−1
+k
+(27)
+Sk = HPk|k−1H⊤+ Rk
+(28)
+Finally, the adaptive thresholding:
+ˆqk = Quantile
+
+Ck; ⌈(w + 1)(1 −α)⌉
+w
+
+(29)
+d) Outlier Handling Mechanism: When sk > ˆqk, indi-
+cating statistical inconsistency:
+Rk ←γRk
+(γ > 1)
+(30)
+This covariance inﬂation strategy temporarily reduces outlier
+inﬂuence while maintaining ﬁlter stability.
+Theorem 2 (Time-Varying Coverage). Under exchangeability
+within the sliding window, the adaptive threshold ˆqk satisﬁes:
+P(sk ≤ˆqk) ≥1 −α −O
+ 1
+√w
+
+(31)
+Proof appears in Appendix B.
+6
+2
+4
+6
+8
+10
+12
+14
+16
+18
+20
+Sample points
+1
+2
+3
+4
+5
+6
+7
+8
+Value
+True Values
+Measurements
+Conformal prediction
+M-Estimation
+Outliers
+Fig. 2. Conformal outlier detection results with α = 0.05.
+e) Effectiveness: To evaluate the effectiveness of this
+approach, consider a scenario where we have n = 20 test
+samples and need to determine whether a new test point is
+an outlier. First, we normalize the calculation results of non-
+conformity score(NS) and sort the NSs in ascending order.
+The closer the score is to 1, the higher the probability that
+the test point is an outlier. The objective is to identify as
+many outliers as possible while ensuring that no more than
+α = 0.05 of the non-outliers are incorrectly classiﬁed as
+outliers. Figure 2 illustrates the results of this procedure using
+an outlier detection model.
+IV. EXPERIMENTS AND EVALUATION
+A. Numerical Simulation
+To effectively evaluate the accuracy and robustness of
+the designed ﬁlter, this study selects a classical nonlinear
+numerical case, namely the Univariate Nonstationary Growth
+Model (UNGM), to demonstrate the ﬁlter’s performance. The
+discrete-time state-space equation of the UNGM can be ex-
+pressed as:
+xk = 0.5xk−1 + 25xk−1
+1 + x2
+k−1
++ 8 cos(1.2(k −1)) + vk−1 (32)
+yk = x2
+k
+20 + rk,
+k = 1, 2, . . . , M
+(33)
+Here, vk−1 represents a Gaussian process noise with zero
+mean and covariance Qk−1. rk denotes the measurement
+noise. The index k represents the simulation step, and M
+is the total number of simulation steps. One term in the
+equation is independent of xk, but varies with time k, which
+can be interpreted as time-varying noise. To demonstrate the
+performance of the ﬁlter, simulations are conducted under the
+following four different types of noise scenarios:
+1) Case a: Measurement noise is known and follows a
+Gaussian distribution, rk ∼N(0, Rk), where k = 1.
+50
+100
+150
+200
+250
+300
+350
+400
+450
+500
+Time step
+-40
+-20
+0
+20
+40
+60
+80
+Measurement
+Case a
+Case b
+Case c
+Case d
+Fig. 3. Comparison of measurements with different noise.
+2) Case b: The covariance of the measurement noise is
+time-varying and follows a Gaussian distribution, rc
+k ∼
+N(0, Rc
+k), with Rc
+k given by:
+Rc
+k =
+(
+3 + 2(2 + arctan(0.3(k −M/4))),
+k < 1.5 × M/4
+3 + 2(2 + arctan(−0.3(k −M/2))),
+k > 1.5 × M/4
+(34)
+3) Case c: Measurement noise follows a mixture of Gaus-
+sian istributions:
+rc
+k ∼(1 −a)N(r1,k|0, R2
+1) + aN(r2,k|0, R2
+2)
+(35)
+where a is a disturbance factor representing the extent of
+contamination in the error model, and R1 and R2 are the
+standard deviations of the Gaussian distributions. The
+ﬁrst Gaussian distribution is a standard Gaussian, while
+the second distribution is considered a perturbation dis-
+tribution. The larger the value of a, the more signiﬁcant
+the disturbance.
+4) Case d: This case combines both b and c, with measure-
+ment noise following a Gaussian mixture distribution rc
+k,
+where the variance is time-varying Rc
+1 = Rc
+k:
+rc
+k ∼(1 −a)N(rc
+1,k|0, R2
+k) + aN(r2,k|0, R2
+2)
+(36)
+The measurement values are shown in Figure 3. And the
+simulation results of VB-based ﬁlter and CP-based ﬁler for
+four different measurement noises are shown in Figure 4. It
+can be observed that CP method can effectively improve the
+ﬁlter effect when the noise is case a and case b, while for c
+and d, although the improvement effect is not signiﬁcant, it
+further inhibits the inﬂuence of outliers on the basis of the
+original robust algorithm.
+We selected two classical ﬁlters, namely the Particle Filter
+(PF) and Unscented Kalman Filter (UKF), a robust Huber-
+based UKF (HUKF), and two adaptive robust ﬁlters for the
+simulation. The results are presented in Figure 5. It is evident
+that as the impact of outliers increases, the advantage of adap-
+tive robust ﬁlters becomes more pronounced. After applying
+the conformal outlier detection method proposed in this paper,
+all ﬁlters show improved performance. Interestingly, even the
+classical ﬁlters, which typically perform worse than adaptive
+7
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo Run
+45
+50
+55
+60
+65
+70
+75
+MSE
+VB-based AUKF
+CP-VB AUKF
+(a)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo Run
+45
+50
+55
+60
+65
+70
+75
+80
+MSE
+VB-based AUKF
+CP-VB AUKF
+(b)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo Run
+45
+50
+55
+60
+65
+70
+75
+80
+MSE
+VB-based AUKF
+CP-VB AUKF
+(c)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo Run
+50
+55
+60
+65
+70
+75
+80
+85
+MSE
+VB-based AUKF
+CP-VB AUKF
+(d)
+Fig. 4. The simulation results of VB-based AUKF ﬁlters for the four different
+types of measurement noise. (a) Case a. (b) Case b. (c) Case c. (d) Case d.
+robust ﬁlters, are able to effectively mitigate the inﬂuence of
+measurement noise with contaminated distributions.
+To quantitatively validate the robustness improvements,
+Table I compares the Mean Squared Error (MSE) of ﬁve ﬁlters
+under four noise scenarios, both with and without conformal
+outlier detection (We mark it simply as CP in the ﬁgures,
+and in the following text as well) enhancement. Three key
+observations emerge:
+• Universal
+Performance
+Gain:
+CP
+integration
+re-
+duces MSE across all ﬁlters and noise types. The
+most signiﬁcant improvement occurs in Case c (non-
+Gaussian mixture), where UKF’s MSE decreases by
+53.2% (200.70→93.89), demonstrating CP’s effectiveness
+against heavy-tailed distributions.
+• Classical vs. Adaptive Filters: While adaptive ﬁlters
+(VB-AUKF/VB-HAUKF) achieve lower baseline MSE,
+classical ﬁlters show greater relative improvement with
+CP. For instance, PF achieves 21.3% MSE reduction
+in Case d versus 1.3% for VB-HAUKF, suggesting CP
+compensates for classical methods’ weaker inherent ro-
+bustness.
+• Noise-Type Dependency: CP provides maximum bene-
+ﬁt in time-varying non-Gaussian scenarios (Cases c/d),
+reducing average MSE by 46.7% compared to 21.9% in
+stationary Gaussian cases (Cases a/b). This aligns with
+the visual trends of Figure 4 and Figure 5.
+Notably,
+the
+proposed
+VB-HAUKF+CP
+combination
+achieves
+the
+lowest
+absolute
+MSE
+in
+all
+scenarios
+(49.16∼98.88), outperforming second-best VB-AUKF+CP
+by 6.1%∼9.4%. This demonstrates the synergistic effect
+of variational Bayesian adaptation and CP-based outlier
+rejection.
+To visually illustrate the effectiveness of the ﬁlters, Figure 6
+shows the cumulative distribution function (CDF) curves of
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+40
+50
+60
+70
+80
+90
+100
+110
+120
+MSE
+PF
+UKF
+HUKF
+VB-AUKF
+VB-HAUKF
+(a)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+46
+47
+48
+49
+50
+51
+52
+53
+MSE
+CP-PF
+CP-UKF
+CP-HUKF
+CP-VB-AUKF
+CP-VB-HAUKF
+(b)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+40
+60
+80
+100
+120
+140
+160
+MSE
+PF
+UKF
+HUKF
+VB-AUKF
+VB-HAUKF
+(c)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+45
+46
+47
+48
+49
+50
+51
+52
+MSE
+CP-PF
+CP-UKF
+CP-HUKF
+CP-VB-AUKF
+CP-VB-HAUKF
+(d)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+80
+100
+120
+140
+160
+180
+200
+220
+240
+260
+MSE
+PF
+UKF
+HUKF
+VB-AUKF
+VB-HAUKF
+(e)
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+90
+92
+94
+96
+98
+100
+102
+104
+106
+MSE
+CP-PF
+CP-UKF
+CP-HUKF
+CP-VB-AUKF
+CP-VB-HAUKF
+(f)
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+100
+120
+140
+160
+180
+200
+220
+240
+260
+MSE
+PF
+UKF
+HUKF
+VB-AUKF
+VB-HAUKF
+(g)
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+Monte Carlo run
+90
+95
+100
+105
+MSE
+CP-PF
+CP-UKF
+CP-HUKF
+CP-VB-AUKF
+CP-VB-HAUKF
+(h)
+Fig. 5. The simulation results of different ﬁlters for the four different types
+of measurement noise. (a) Case a. (b) Case b. (c) Case c. (d) Case d.
+TABLE I
+THE MEAN MSE OF THE FIVE FILTERS
+ﬁlters
+Mean-MSE
+Case a
+Case b
+Case c
+Case d
+original
+CP-based
+original
+CP-based
+original
+CP-based
+original
+CP-based
+PF
+62.66
+49.35
+61.81
+48.86
+125.00
+98.27
+137.40
+97.68
+UKF
+63.55
+49.11
+64.62
+48.60
+200.70
+93.89
+207.8
+93.45
+HUKF
+61.81
+49.11
+61.91
+48.66
+188.60
+94.79
+182.5
+94.91
+VB-AUKF
+55.77
+49.55
+56.41
+49.10
+107.70
+98.77
+102
+98.39
+VB-HAUKF
+50.15
+49.62
+49.79
+49.16
+100.70
+98.88
+99.28
+98.51
+the four ﬁlters under different conditions, which reveal three
+critical insights about ﬁlter performance:
+• Tail Behavior Characterization: In heavy-tailed sce-
+narios (Cases c/d), the proposed CP-based combination
+exhibits the steepest CDF ascent within the low-error
+8
+region (e.g., < 100 in Fig. 6c), with 90% of errors below
+95 versus 107 for vanilla UKF. This indicates effective
+suppression of outlier-induced large errors. The CP-
+enhanced curves (dashed lines) show compressed right
+tails compared to original ﬁlters (solid lines), particularly
+visible in 95th percentile range.
+• Consistency Across Noise Types: While adaptive ﬁlters
+(VB-AUKF/VB-HAUKF) maintain tight error distribu-
+tions in Gaussian cases (Cases a/b), CP brings classical
+ﬁlters (UKF) closer to their performance. For instance,
+in Case a, UKF+CP reaches 95% CDF at 51 error—even
+higher slightly than VB-HAUKF+CP, despite UKF’s
+baseline being 71 worse.
+• Algorithmic Robustness Trade-off: The HUKF’s CDF
+curves demonstrate median error robustness but falter
+in extreme cases—its 95th percentile error in Case c
+reaches more than 220 versus 100 for VB-HAUKF+CP.
+This
+quantiﬁes
+the
+trade-off between
+heuristic ro-
+bustness (HUKF) and learning-based adaptation (VB-
+HAUKF+CP).
+These observations align with the MSE metrics in Ta-
+ble I while providing new dimensionality: the CDFs quantify
+not just average performance but error distribution shap-
+ing—critical for safety-sensitive applications where bounding
+worst-case errors is paramount.
+40
+50
+60
+70
+80
+90
+100
+110
+120
+Error
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Cumulative Probability
+PF
+CP-PF
+UKF
+CP-UKF
+HUKF
+CP-HUKF
+VB-AUKF
+CP-VB-AUKF
+VB-HAUKF
+CP-VB-HAUKF
+(a)
+40
+60
+80
+100
+120
+140
+160
+Error
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Cumulative Probability
+PF
+CP-PF
+UKF
+CP-UKF
+HUKF
+CP-HUKF
+VB-AUKF
+CP-VB-AUKF
+VB-HAUKF
+CP-VB-HAUKF
+(b)
+80
+100
+120
+140
+160
+180
+200
+220
+240
+260
+Error
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Cumulative Probability
+PF
+CP-PF
+UKF
+CP-UKF
+HUKF
+CP-HUKF
+VB-AUKF
+CP-VB-AUKF
+VB-HAUKF
+CP-VB-HAUKF
+(c)
+100
+120
+140
+160
+180
+200
+220
+240
+260
+Error
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+Cumulative Probability
+PF
+CP-PF
+UKF
+CP-UKF
+HUKF
+CP-HUKF
+VB-AUKF
+CP-VB-AUKF
+VB-HAUKF
+CP-VB-HAUKF
+(d)
+Fig. 6.
+The CDF curves of different ﬁlters for the four different types of
+measurement noise. (a) Case a. (b) Case b. (c) Case c. (d) Case d.
+B. Implementation Experiment
+In order to evaluate the actual positioning performance of
+the method proposed in this paper, we designed an indoor
+positioning and navigation system and conducted experiments
+on the third and ﬁfth ﬂoors of the experimental building at
+Southwest University. Figure 7 shows the experimental scene
+and provides the plane proﬁle of the experimental site. The
+experimental grid was divided every 3 meters, and nodes were
+marked with location labels. Geomagnetic ﬁngerprints were
+used to locate the nodes, and the detailed position coordinates
+were obtained with the assistance of inertial data.
+The basic procedure of the experiment includes the es-
+tablishment of a ﬁngerprint database, real-time RSSI data
+acquisition, data fusion prediction via ﬁltering, ﬁngerprint
+matching of unknown coordinates, and the output of the
+current position information.
+The RSSI measurements were obtained using a high-
+precision 9-axis geomagnetic sensor in real-time. The ex-
+perimental equipment consisted of the STM32F103 MCU,
+WHEELTEC H30 high-precision 9-axis IMU sensor (which
+includes a 3-axis accelerometer, 3-axis gyroscope, and 3-axis
+magnetometer), and the related software and hardware tools
+for geomagnetic matching algorithms, such as the USART
+HMI, Matlab(R2024a), and XCOM serial debugging tool.
+Additionally, portable computing devices were employed for
+real-time data processing and analysis.
+The experimental results demonstrate that the accuracy
+of the indoor single-point ﬁngerprint matching algorithm,
+when enhanced with the conformal outlier detection method
+proposed in this paper, improved from 81.25% to 93.75%.
+Furthermore, the positioning error was signiﬁcantly reduced,
+from a range of 0.62–6.87 m to just 0.03–0.35 m.
+Fig. 7. Experimental scene.
+9
+Fig. 8. The construction of ﬁngerprint database and real-time RSSI acquisi-
+tion.
+V. CONCLUSION
+This paper presents a novel approach to improving indoor
+localization performance by integrating conformal outlier de-
+tection with a geomagnetic/inertial-based ﬁngerprinting sys-
+tem. The proposed method addresses common challenges in
+indoor positioning by providing a robust and adaptive solution
+that is independent of noise distributions. Through extensive
+experimental validation, the framework demonstrated a sig-
+niﬁcant improvement in positioning accuracy and reliability,
+with the ﬁngerprint matching algorithm’s accuracy increasing
+from 81.25% to 93.75% and positioning errors reduced from
+0.62–6.87 m to 0.03–0.35 m.
+The results highlight the effectiveness of conformal predic-
+tion in mitigating outlier inﬂuence and enhancing the robust-
+ness of indoor localization systems. The method’s ability to
+adapt to dynamic environments and non-Gaussian noise makes
+it particularly well-suited for real-world IoT applications,
+including autonomous navigation, wearable devices, and smart
+buildings.
+PROOF: SEMI-POSITIVE DEFINITENESS PROOF OF
+HUBER-KF COVARIANCE
+Proof. The proof establishes the positive semi-deﬁniteness of
+the posterior covariance matrix through three steps:
+Step 1: Term Decomposition
+Decompose the posterior covariance into two terms:
+Pk|k = (I −WkKkH)Pk|k−1(I −WkKkH)T
+|
+{z
+}
+T1
++ WkKkRKT
+k
+|
+{z
+}
+T2
+(37)
+Step 2: Individual Semi-Deﬁniteness Analysis
+• Term T1:
+T1 = APk|k−1AT
+where A = I −WkKkH
+⪰0
+(as Pk|k−1 ≻0 and A is real)
+• Term T2:
+T2 = WkKkRKT
+k
+⪰0
+(since R ≻0 and Wk ≥0)
+Step 3: Summation Property
+The summation preserves semi-deﬁniteness:
+Pk|k = T1 + T2 ⪰0
+(38)
+Boundary Case Validation:
+• Case 1: Wk = 0 (no measurement update):
+Pk|k = Pk|k−1 ≻0
+(39)
+• Case 2: Wk > 0: Both T1 and T2 contribute positively
+to Pk|k ⪰0.
+Hence, Pk|k ⪰0 holds for all valid Wk ≥0.
+PROOF: COVERAGE PROPERTY OF SLIDING WINDOW
+CONFORMAL PREDICTION
+Let {(Xk, Yk)}K
+k=1 be a time series data stream. At each
+time step k > w, we maintain a sliding calibration set
+Ck = {sk−w, . . . , sk−1} where w is the window size, and
+si = s(Xi, Yi) are non-conformity scores.
+Modiﬁed Exchangeability Assumption
+Assume the scores in the extended window Ck ∪{sk} are
+approximately exchangeable within any temporal block of size
+w + 1. This weakens the i.i.d. assumption while preserving
+local stationarity.
+Adaptive Quantile Construction
+Deﬁne the sliding window quantile estimate:
+ˆqk = inf
+
+q : |{s ∈Ck : s ≤q}|
+w
+≥⌈(w + 1)(1 −α)⌉
+w
+
+Coverage Analysis
+Theorem 3. Under the block exchangeability assumption, the
+sliding window conformal predictor satisﬁes:
+|P(sk ≤ˆqk) −(1 −α)| ≤
+C
+√w
+where C depends on the mixing coefﬁcient of the time series.
+Proof. Deﬁne the martingale difference sequence:
+Dk = I{sk ≤ˆqk} −(1 −α)
+The accumulated error satisﬁes:
+
+K
+X
+k=w+1
+Dk
+ ≤C
+p
+K log(1/δ)
+w.p. 1 −δ
+Normalizing by the window size:
+1
+K −w
+
+K
+X
+k=w+1
+Dk
+ ≤C
+√w
+Applying the Azuma-Hoeffding inequality for weakly de-
+pendent sequences [31]:
+P
+ 
+1
+w
+X
+s∈Ck
+I{s ≤ˆqk} −(1 −α)
+ ≥ǫ
+!
+≤2 exp
+
+−wǫ2
+2
+
+Setting ǫ = C/√w yields the stated bound.
+10
+Practical Interpretation
+The coverage gap decays as O(1/√w), implying:
+• For w = 1000, the coverage deviation is bounded by
+∼3%
+• Window size controls tradeoff between adaptivity and
+statistical guarantees
+• The bound holds for α-mixing processes [31]
+REFERENCES
+[1] X. Zhu, J. Liu, L. Lu, T. Zhang, T. Qiu, C. Wang, and Y. Liu, “Enabling
+intelligent connectivity: A survey of secure isac in 6g networks,” IEEE
+Communications Surveys & Tutorials, 2024.
+[2] Q. Xu, Y. Han, B. Wang, M. Wu, and K. R. Liu, “Indoor events
+monitoring using channel state information time series,” IEEE Internet
+of Things Journal, vol. 6, no. 3, pp. 4977–4990, 2019.
+[3] C. Urrea and R. Agramonte, “Kalman ﬁlter: historical overview and
+review of its use in robotics 60 years after its creation,” Journal of
+Sensors, vol. 2021, no. 1, p. 9674015, 2021.
+[4] H. Lin and C. Hu, “Variational inference based distributed noise adaptive
+bayesian ﬁlter,” Signal Processing, vol. 178, p. 107775, 2021.
+[5] M. Fauß, A. M. Zoubir, and H. V. Poor, “Minimax robust detection:
+Classic results and recent advances,” IEEE Transactions on signal
+Processing, vol. 69, pp. 2252–2283, 2021.
+[6] L. Erhan, M. Ndubuaku, M. Di Mauro, W. Song, M. Chen, G. Fortino,
+O. Bagdasar, and A. Liotta, “Smart anomaly detection in sensor systems:
+A multi-perspective review,” Information Fusion, vol. 67, pp. 64–79,
+2021.
+[7] G. Guo, R. Chen, F. Ye, Z. Liu, S. Xu, L. Huang, Z. Li, and L. Qian,
+“A robust integration platform of wi-ﬁrtt, rss signal, and mems-imu
+for locating commercial smartphone indoors,” IEEE Internet of Things
+Journal, vol. 9, no. 17, pp. 16 322–16 331, 2022.
+[8] G. Pau, F. Arena, Y. E. Gebremariam, and I. You, “Bluetooth 5.1:
+An analysis of direction ﬁnding capability for high-precision location
+services,” Sensors, vol. 21, no. 11, p. 3589, 2021.
+[9] P. Sambu and M. Won, “An experimental study on direction ﬁnding of
+bluetooth 5.1: Indoor vs outdoor,” in 2022 IEEE Wireless Communica-
+tions and Networking Conference (WCNC).
+IEEE, 2022, pp. 1934–
+1939.
+[10] M. Sun, Y. Wang, S. Xu, H. Yang, and K. Zhang, “Indoor geomagnetic
+positioning using the enhanced genetic algorithm-based extreme learning
+machine,” IEEE Transactions on Instrumentation and Measurement,
+vol. 70, pp. 1–11, 2021.
+[11] M. Sun, Y. Wang, W. Joseph, and D. Plets, “Indoor localization
+using mind evolutionary algorithm-based geomagnetic positioning and
+smartphone imu sensors,” IEEE Sensors Journal, vol. 22, no. 7, pp.
+7130–7141, 2022.
+[12] M. Qi, B. Xue, and W. Wang, “Calibration and compensation of anchor
+positions for uwb indoor localization,” IEEE Sensors Journal, 2023.
+[13] N. S. Ahmad, “Recent advances in wsn-based indoor localization: A
+systematic review of emerging technologies, methods, challenges and
+trends,” IEEE Access, 2024.
+[14] B.
+Kwon,
+“Adaptive
+fading-memory
+receding-horizon
+ﬁlters
+and
+smoother for linear discrete time-varying systems,” Applied Sciences,
+vol. 12, no. 13, p. 6692, 2022.
+[15] X. Fan, G. Wang, J. Han, and Y. Wang, “Interacting multiple model
+based on maximum correntropy kalman ﬁlter,” IEEE Transactions on
+Circuits and Systems II: Express Briefs, vol. 68, no. 8, pp. 3017–3021,
+2021.
+[16] P.-T. Chen, D. S. Bayard, R. F. Sharrow, W. A. Majid, B. A. Dunst, and
+J. L. Speyer, “A gaussian sum ﬁlter for pulsar navigation: Processing
+single photon arrival time measurements,” IEEE Transactions on Control
+Systems Technology, vol. 31, no. 6, pp. 2499–2514, 2023.
+[17] D. Wang, B. Wang, H. Huang, and Y. Yao, “An improved robust
+ﬁlter method for sins/dvl system with earth frame error model,” IEEE
+Transactions on Vehicular Technology, 2024.
+[18] K. Li, L. Chang, and B. Hu, “A variational bayesian-based unscented
+kalman ﬁlter with both adaptivity and robustness,” IEEE Sensors Jour-
+nal, vol. 16, no. 18, pp. 6966–6976, 2016.
+[19] X. Liu, X. Liu, Y. Yang, Y. Guo, and W. Zhang, “Variational bayesian-
+based robust cubature kalman ﬁlter with application on sins/gps inte-
+grated navigation system,” IEEE Sensors Journal, vol. 22, no. 1, pp.
+489–500, 2021.
+[20] N. Davari and A. P. Aguiar, “Real-time outlier detection applied to a
+doppler velocity log sensor based on hybrid autoencoder and recurrent
+neural network,” IEEE Journal of Oceanic Engineering, vol. 46, no. 4,
+pp. 1288–1301, 2021.
+[21] B. Yang, H. Wang, and Z. Shi, “Variational bayesian and generalized
+maximum-likelihood based adaptive robust nonlinear ﬁltering frame-
+work,” Signal Processing, vol. 215, p. 109271, 2024.
+[22] Q. Waymel, S. Badr, X. Demondion, A. Cotten, and T. Jacques, “Impact
+of the rise of artiﬁcial intelligence in radiology: what do radiologists
+think?” Diagnostic and interventional imaging, vol. 100, no. 6, pp. 327–
+336, 2019.
+[23] G. Shafer and V. Vovk, “A tutorial on conformal prediction.” Journal of
+Machine Learning Research, vol. 9, no. 3, 2008.
+[24] M. Campos, A. Farinhas, C. Zerva, M. A. Figueiredo, and A. F. Martins,
+“Conformal prediction for natural language processing: A survey,”
+Transactions of the Association for Computational Linguistics, vol. 12,
+pp. 1497–1516, 2024.
+[25] C. Xu and Y. Xie, “Conformal prediction for time series,” IEEE
+transactions on pattern analysis and machine intelligence, vol. 45,
+no. 10, pp. 11 575–11 587, 2023.
+[26] K. J. Strawn, N. Ayanian, and L. Lindemann, “Conformal predictive
+safety ﬁlter for rl controllers in dynamic environments,” IEEE Robotics
+and Automation Letters, vol. 8, no. 11, pp. 7833–7840, 2023.
+[27] S. Yang, G. J. Pappas, R. Mangharam, and L. Lindemann, “Safe
+perception-based control under stochastic sensor uncertainty using con-
+formal prediction,” in 2023 62nd IEEE Conference on Decision and
+Control (CDC).
+IEEE, 2023, pp. 6072–6078.
+[28] E. Garcia-Ceja, “Multi-view conformal learning for heterogeneous sen-
+sor fusion,” arXiv preprint arXiv:2402.12307, 2024.
+[29] D. Kim, M. Zecchin, S. Park, J. Kang, and O. Simeone, “Robust
+bayesian optimization via localized online conformal prediction,” IEEE
+Transactions on Signal Processing, 2025.
+[30] D. Liu, S. Guo, Y. Yang, Y. Shi, and M. Chen, “Geomagnetism-based
+indoor navigation by ofﬂoading strategy in nb-iot,” IEEE Internet of
+Things Journal, vol. 6, no. 3, pp. 4074–4084, 2018.
+[31] R. Barber, E. Candes, A. Ramdas, and R. Tibshirani, “Predictive
+inference with the jackknife+,” Annals of Statistics, 2022.

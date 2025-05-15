@@ -1,0 +1,919 @@
+ 
+ 
+ 
+ 
+A portable diagnosis model for Keratoconus 
+using a smartphone 
+ 
+Yifan Lia, Myeongjun Kimb, Yanjing, Jinb Peter Hoc, Jo Woon Chongd 
+a Department of Electrical and Computer Engineering, Texas Tech University, Lubbock, USA,  
+b Department of Electrical and Computer Engineering, Sungkyunkwan University, Suwon, South Korea, 
+c Lubbock Eye Clinic, Lubbock, Texas 79410, USA 
+d School of Electronic and Electrical Engineering, Sungkyunkwan University, Suwon, South Korea, 
+jwchong@skku.edu 
+ 
+Abstract 
+Keratoconus (KC) is a progressive corneal disorder characterized by localized thinning and protrusion, leading to 
+visual distortion. While Placido disc-based topography remains a standard in clinical diagnostics, its dependence on 
+specialized equipment limits accessibility. In this paper, we propose a portable, smartphone-based diagnostic 
+framework that captures corneal reflections of a Placido disc displayed on a phone screen and applies a two-stage 
+detection pipeline, then validate on 3D-printed emulated eyeball models that simulate normal, moderate, and severe 
+KC stages based on anterior chamber depth (ACD). The first step of the two-stage detection pipeline is classifying 
+different stages of KC with features including height and width of extracted reflections using weighted support vector 
+machine (WSVM). It achieves a maximum accuracy of 92.93%, and maintains over 90% accuracy across multiple 
+smartphone models, including the Galaxy Z Flip 3, iPhone 15 Pro, and iPhone 16 Pro. For the second step, we visualize 
+the KC-affected protrusion regions on the corneas with color maps based on inter-disc distance, that provides an 
+intuitive representation of disease severity and localization. Moreover, we validate the ability of the extracted features 
+to differentiate between KC stages with ANOVA and Omega Squared, with significant p-values (e.g., p < 10⁻⁶) and 
+large effect sizes (ω² up to 0.8398) among classes. 
+Keywords 
+ 
+ 
+2 
+ 
+Keratoconus, Smartphone diagnosis, Placido disc, WSVM (Weighted Support Vector Machine), corneal topography, 
+image processing, 3D-printed model 
+1. Introduction 
+Keratoconus (KC) is a corneal disorder causing blurry and distorted vision from thinning and steepening of the cornea, 
+as shown in Figure 1a (Rabinowitz, 1993, 1998). The potential risk factors of KC are corneal thinning and subsequent 
+steepening associated with Down syndrome, atopy, eczema, excessive eye rubbing, and genetic disorders (Gordon-
+Shaag et al., 2015; Karolak & Gajecka, 2017). Moreover, environmental factors, such as long-lasting ultraviolet light 
+exposure and hot climate in some Asian countries such as India, may result in an increase in the number of KC subjects 
+compared to other parts of the world (Assiri et al., 2005; Nielsen et al., 2007). 
+The most prevalent method for diagnosing KC is monitoring clinical signs such as Vogt striae, Rizzuti signs, Munson 
+signs, Fleischer rings, and the retinoscopy scissoring reflex by using slit-lamp examination (Jonas et al., 2009). These 
+methods can quickly diagnose moderate to advanced cases of KC. However, the early detection of KC helps to prevent 
+vision loss or the need for corneal transplantation, i.e., timely intervention with corneal cross-linking (CXL) can be 
+performed before the cornea has thinned excessively, and early detection can help avoid complications associated with 
+advanced keratoconus (Belin et al., 2022). To detect mild stages of KC with higher accuracy, a series of corneal 
+topography technologies, for instance, Placido disc, photo-keratoscopy, keratometry, and computer-assisted video-
+keratography (Bevara & Vaddavalli, 2023; De Sanctis et al., 2007; Gordon-Shaag et al., 2012) have been widely used. 
+Scheimpflug imaging, optical coherence tomography, and slit-scan tomography have also been used for KC early 
+detection (Buzzonetti et al., 2020). The diagnostic methodologies discussed thus far necessitate using advanced 
+clinical devices for data collection. These instruments, however, have limitations in that they could be inconvenient 
+and may require a skilled technician for operation and maintenance. Furthermore, for an accurate and reliable 
+Keratoconus (KC) diagnosis, ophthalmologists and optometrists should concurrently consider various other clinical 
+indicators of the disease (Agrawal, 2011). 
+Utilizing advancements in machine learning, image processing technologies, and smartphones' ubiquity, we can now 
+develop accurate and easy-to-use imaging and diagnosis methods. For example, the brilliant KC consists of a 3D-
+printed Placido disc attachment, an LED light strip, and an intelligent app capturing the reflection of Placido rings 
+ 
+ 
+3 
+ 
+(Askarian et al., 2018). It utilizes an image processing pipeline to analyze the corneal image and applies the 
+smartphone's camera parameters, Placido rings' 3D location, and pixel location of reflected rings for the KC diagnosis 
+(Gairola et al., 2021). Another novel feature of our approach is capturing side photos of the eyes, processing these 
+images to analyze corneal curvature at various angles, and identifying keratoconus based on the differences observed. 
+This method is adaptable to multiple smartphone types with high detection accuracies for severe to moderate 
+keratoconus (Askarian et al., 2018). 
+Placido-based corneal topography systems project the concentric Placido rings onto the cornea and analyze the 
+reflection to assess the anterior corneal surface. (Gao et al., 2020). KC is characterized by localized corneal thinning 
+and protrusion, leading to a distinctive distortion of the reflected rings and changes in the inter-ring distance, which 
+are regarded as KC hallmarks and a primary diagnostic indicator. While other corneal conditions can influence the 
+Placido disc reflection patterns, their effects on inter-ring distances are generally less obvious or perform differently. 
+For example, corneal scars and degenerations cause surface irregularities, resulting in localized distortions of the 
+reflected rings. However, these distortions are usually limited to the areas of scarring and do not present the 
+progressive inter-ring distance changes characteristic of KC (Seitz et al., 1997). An unstable or disrupted tear film can 
+affect the quality of Placido disc reflections, leading to artifacts or irregular patterns, but these changes are usually 
+diffuse and transient (Fu et al., 2020). In this study, our method is designed to detect the changes from KC. 
+In this paper, we propose a portable and easy-to-use methodology for diagnosing Keratoconus (KC). Our method 
+leverages smartphones' versatility for detecting KC and image processing and machine learning techniques for 
+pinpointing the corneal region affected by the disease. As illustrated in Figure 1b, our procedure does not require a 
+3D-printed attachment; instead, we display a Placido disc on the smartphone's screen, directed towards the patient's 
+eye, and capture images of the discs reflected from the cornea. This novel approach aids in not only identifying KC 
+but also visualizing the affected area of the cornea. Fig 1c shows a broader view of our method where the Placido disc 
+is displayed on a smartphone's screen and smartphone's camera then captures images of the reflected discs from aleft 
+eye.  We proposed enhanced the Placido disc's design, as shown in Fig 1d-i, where the center ring has been transformed 
+into a solid circle to facilitate graphic visualization on the cornea. Fig 1d-ii exhibits’ images obtained from a normal 
+cornea, a moderate KC effected cornea and a severe KC effected cornea in our experiments.  We applied an image 
+processing pipeline to extract meaningful diagnostic features from the captured images, including specular reflection 
+ 
+ 
+4 
+ 
+removal, disc extraction, and geometric feature measurement (width and height). A two-stage framework was 
+employed for KC severity classification and protrusion region visualization after feature extraction. In the first stage, 
+we applied multiclass Weighted Support Vector Machine (WSVM) to classify the corneas into normal, moderate KC, 
+and severe KC categories, achieving a maximum accuracy of 92.93% and maintaining over 90% accuracy across 
+multiple smartphone models. In the second stage, we generated color-coded distance maps based on inter-disc 
+measurements to visualize KC protrusion's precise location and severity. Statistical analyses, including ANOVA and 
+Omega Squared (ω² up to 0.8398), confirmed the effectiveness of the extracted features in distinguishing disease 
+stages. 
+ 
+Figure 1. Overview of portable Keratoconus diagnosis. a) Demonstration of the non-KC eye and KC eye with the 
+cone-shaped cornea. b) Concept of the proposed approach. c) Overview of smartphone-based Placido disc reflection 
+capture system. d) i. Improved Placido disc and ii. Reflections on the Placido disc on cornea models over normal, 
+moderate-KC , and severe-KC stage. 
+2. Method 
+2.1. Design of image capturing model  
+Corneal curvature describes how steep (or flat) the surface of the cornea is at a given point. It is typically measured in 
+diopters (D) using instruments such as keratometry or Placido-based topographers (Cavas-Martínez et al.; Shirayama 
+et al., 2010). For instance, the Keratoconus eyes can be divided into moderate (47.0 to 52.0 D), and severe (52.0 D or 
+ 
+ 
+5 
+ 
+higher) according to mean curvature (Emre et al., 2007; Hashemi et al., 2020). In topographic systems, increased 
+curvature is associated with steeper surfaces, resulting in  compressed or distorted projected rings and reflection 
+patterns. In keratoconus corneas, these distortions are localized, especially in inferior or central zones, making 
+curvature a critical geometric and diagnostic feature. In order to create amodel fitting the human cornea, we used 
+anterior the chamber depth (ACD). As shown in Figure 2, ACD, defined as the distance from the corneal endothelium 
+to the anterior lens surface, has been proven to increase with KC severity due to forward displacement of the corneal 
+apex (Emre et al., 2007), which allows us to simulate varying KC stages with more anatomical fidelity physically.  
+ 
+Figure 2. Difference between normal and Keratoconus cornea, Anterior chamber depth (ACD) increases due to  
+Keratoconus. 
+In this study, we designed and printed emulated eyeballs for each type of eye: 1) normal, 2) moderate KC, and 3) 
+severe KC, based on ACD, using a 3D printer as shown in Table 1. Considering the variety of real eyeballs, we 
+designed three versions (smaller, medium, and larger) for each stage of KC (Hashemi et al., 2020; Kovács et al., 2010).  
+ 
+Anterior chamber depth (mm) 
+ 
+Small 
+Medium 
+Large 
+Normal 
+2.54 
+2.7025 
+2.865 
+ 
+ 
+6 
+ 
+Moderate KC 
+3.0275 
+3.19 
+3.3525 
+Severe KC 
+3.515 
+3.6775 
+3.84 
+Table 1. Anterior chamber depth measurements for emulated eyeball models across different sizes (small, medium, 
+and large) and stages (normal, moderate KC, and severe KC) of Keratoconus. 
+In corneal topography, particularly with Placido disc systems, the cornea's anterior surface acts as a convex mirror, 
+reflecting light to the imaging system. This method primarily captures the shape and curvature of the cornea by 
+analyzing these reflections (Mejía-Barbosa & Malacara-Hernández, 2001; Wang, 2024). In this case, light reflecting 
+off the anterior corneal surface is the primary measurement. To quantify when internal refraction can be ignored, we 
+considered the geometry of the system, according to Snell's Law as shown in Eq. 1 (Næser et al., 2016): 
+𝑛1 sin(𝜃1) = 𝑛2sin⁡(𝜃2)                                                                   (1) 
+where 𝑛1 and 𝑛2 are refractive indexes of the first and second medium (air: 𝑛1 ≈1.000, cornea 𝑛2 ≈1.376), 𝜃1 and 
+𝜃2 represent the angle of incidence and refraction. In the case of corneal topography, the light rays strike the cornea 
+nearly perpendicularly. Since the sine of the angle is approximately equal to the angle itself when measured in radians 
+(sin(𝜃) ≈𝜃) for small angles, we could obtain the difference between 𝜃1 and 𝜃2 is minimal by applying this 
+approximation in Eq. 2: 
+𝑛1𝜃1 ≈𝑛2𝜃2                                                                                  (2) 
+In addition, optical path length (OPL) within the cornea is the actual distance light travels inside the cornea (Farjo et 
+al., 2009), which is given in Eq. 3: 
+𝑂𝑃𝐿= 𝑛2 × 𝑑                                                                                  (3) 
+where 𝑑 represents physical thickness of the cornea (0.5 mm centrally), 𝑛2 is the refractive index of the cornea which 
+gives an approximate OPL value of 0.688mm. 
+By applying Snell's Law and considering the small-angle approximation along with the optical path length within the 
+cornea relative to the observation distance, we can justify that the effects of light refraction within the cornea are 
+ 
+ 
+7 
+ 
+negligible in setups where the light source and camera are positioned significantly farther from the cornea (150 mm) 
+than the cornea's thickness. 
+Since the standard 3D printing materials used for the eyeball models lack reflective properties, we applied a reflective 
+coating to the corneal region of each eyeball model. This simulates the reflective behavior of the anterior corneal 
+surface, ensuring that the corneal region has the necessary reflectivity to capture Placido disc patterns. 
+In our experimental setup, we modified the camera positioning compared to traditional diagnostic methods, as 
+illustrated in Figure 3a. Instead of aligning the camera and light source along the same optical axis, we positioned the 
+camera at a 90-degree angle relative to the light source to better capture the reflected Placido disc patterns. While a 
+foldable smartphone could theoretically integrate both functions displaying the Placido disc and capturing its reflection 
+on separate screens - our implementation utilized two separate smartphones: one serving as the light source and the 
+other functioning as the imaging device. This configuration ensures flexibility, enabling the method to be implemented 
+using any standard smartphone setup rather than relying on foldable devices. In Figure 3a, the cornea curve C faces 
+the light source plane 𝑃𝐺, we capture the images at the plane 𝑃𝐶 which is perpendicular to 𝑃𝐺steps away from the 
+conventional same-axis method, 3b, where the camera locates on 𝑃𝐺 and the face’s center of C. The experimental 
+setting of 𝑃𝐶 and 𝑃𝐺 is shown in Figure 3c, the green line represents the camera 𝑃𝐶 and the blue line represents the 
+Placido disc displaying screen 𝑃𝐺. The various notations in Figures 3a and 3b have specific implications, which will 
+be clarified in the following discussion. A and B correspond to any two different circles (ignore the width of the 
+circles), 𝐴′and 𝐵′ are the points of incidence from the incident rays 𝐴𝐴′and 𝐵𝐵′. Correspondingly, 𝐴′𝐴′′ and 𝐵′𝐵′′ 
+are the reflected rays from cornea model to the plane of camera, 𝐴′′ and 𝐵′′ are the images of corresponding circle we 
+obtain from the camera which means the length of the line 𝐴′′𝐵′′ (𝑑′′) is the distance between the two corresponding 
+circles observed on camera. Based on the schematic diagram of image capturing, we hypothesize the distance (𝑑′′) 
+that Placido discs are related to the severity of Keratoconus, as shown in Eq. 4. 
+𝑑′′ = (ℎ𝐵′ −ℎ𝐴′) + 𝑙(𝑡𝑎𝑛2𝛼−
+1
+𝑡𝑎𝑛2𝛽 ) + 𝑑𝑡𝑎𝑛2𝛼 
+(4) 
+where ℎ𝐵′ and ℎ𝐴′ represent the distance between the points of incidence 𝐴′ and 𝐵′ and the screen of smartphone’s 
+plane 𝑃𝐺, 𝑙 represents the distance between camera’s plane 𝑃𝐶 and outer circle B, d represents the distance between 
+the two circles, α and β represent the tangent angles of cornea model at point 𝐴′ and 𝐵′. The equation establishes that 
+ 
+ 
+8 
+ 
+the distance between any pair of circles-whether adjacent or not-is only determined by the difference in the distances 
+between the points of incidence and the smartphone screen's plane, in conjunction with the tangent angles of the cornea 
+model at these points of incidence. For those corneas with KC, both factors above - the difference in distances and the 
+tangent angles - exhibit an increase. 
+The flowchart of our proposed diagnosis model and simultaneous experiment setup is illustrated in Figure 3c. In the 
+first step of image collection, we designed and 3D-printed anatomically inspired eyeball models using the Bambu Lab 
+X1 Carbon printer (Lab). These models incorporated variations in anterior chamber depth (ACD) to simulate different 
+stages of keratoconus (normal, moderate, and severe). A custom L-shaped 3D-printed fixture was used to maintain a 
+fixed 15 cm working distance and a consistent imaging angle between the corneal model and the light source. To 
+minimize ambient reflections, the interior surfaces of the fixture were coated with black pigment. A Samsung Galaxy 
+Note 20 Ultra (Samsung, 2020), with a peak screen brightness of 1500 nits, served as the light source and was 
+positioned securely at the base of the setup. The smartphone cameras (iPhone XS MAX (Apple, 2023), iPhone 15 Pro 
+(Apple, 2024a), iPhone 16 Pro (Apple, 2024b), and Galaxy Z Flip 3 (Samsung)) were used individually in the second 
+step of image collection to capture raw Placido disc reflections from the corneal surface. Images were acquired under 
+consistent exposure settings (3 seconds) and with auto-processing enabled. A total of 195 images were collected across 
+devices and disease stages. In the third step, we applied reflection detection and image preprocessing algorithms to 
+extract the Placido disc patterns from the side-view corneal reflections. These extracted features were then analyzed 
+and classified into normal, moderate KC, and severe KC groups, and color-coded visualizations were generated to 
+assist with diagnostic interpretation and visualization. 
+ 
+ 
+9 
+ 
+ 
+Figure 3. Principle and flowchart of 2-stage diagnosis. a) Schematic diagram of side-view image capturing using 
+separate camera devices. b) Schematic diagram of traditional Placido disc-based diagnosis with coaxial camera-light 
+source alignment. c) Flowchart of a simulation experiment for the 2-stage diagnosis. 
+2.2. Data preparation and preprocessing 
+We used the Bambu Lab X1 Carbon 3D printer (Lab) to print the emulated eyeballs. This printer features a maximum 
+build volume of 256 × 256 × 256 mm³, allowing for the creation of models across our specified size range. We 
+employed a 0.4 mm hardened steel nozzle and used Bambu PLA Basic filament with a diameter of 1.75 mm ± 0.03 
+mm, ensuring consistent extrusion and structural integrity. The enclosed building chamber, equipped with an activated 
+carbon air filter, provided a stable printing environment, minimizing external influences on print quality. To emulate 
+the reflective properties of the human cornea, we applied a reflective coating to the corneal region of each 3D-printed 
+eyeball model (normal, moderate KC, and severe KC from top to bottom), as shown in Figure 4a. This approach 
+effectively simulated the corneal reflection necessary for accurate analysis. In Figure 4b, we illustrate the L-shape 
+instrument assisting image collection, which includes one round groove for fixing eyeball models and one holder for 
+fixing the smartphone used as light source, and Figure 4c demonstrates the collected images from the eyeball models 
+with different stage of KC. 
+ 
+ 
+10 
+ 
+ 
+ 
+(a) 
+(b) 
+ 
+(c) 
+Figure 4. 3D-printed eyeball models for experiment. a) Eyeball models over different severity of KC. b) L-shape 
+model for fixing eyeball and light source. c) Original images from 3D-printed eyeball model (left to right: normal, 
+moderate KC, severe KC) 
+We also designed a 5-circled Placido disc image that improves from the Placido discs of a keratoscope used in the 
+optical clinic, as shown in Figure 1d-i. To validate the cross-device generalizability of our proposed method, we 
+selected four commercially available smartphones with diverse hardware characteristics: Samsung Galaxy Z Flip 3, 
+iPhone XS MAX, iPhone 15 Pro, and iPhone 16 Pro, as shown in Table 2. They have a fixed working distance of 15 
+cm to standardize reflection geometry. These devices represent a range of camera sensor configurations, lens types, 
+and image optimization capabilities. The iPhone 15 Pro and iPhone 16 Pro are equipped with triple-lens systems 
+ 
+ 
+11 
+ 
+(including ultra-wide and telephotos), macro photography support, and advanced image processing for low-light 
+conditions. Compared with them, the iPhone XS MAX and Galaxy Z Flip 3 have more limited camera arrays and lack 
+macro functionality. All devices were used with the default camera application, fixed exposure settings (3 seconds), 
+and auto-processing enabled to simulate practical deployment scenarios. Additionally, the Galaxy Note 20 Ultra—
+with a peak screen brightness of 1500 nits—was employed solely as the light source in the image acquisition setup.  
+Device 
+Galaxy Note 
+20 Ultra 
+iPhone 16 Pro 
+iPhone 15 Pro 
+Galaxy Z Flip 3 
+iPhone XS 
+MAX   
+Role  
+Light source 
+Camera 
+Camera 
+Camera 
+Camera 
+Hardware Specifications and Features 
+Screen 
+Brightness 
+(nits) 
+1500 
+- 
+- 
+- 
+- 
+Lens Type 
+- 
+Triple Camera 
+Triple Camera 
+Double Camera 
+Double Camera 
+Main 
+- 
+48MP, 24mm, 
+f/1.78 
+48MP, 24mm, 
+f/1.78 
+12MP, 27mm, 
+f/1.8 
+12MP, 26mm, 
+f/1.5 
+Wide  
+- 
+48MP, 24mm, 
+f/1.78 
+48MP, 24mm, 
+f/1.78 
+12MP, 27mm, 
+f/1.8 
+12MP, 13mm, 
+f/2.4 
+Ultra-Wide 
+- 
+48MP, 13mm, 
+f/2.2 
+12MP, 13mm, 
+f/2.2 
+12MP, 14mm, 
+f/2.2 
+- 
+Telephoto 
+- 
+12MP, 120mm, 
+f/2.8 
+12MP, 77mm, 
+f/2.8 
+- 
+- 
+Camera Setting at Demonstrating System 
+PDAF 
+- 
+Yes 
+Yes 
+Yes 
+Yes 
+Night Mode 
+- 
+Yes (3 Seconds 
+Exposure) 
+Yes (3 Seconds 
+Exposure) 
+Yes (3 Seconds 
+Exposure) 
+Yes (3 Seconds 
+Exposure) 
+ 
+ 
+12 
+ 
+Macro 
+photography 
+- 
+Wide and 
+ Ultra-Wide 
+Lens 
+Yes 
+Wide and 
+ Ultra-Wide Lens 
+No 
+No 
+Image 
+optimizing 
+algorithm 
+- 
+Auto 
+Processing for 
+Low Light 
+Density and 
+Macro 
+Photography 
+Auto Processing 
+for Low Light 
+Density and 
+Macro 
+Photography 
+Auto Processing 
+for Low Light 
+Density 
+Auto 
+Processing for 
+Low Light 
+Density 
+Table 2. The hardware specifications and image settings of smartphones used as light source and cameras in the 
+proposed Keratoconus diagnostic system. 
+We applied specular reflection detection and removal to improve image quality by reducing the specular reflections 
+in Placido disc images (Nie et al., 2023). In this study, we conducted imaging in a darkened room with an ambient 
+illuminance of 7 lux, simulating the conditions commonly used in ophthalmic clinics. Initially, the system classifies 
+the image based on brightness levels to identify regions with specular reflections. An adaptive threshold function, 
+responsive to the image's brightness, is then applied to detect these reflective areas accurately. Once identified, the 
+specular regions are restored using an exemplary-based inpainting algorithm, which reconstructs the occluded corneal 
+features by referencing the surrounding texture information. This approach ensures that the Placido disc reflection 
+patterns are accurately represented, enhancing the reliability of corneal curvature assessments. 
+For reflection extraction, we firstly applied a decision tree classification algorithm (Breiman, 2017) to extract the 
+reflected Placido rings from the corneal images, due to the distinct color characteristics of the ring patterns (i.e., red 
+hue relative to the background). Given the consistency and uniqueness of this color feature, we manually selected 
+color-related features color-based features including HSV components, and normalized RGB values from the image 
+pixels (Li et al.). These features capture hue, saturation, and chromaticity variations, effectively differentiating 
+reflection patterns from surrounding non-informative regions. For example, we defined the input feature vector for 
+each pixel as: 
+ 
+ 
+13 
+ 
+[𝑝𝑖𝑥𝑒𝑙H, 𝑝𝑖𝑥𝑒𝑙S, 𝑝𝑖𝑥𝑒𝑙V,
+𝑅
+𝑅+ 𝐵+ 𝐺,
+𝐺
+𝑅+ 𝐵+ 𝐺, 𝑐ℎ𝑟𝑜𝑚𝑎] 
+(5) 
+where 𝑝𝑖𝑥𝑒𝑙H, 𝑝𝑖𝑥𝑒𝑙S, and 𝑝𝑖𝑥𝑒𝑙V represent the pixel values in HSV color space (Sobottka & Pitas, 1996), R, G, B 
+values are the pixel values at R, G, B channels of the images. 
+The decision tree algorithm operates by recursively partitioning the feature space based on threshold values learned 
+during training. Each node in the tree represents a decision rule based on one feature, and the leaf nodes correspond 
+to class labels indicating whether the pixel belongs to a reflected ring or background. Then, we retained the pixels that 
+were predicted at the Placido graphic by the classification tree and generated a binary image. 
+Secondly, we applied an open-close operation (Soille, 1999) to denoise. Variance in the surface curvature of the cornea 
+model can result in uneven light reflection (Urone & Hinrichs, 2016). Specifically, areas with more significant 
+curvature tend to capture more light, appearing brighter in images (Healey & Kondepudy, 1994). Furthermore, the 
+smartphone, which displays the 8-circle Placido disc, is the light source. As a result, areas closer to this light source 
+also exhibit increased brightness.  
+Additionally, inherent noise in the camera sensor can contribute to disparities in the captured image. These factors 
+collectively lead to color distortions in the original photos, which can interfere with binarization. To minimize the 
+impact of color distortions, we applied an opening-closing operation (Soille, 1999). It is a morphological operation to 
+reduce noise and enhance objects of interest. The opening operation is an erosion operation followed by dilation. It 
+helps to remove small white objects not belonging to Placido circles in the binary image and smooth the boundary of 
+the larger objects (Urone & Hinrichs, 2016). The closing operation is dilation followed by erosion. It helps to fill small 
+holes and connect slightly disconnected objects. 
+Thirdly, we corrected the orientation (Lee et al., 2017) of the denoised image for further analysis. The processed binary 
+image visualized the enhanced Placido rings, which included a central ellipse and a series of arcs. We located all the 
+connected components in the image and found the central ellipse by identifying the element with white pixels in the 
+central bottom area. The orientation, determined by the angle between the x-axis and the ellipse's central axis, was 
+used to rotate the entire image and perform further analysis. 
+ 
+ 
+14 
+ 
+The final step is to focus on the region of interest by removing the irrelevant parts of the image. The bounding boxes 
+(Lempitsky et al., 2009) of the ellipse and arcs define a rectangle for cropping. 
+A total of 232 images were collected across four smartphone models, encompassing three categories: normal, moderate 
+keratoconus (KC), and severe KC. The dataset includes 42 images from the Galaxy Z Flip 3, 65 from the iPhone XS 
+MAX, 58 from the iPhone 15 Pro, and 67 from the iPhone 16 Pro as shown in Table 3. 
+ 
+Galaxy Z Flip 3 
+iPhone XS MAX 
+iPhone 15 Pro 
+iPhone 16 Pro 
+Normal 
+15 
+18 
+24 
+19 
+Moderate KC 
+16 
+22 
+22 
+19 
+Severe KC 
+16 
+25 
+12 
+29 
+Total 
+42 
+65 
+58 
+67 
+Table 3. Data distribution of collected corneal images across smartphone devices and different stages of 
+Keratoconus (KC). 
+2.3. Weighted support vector machines 
+To classify corneal images into three categories: 1) normal, 2) moderate KC, and 3) severe KC, we employed a 
+multiclass Weighted Support Vector Machine (WSVM) classifier (Yang et al., 2007). This approach efficiently 
+handles class imbalances by assigning different weights to each class, thereby reducing the influence of 
+underrepresented categories on the decision boundary. WSVM aims to find optimal hyperplanes that maximize the 
+margin between classes while incorporating class-specific weights into its optimization problem. The optimization 
+problem for WSVM is formulated in Eq. 6: 
+𝑀𝑖𝑛𝑖𝑚𝑖𝑧𝑒⁡𝜙(𝑤) = 1
+2 𝑤𝑇𝑤+ 𝐶∑𝑊𝑖𝜉𝑖 
+(6) 
+subject to: 
+𝑦𝑖(〈𝑤, 𝜙(𝑥𝑖)〉+ 𝑏) ≥1 −𝜉𝑖, 𝑖= 1, … , 𝑙;⁡𝜉𝑖≥0, 𝑖= 1, … , 𝑙 
+(7) 
+where 𝑥𝑖𝜖ℝ𝑑 represents feature vector (i.e. width and height measurements from the Placido disc images), 
+𝑦𝑖𝜖{−1,0,1} is the class labels correspond to normal, moderate KC, and severe KC respectively, 𝑤 and 𝑏 define the 
+hyperplane, 𝜉𝑖 are slack variables allowing for misclassification, 𝐶 is the regularization parameter controlling the 
+ 
+ 
+15 
+ 
+trade-off between maximizing the margin and minimizing the classification error, and 𝑤𝑖 are the weights assigned to 
+each sample based on class distribution. 
+To extend the binary WSVM to multiclass classification, we applied the one-vs-one (OvO) strategy (Milgram et al., 
+2006), constructing a WSVM classifier for each pair of classes. A majority voting among all pairwise classifiers 
+determine the final classification decision for a new sample. This method allows for fine-tuned decision boundaries 
+sensitive to each class's characteristics. 
+However, they are sensitive to outliers, as these anomalous data points can significantly influence the position of the 
+decision boundary, leading to reduced model performance. To reduce this effect, we applied Z-score normalization 
+to the feature set to standardize the data, ensuring that each feature contributes equally to the distance calculations 
+within the SVM algorithm. This preprocessing step enhances the model's performance by preventing larger-scale 
+features from dominating the learning process and reducing the effect of outliers. The Z-score for a data point 𝑥 is 
+calculated in Eq. 8: 
+𝑍= 𝑥−𝜇
+𝜎
+ 
+(7) 
+where 𝜇 represents the mean value, and 𝜎 is the standard deviation of the dataset. Data points with a Z-score 
+exceeding a certain threshold (±3) are considered outliers and can be excluded from the dataset. Removing these 
+outliers makes the dataset allow the SVM to establish a more accurate decision boundary and reduces the influence 
+of extreme values on the model's performance. 
+2.4. Analysis of Variance (ANOVA) 
+To evaluate whether there are statistically significant differences among the means of three independent groups—namely, 
+normal, moderate keratoconus (KC), and severe KC—we employed a one-way Analysis of Variance (ANOVA) (Quirk 
+& Quirk, 2012). This method is appropriate for comparing more than two group means and helps control the Type I error 
+rate that would increase if multiple pairwise t-tests were conducted. ANOVA partitions the total variability in the data 
+into variability between groups and within groups, allowing us to assess whether the between-group variability is 
+significantly greater than what would be expected by chance. The test statistic for ANOVA is the F-ratio, calculated as: 
+ 
+ 
+16 
+ 
+𝐹= 𝑀𝑆𝑏𝑒𝑡𝑤𝑒𝑒𝑛
+𝑀𝑆𝑤𝑖𝑡ℎ𝑖𝑛
+ 
+(5) 
+where 𝑀𝑆𝑏𝑒𝑡𝑤𝑒𝑒𝑛 is the mean square between groups, and 𝑀𝑆𝑤𝑖𝑡ℎ𝑖𝑛 is the mean square within groups. A significant F-
+ratio indicates that at least one group means differs from the others, warranting further post hoc analyses to identify 
+specific group differences.  
+2.5. Omega Squared (ω²) 
+While ANOVA determines the presence of statistically significant differences among group means, it does not convey 
+the magnitude of these differences. To quantify the proportion of variance in the dependent variable attributable to group 
+membership, we calculated omega squared (𝜔2), an effect size measure. Omega squared is preferred over eta squared 
+(𝜂2) because it provides a less biased estimate of the population effect size, particularly in studies with small sample 
+sizes. The formula for omega squared in a one-way ANOVA is: 
+𝜔2 = 𝑆𝑆𝑏𝑒𝑡𝑤𝑒𝑒𝑛−(𝑑𝑓𝑏𝑒𝑡𝑤𝑒𝑒𝑛× 𝑀𝑆𝑤𝑖𝑡ℎ𝑖𝑛)
+𝑆𝑆𝑡𝑜𝑡𝑎𝑙+ 𝑀𝑆𝑤𝑖𝑡ℎ𝑖𝑛
+ 
+(7) 
+ 
+where 𝑆𝑆𝑏𝑒𝑡𝑤𝑒𝑒𝑛 is the sum of squares between groups, 𝑑𝑓𝑏𝑒𝑡𝑤𝑒𝑒𝑛 is the degrees of freedom between groups, 𝑀𝑆𝑤𝑖𝑡ℎ𝑖𝑛 
+is the mean square within groups, and 𝑆𝑆𝑡𝑜𝑡𝑎𝑙 is the total sum of squares. Omega squared values range from 0 to 
+1, with higher values indicating a greater proportion of variance explained by the group variable. This measure 
+provides a more accurate reflection of the effect size in the population, enhancing the interpretability of our findings. 
+3. Results 
+3.1. Image preprocessing 
+In this paper, we applied a robust approach to extract reflected Placido discs as the diagram shown in Figure 5. We 
+visually compare the original corneal image captured by the smartphone camera and the processed image after specular 
+reflection detection and removal. In the original image (Figure 5a), obvious specular highlights are observed on the cornea 
+model, which is caused by the reflection of the environment illumination source. These reflections can be detected in 
+further image processing, potentially affecting the accuracy of analysis. After applying a brightness-based detection and 
+exemplar-based inpainting method, the specular highlights were suppressed in the processed image (Figure 5b), and they 
+ 
+ 
+17 
+ 
+became smoother and gentler. This improvement enhances and contributes to more reliable feature extraction for 
+keratoconus classification. 
+ 
+ 
+(a) 
+(b) 
+(c) 
+(d) 
+Figure 5. Preprocessing and extraction of Placido disc reflections for feature analysis. a) The original image from a 
+normal group. b) The processed image after specular reflection detection and removal. c) The preprocessed imaged 
+from severe KC group. d) The extracted reflection of Placido disc graphic. 
+ 
+3.2. Two-stage KC diagnosis – Classification 
+To evaluate the robustness and generalizability of our proposed method, we assessed performance across corneal 
+images captured by different smartphone cameras: Samsung Galaxy Z Flip 3, iPhone XS MAX, iPhone 15 Pro, and 
+iPhone 16 Pro, as shown in Figure 6 (a–d). Across all devices except iPhone XS MAX, the classifier achieved high 
+specificity and sensitivity, particularly in identifying severe KC cases. This consistency suggests the model’s ability 
+ 
+ 
+18 
+ 
+to recognize morphological changes associated with severe KC, regardless of imaging source. Confusion was 
+occasionally observed for moderate and normal classes, and different stages, especially in the iPhone XS MAX dataset 
+(Figure 5b), where moderate KC was misclassified as severe and normal. This suggests that features at early stages 
+may be more susceptible to variations in imaging conditions or reflective artifacts. Compared with the iPhone XS 
+MAX, data from the iPhone 15 Pro and the iPhone 16 Pro had fewer misclassifications, demonstrating the model's 
+capability to reduce intra-class variance and camera-dependent noise with more advanced camera specifications. 
+ 
+(a) 
+(b) 
+ 
+(c) 
+(d) 
+Figure 6. Confusion matrixes produced by weighted support vector machine (WSVM) for 
+classifying corneal images captured by different smartphone cameras. a) Image data from 
+Samsung Galaxy Z Flip 3. b) Image data from iPhone XS MAX. c) Image data from iPhone 15 
+Pro. d) Image data from iPhone 16 Pro. 
+Besides confusion matrices, we also evaluated the method with standard metrics (accuracy, precision, recall, and F1 
+score) with corresponding 95% confidence intervals, as shown in Table 3. All image data were acquired under 
+controlled conditions with consistent lighting and fixed imaging angles to eliminate environmental variability. Among 
+ 
+ 
+19 
+ 
+the devices tested, the iPhone 16 Pro achieved the highest performance, with an accuracy of 92.93% (CI: 0.78–0.99), 
+precision of 92.43%, recall of 91.24%, and an F1 score of 90.03%. Similarly, the iPhone 15 Pro showed strong and 
+stable performance (accuracy: 91.57%, CI: 0.75–0.99), supporting the effectiveness of our system across advanced 
+smartphone models. 
+The Samsung Galaxy Z Flip 3 was used solely in its unfolded form as a standard smartphone camera, demonstrating 
+an accuracy of 90.04% (CI: 0.70–0.99) and an F1 score of 88.38%. These results establish a practical performance 
+threshold, suggesting that any device achieving similar or higher metrics can be considered suitable for this diagnostic 
+framework. In contrast, the iPhone XS MAX obtained an accuracy of only 68.95% (CI: 0.00–0.50) and 
+correspondingly low scores in other metrics. Based on these findings, we designate the specifications of the Samsung 
+Galaxy Z Flip 3 as the reference threshold, and consider devices performing below this baseline as unsuitable for 
+clinical deployment within this system. In conclusion, the classification results demonstrate that the proposed system 
+maintains high diagnostic accuracy, precision, and robustness across multiple smartphone models with varying 
+hardware specifications.. 
+ 
+Performance metrics (95% CI) 
+ 
+Accuracy 
+Precision 
+Recall 
+F1 
+Samsung 
+Galaxy Z Flip 3 
+90.04% 
+(0.70-0.99) 
+90.45% 
+(0.61-0.99) 
+90.57% 
+(0.62-0.99) 
+88.38% 
+(0.61-0.99) 
+iPhone XS 
+MAX 
+68.95% 
+(0.38-0.92) 
+69.16% 
+(0.37-0.94) 
+69.26% 
+(0.38-0.94) 
+66.14% 
+(0.36-0.93) 
+iPhone 15 Pro 
+91.57% 
+(0.75-0.99) 
+88.85% 
+(0.67-0.99) 
+90.77% 
+(0.58-0.99) 
+87.65% 
+(0.60-0.99) 
+iPhone 16 Pro 
+92.93% 
+(0.78-0.99) 
+92.43% 
+(0.62-0.99) 
+91.24% 
+(0.67-0.99) 
+90.03% 
+(0.63-0.99) 
+Table 4. Average performance metrics (accuracy, precision, recall, and F1 score) over different smartphone 
+cameras. 
+3.3. Two-stage KC diagnosis – Visualization 
+Keratoconus causes localized thinning and protrusion of the cornea altering its topography. KC does not appear at a 
+fixed location but manifests anywhere on the cornea. Thus, we visualize a distance matrix to pinpoint the exact location 
+of the protrusion. This distance map facilitates more accurate diagnosis and treatment planning, such as determining 
+ 
+ 
+20 
+ 
+suitable sites for corneal cross-linking or intracorneal ring segment (ICRS) placement, as performed conventionally 
+in Alió’s work (Alió et al., 2006).  
+We implemented a color scheme to enhance the interpretability of Keratoconus severity. This visual enhancement 
+more effectively differentiates the levels of corneal protrusion, with individual colors indicating diverse depths. It 
+allows us to visualize the exact location of KC on the cornea as shown in Figure 7. 
+ 
+(a) 
+(b) 
+(c) 
+ 
+ 
+Figure 7. Color-coded distance maps visualizing Placido disc deformation across different stages of Keratoconus. a) 
+Colormap of normal cornea. b) Colormap of moderate KC cornea.  c) Colormap of severe KC cornea. 
+Spanning an angular range from 45 to 135 degrees, this visual improvement effectively distinguished varying inter-
+disc distances, with the color spectrum representing these distances. More blueish colors, such as blues and greens, 
+were assigned to shorter distances, corresponding to healthier cornea states, while warmer hues, including oranges 
+and reds, depicted longer distances caused by protrusion, indicating more severe KC conditions. As the colors 
+transition from cool to warm, they suggest progression from normal status to severe KC-affected status, with the red 
+tones indicating the most severe cases. The color map differentiates among normal and different stages of corneas and 
+precisely visualizes the KC on the cornea, making it a valuable tool for accurate diagnosis and targeted treatment 
+planning. 
+ 
+ 
+21 
+ 
+3.4. Statistical analysis 
+Figure 8 illustrates the standardized width and height feature distribution of each device across keratoconus severity 
+levels. In all cases, height decreases by increasing disease severity, supporting its value as a consistent geometric 
+marker of disease and its severity. The separation between classes is most distinct in the iPhone 16 Pro (Figure 8d), 
+where the interquartile ranges are well-separated with minimal overlap. Conversely, the iPhone XS MAX (Figure 8b) 
+exhibits more significant variability and class overlap, particularly in the height feature, which contributes to its lower 
+classification performance. 
+ 
+ 
+ 
+(a) 
+(b) 
+ 
+ 
+22 
+ 
+ 
+ 
+(c) 
+(d) 
+Figure 8. oxplots of standardized width and height features extracted from corneal reflection images captured by 
+different smartphone cameras. a) Boxplot from Galaxy Z Flip 3. b) Boxplot from iPhone XS MAX. c) Boxplot from 
+iPhone 15 Pro. d) Boxplot from iPhone 16 Pro. 
+Table 5 summarizes the results of one-way ANOVA and corresponding Omega Squared (ω²) effect sizes for 
+standardized width and height measurements across keratoconus severity levels on different smartphone devices. 
+Across all devices, height consistently demonstrated stronger discriminatory power than width, with the highest effect 
+sizes observed on iPhone XS MAX and iPhone 16 Pro (ω² = 0.8398), indicating that height captures substantial 
+variance associated with disease stage. The Samsung Galaxy Z Flip 3 also showed large effect sizes for width (ω² = 
+0.5435) and height (ω² = 0.3302), confirming its suitability as a performance threshold. In contrast, width 
+measurements from iPhone 15 Pro showed no significant group differences (ω² = –0.0212), suggesting that device-
+specific optical factors may influence the reliability of certain features. 
+Device 
+Feature 
+F-value 
+p-value 
+ω² 
+Samsung Z Flip 3 
+Width 
+28.98 
+9.33×10⁻⁹ 
+0.5435 
+Height 
+12.58 
+4.80×10⁻⁵ 
+0.3302 
+iPhone XS MAX 
+Width 
+8.61 
+0.0005 
+0.1897 
+ 
+ 
+23 
+ 
+Height 
+7.93 
+0.0009 
+0.1758 
+iPhone 15 Pro 
+Width 
+0.40 
+0.6740 
+–0.0212 
+Height 
+55.78 
+5.85×10⁻¹⁴ 
+0.6538 
+iPhone 16 Pro 
+Width 
+4.59 
+0.0138 
+0.0967 
+Height 
+176.60 
+8.85×10⁻²⁷ 
+0.8398 
+Table 5. One-way ANOVA and corresponding Omega Squared (ω²) effect sizes for standardized width and height 
+measurements across keratoconus severity levels on different smartphone devices. 
+4. Conclusion 
+Placido disc technology and its computer analysis have long been an established method for diagnosing keratoconus. 
+However, it requires operator experience and is costly. This manuscript introduces a novel application of Placido disc 
+technology using a smartphone platform. We utilize the smartphone camera to capture distinctive corneal images, 
+enabling a novel data extraction and analysis approach. 
+In our approach, we modified the traditional Placido disc by replacing the empty central ring with a solid circle, 
+significantly improving the accuracy and consistency of the extracted reflection. As shown in Figure 3, compared to the 
+empty ring design, the solid circle allows for the entire reflected shape to form a well-defined ellipse. This complete 
+reflection enables precise orientation correction by detecting the long axis of the reflected shape and rotating it 
+accordingly. With a consistently aligned reflection, subsequent feature extraction becomes more reliable. Specifically, 
+for distance matrix generation, the rays used to compute inter-disc distances will always originate from a fixed starting 
+point, which is the center of the solid reflected ellipse, minimizing the bias in distance measurements compared to the 
+fragmented reflections from a traditional Placido disc that is hard to localize the center. Furthermore, when measuring 
+the height and width of the extracted Placido disc reflection, the corrected orientation ensures more accurate dimension 
+estimation, reducing errors caused by misalignment. This refinement ultimately enhances the overall precision of 
+keratoconus classification and visualization. 
+In summary, our proposed WSVM-based classification framework demonstrates robust and accurate performance across 
+various smartphone cameras, suggesting its potential as a reliable tool for keratoconus severity classification. Our 
+ 
+ 
+24 
+ 
+proposed method achieved high accuracy, precision, recall, and F1 scores with advanced devices such as the iPhone 15 
+Pro, iPhone 16 Pro, and Samsung Galaxy Z Flip 3. Particularly, the classifier can reliably detect severe KC cases across 
+all tested devices, indicating its sensitivity to the morphological changes associated with advanced disease stages. 
+By setting the Samsung Galaxy Z Flip 3 as a practical baseline threshold, we propose a baseline to evaluate smartphone 
+suitability in clinical diagnostic contexts. Devices that exceed this performance threshold, such as the iPhone 15 Pro and 
+iPhone 16 Pro, were shown to be well-suited for accurate KC classification. On the other hand, even if the imaging 
+conditions are controlled, the significantly degraded performance observed with the iPhone XS MAX demonstrates that 
+hardware or software limitations can reduce the system's reliability. These findings underscore the significance of 
+camera quality and reinforce the system's suitability for deployment in portable, cost-effective settings, as device 
+specifications meet the required standards. 
+Previous studies that rely on conventional Placido disc-based topographers, such as the work by Kamiya et al. (Kamiya 
+et al., 2021)., which used TMS-4TM equipment and deep learning on color-coded topography maps to achieve high 
+classification accuracy (96.6%) and sensitivity (98.8%) for keratoconus detection, and 78.5% accuracy in classifying 
+the stage. While traditional systems require costly, stationary clinical instrumentation and specialized acquisition 
+software, our smartphone-based system captures raw reflection patterns directly from the cornea using readily 
+available consumer devices under controlled but portable conditions. Despite using simplified imaging inputs without 
+full surface curvature reconstruction, our approach achieves comparable classification performance, with the added 
+advantage of enabling point-of-care deployment and broader accessibility in low-resource or non-clinical settings. 
+Based on the comparative evaluation, we suggest using the hardware and imaging performance of the Samsung Galaxy 
+Z Fold 3 as a minimum threshold for clinical applicability to ensure reliable diagnostic outcomes. This device features 
+a dual-camera system with a 12MP main lens (27 mm, f/1.8) and a 12MP ultra-wide lens (14 mm, f/2.2), along with 
+night mode support (3-second exposure) and automatic processing for low-light environments. The classifier achieved 
+over 90% accuracy and an F1 score of 88.38%, with images captured using this setup under consistent acquisition 
+protocols. Devices lacking key capabilities such as macro photography support or advanced computational 
+enhancement, like the iPhone XS MAX, exhibited substantially poorer performance (accuracy: 16.48%, F1 score: 
+11.60%) under the same imaging conditions. 
+ 
+ 
+25 
+ 
+In addition to classification performance, statistical analyses were conducted to validate the reliability and discriminative 
+strength of the extracted features. One-way ANOVA and Omega Squared (ω²) confirmed that the height feature exhibited 
+large effect sizes across most devices, particularly for the iPhone 16 Pro (ω² = 0.8398), indicating a strong association 
+with KC severity. Furthermore, classification metrics were evaluated using a 1,000-iteration bootstrapping approach, 
+yielding narrow 95% confidence intervals for high-performing devices, such as the iPhone 15 Pro and iPhone 16 Pro. 
+These results affirm the robustness of the proposed features and support the statistical reliability of the system's diagnostic 
+performance across various device configurations. 
+Our comprehensive analysis helped distinguish normal corneas from those suffering from Keratoconus, recognize 
+different stages of the cornea, and provide the location of the KC. A noteworthy addition was the inclusion of a color 
+map in the distance matrix, which improved the precise visualization of KC on the cornea and enhanced diagnostic 
+accuracy. This innovative technique can refine treatment strategies by providing a clear visualization of the affected 
+areas. Due to widespread use of smartphones, our approach facilitates access to advanced diagnostic tools, making them 
+available to a broader audience, including those in remote or underserved areas. It enables rapid and convenient 
+preliminary screening for keratoconus, eliminating the need for specialized equipment or trained personnel. In future 
+work, we plan to conduct comprehensive clinical trials to assess the efficacy and accuracy of our diagnostic method. This 
+will include gathering data from patients with different severities of keratoconus and exploring the integration of 
+additional diagnostic modalities, such as corneal biomechanics and tomography, to ensure the model’s robustness and 
+reliability in real-world applications. 
+5. REFERENCES 
+ 
+Alió, J. L., Shabayek, M. H., & Artola, A. (2006). Intracorneal ring segments for keratoconus correction: long-term 
+follow-up. Journal of Cataract & Refractive Surgery, 32(6), 978-985.  
+Apple. (2023). iPhone 14. https://www.apple.com/go/2023/iphone-14/ 
+Apple. (2024a). iPhone 15 Pro - Tech Specs. https://support.apple.com/en-us/111829 
+Apple. (2024b). iPhone 16 Pro. https://www.apple.com/iphone-16-pro/specs/ 
+Askarian, B., Tabei, F., Askarian, A., & Chong, J. W. (2018). An affordable and easy-to-use diagnostic method for 
+keratoconus detection using a smartphone. Medical imaging 2018: computer-aided diagnosis,  
+Breiman, L. (2017). Classification and regression trees. Routledge.  
+Cavas-Martínez, F., De la Cruz Sánchez, E., Nieto Martínez, J., Fernández Cañavate, F., & Fernández-Pacheco, D. 
+Corneal topography in keratoconus: State of the art. Eye Vis (Lond). 2016; 3: 5. In. 
+Emre, S., Doganay, S., & Yologlu, S. (2007). Evaluation of anterior segment parameters in keratoconic eyes measured 
+with the Pentacam system. Journal of Cataract & Refractive Surgery, 33(10), 1708-1712.  
+ 
+ 
+26 
+ 
+Farjo, A. A., McDermott, M. L., & Soong, H. K. (2009). Corneal anatomy, physiology, and wound healing. 
+Ophthalmology, 44(2), 203-208.  
+Fu, P.-I., Fang, P.-C., Ho, R.-W., Chao, T.-L., Cho, W.-H., Lai, H.-Y., Hsiao, Y.-T., & Kuo, M.-T. (2020). 
+Determination of tear lipid film thickness based on a reflected placido disk tear film analyzer. Diagnostics, 
+10(6), 353.  
+Gao, M., Wu, C., Li, B., Sheng, B., & Huang, Y. (2020). Design and implementation of a Placido disk-based corneal 
+topographer optical system based on aberration theory and simulated annealing algorithm. Optics 
+Communications, 475, 126097.  
+Hashemi, H., Yekta, A., Yazdani, N., Ostadimoghaddam, H., & Khabazkhoob, M. (2020). Comparison of anterior 
+chamber depth between normal and keratoconic eyes: a systematic review and meta-analysis. Journal of 
+Current Ophthalmology, 32(1), 94-98.  
+Kamiya, K., Ayatsuka, Y., Kato, Y., Shoji, N., Mori, Y., & Miyata, K. (2021). Diagnosability of keratoconus using 
+deep learning with Placido disk-based corneal topography. Frontiers in Medicine, 8, 724902.  
+Kovács, I., Németh, J., & Nagy, Z. Z. (2010). Anterior chamber characteristics of keratoconus assessed by rotating 
+Scheimpflug imaging. Journal of Cataract & Refractive Surgery, 36(7), 1101-1106.  
+Lab, 
+B. 
+Bambu 
+Lab 
+X1C 
+3D 
+Printer. 
+https://us.store.bambulab.com/products/x1-
+carbon?srsltid=AfmBOooBCBnMn5i5D6H1PFN6cRAslWAxkdMsEdLqPKagQbsvaAxDYvbf 
+Li, Y., Pang, A. W., & Chong, J. W. A Robust Approach to Segment Human Skin and Burnt Region from Chaos 
+Background Using Classification Trees.  
+Mejía-Barbosa, Y., & Malacara-Hernández, D. (2001). A review of methods for measuring corneal topography. 
+Optometry and vision science, 78(4), 240-253.  
+Milgram, J., Cheriet, M., & Sabourin, R. (2006). “One against one” or “one against all”: Which one is better for 
+handwriting recognition with SVMs? tenth international workshop on Frontiers in handwriting recognition,  
+Næser, K., Savini, G., & Bregnhøj, J. F. (2016). Corneal powers measured with a rotating Scheimpflug camera. British 
+Journal of Ophthalmology, 100(9), 1196-1200.  
+Nie, C., Xu, C., Li, Z., Chu, L., & Hu, Y. (2023). Specular reflections detection and removal for endoscopic images 
+based on brightness classification. Sensors, 23(2), 974.  
+Quirk, T. J., & Quirk, T. J. (2012). One-way analysis of variance (ANOVA). Excel 2007 for educational and 
+psychological statistics: A guide to solving practical problems, 163-179.  
+Samsung. Galaxy Z Flip 3. https://www.samsung.com/levant/smartphones/galaxy-z-flip3-5g/specs/ 
+Samsung. (2020). Galaxy Note20 5G | Note20 Ultra 5G. https://www.samsung.com/us/smartphones/galaxy-canvas/ 
+Seitz, B., Behrens, A., & Langenbucher, A. (1997). Corneal topography. Current opinion in ophthalmology, 8(4), 8-
+24.  
+Shirayama, M., Wang, L., Koch, D. D., & Weikert, M. P. (2010). Comparison of accuracy of intraocular lens 
+calculations using automated keratometry, a Placido-based corneal topographer, and a combined Placido-
+based and dual Scheimpflug corneal topographer. Cornea, 29(10), 1136-1138.  
+Wang, M. (2024). Corneal Topography: A Guide for Clinical Application in Wavefront Era. CRC Press.  
+Yang, X., Song, Q., & Wang, Y. (2007). A weighted support vector machine for data classification. International 
+Journal of Pattern Recognition and Artificial Intelligence, 21(05), 961-976.  
+ 
+ 
+ 

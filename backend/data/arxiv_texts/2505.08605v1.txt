@@ -1,0 +1,1079 @@
+Leveraging Multi-Modal Information to Enhance Dataset Distillation
+Zhe Li
+FAU Erlangen-N¨urnberg
+zhe.li@fau.de
+Hadrien Reynaud
+Imperial College London
+hadrien.reynaud19@imperial.ac.uk
+Bernhard Kainz
+FAU Erlangen-N¨urnberg, Imperial College London
+b.kainz@imperial.ac.uk
+Abstract
+Dataset distillation aims to create a compact and highly
+representative synthetic dataset that preserves the knowl-
+edge of a larger real dataset. While existing methods pri-
+marily focus on optimizing visual representations, incor-
+porating additional modalities and refining object-level in-
+formation can significantly improve the quality of distilled
+datasets.
+In this work, we introduce two key enhance-
+ments to dataset distillation: caption-guided supervision
+and object-centric masking. To integrate textual informa-
+tion, we propose two strategies for leveraging caption fea-
+tures: the feature concatenation, where caption embeddings
+are fused with visual features at the classification stage,
+and caption matching, which introduces a caption-based
+alignment loss during training to ensure semantic coher-
+ence between real and synthetic data. Additionally, we ap-
+ply segmentation masks to isolate target objects and remove
+background distractions, introducing two loss functions de-
+signed for object-centric learning: masked feature align-
+ment loss and masked gradient matching loss. Comprehen-
+sive evaluations demonstrate that integrating caption-based
+guidance and object-centric masking enhances dataset dis-
+tillation, leading to synthetic datasets that achieve superior
+performance on downstream tasks.
+1. Introduction
+Computer vision has rapidly evolved with the advent of
+deep learning, enabling breakthroughs in tasks such as
+image classification, segmentation, and object detection.
+These advances have been largely driven by the availability
+of large-scale datasets, such as ImageNet-1K, which pro-
+vide the rich visual diversity necessary for training high-
+performance models.
+However, the growing reliance on
+massive datasets has led to significant computational, stor-
+age, and energy demands, posing challenges for efficient
+training, model deployment, and scalability, especially in
+resource-constrained environments.
+Researchers have sought ways to reduce dataset sizes
+while preserving their training efficacy to lower storage and
+computational requirements. Traditional techniques, such
+as data pruning, coreset selection, and compression, focus
+on selecting or compressing informative subsets of real im-
+ages. However, these methods still rely on storing real data,
+which can be inefficient. Dataset distillation takes a differ-
+ent approach, which aims to synthesize a small set of opti-
+mized samples that encapsulate the essential information of
+the full dataset. By distilling knowledge into a condensed
+form, models are expected to achieve competitive perfor-
+mance with significantly fewer data samples.
+The chal-
+lenge lies in effectively capturing the complexity of high-
+dimensional datasets, such as ImageNet-1K, while ensuring
+generalization, making dataset distillation a crucial research
+direction for efficient and scalable deep learning.
+Recent advances in dataset distillation have primar-
+ily focused on two key directions: matching-based meth-
+ods [1, 27, 29, 30] and generative model priors [2, 17],
+both of which aim to generate synthetic datasets that closely
+approximate real data distributions. Matching-based meth-
+ods optimize the alignment between real and synthetic im-
+ages, ensuring that the distilled dataset preserves essential
+structural and statistical properties. These approaches have
+shown effectiveness in image-only datasets by directly op-
+timizing synthetic samples against real data distributions.
+Meanwhile, generative model priors leverage GAN-based
+or diffusion models to synthesize high-quality samples, cap-
+turing complex variations in the data.
+While both tech-
+niques have demonstrated success in image-based tasks,
+they largely overlook the potential benefits of multi-modal
+information, such as textual descriptions and object-centric
+features, which could further enhance model generalization
+and feature learning.
+To address these limitations, we propose a multi-modal
+arXiv:2505.08605v1  [cs.CV]  13 May 2025
+dataset distillation framework that integrates diverse data
+modalities, such as caption descriptions, segmentation
+masks, and bounding boxes, into the distillation process.
+By incorporating multi-modal cues, our approach enables
+the model to learn from a more comprehensive represen-
+tation of the dataset, rather than relying solely on image
+information. Caption features provide high-level semantic
+understanding, masks and bounding boxes help localize im-
+portant regions within images, all contributing to a more
+informative synthetic dataset. This integration not only en-
+hances feature learning but also improves model robustness
+in downstream tasks, making dataset distillation more scal-
+able and effective beyond conventional image-based meth-
+ods.
+A major challenge in incorporating multi-modal data
+into dataset distillation is the lack of ground truth annota-
+tions in most large-scale datasets. To address this limitation,
+we employ state-of-the-art methods [7, 8, 13, 22, 26] to gen-
+erate captions, segmentation masks, and bounding boxes for
+real images. Afterwards, we propose two approaches for in-
+tegrating caption features into dataset distillation. The first
+approach, caption feature concatenation, directly concate-
+nates caption embeddings with visual features, allowing the
+model to process linguistic and visual information jointly.
+This fusion improves feature representation, enabling syn-
+thetic datasets to capture both semantic meaning and fine-
+grained visual details. The second approach, caption match-
+ing, treats captions as an additional alignment constraint
+rather than a fused input. During training, caption features
+are generated for synthetic images and matched against real
+image captions alongside gradient matching. This ensures
+that the synthetic dataset aligns not only in appearance but
+also in semantic content, preserving textual descriptions.
+For leveraging segmentation masks, we propose masked
+gradient matching and masked distribution matching to en-
+hance object-centric learning. By applying masks to both
+real and synthetic images, we obscure background regions,
+forcing the model to focus on salient object areas and pre-
+venting overfitting to irrelevant background information.
+The first method applies gradient matching between masked
+real and synthetic images while also enforcing gradient
+alignment on full images. The second method combines
+distribution matching for masked real and synthetic images
+with gradient matching for full images. These approaches
+enable the synthetic dataset to capture detailed object struc-
+tures while maintaining a broader image context, enhanc-
+ing robustness across downstream tasks.
+By integrating
+captions and masks into dataset distillation, our approach
+enriches feature learning, enhances generalization, and im-
+proves performance in downstream tasks.
+Our contribution are as follows:
+1. We integrate multi-modal information into dataset dis-
+tillation by leveraging captions and segmentation masks
+to enhance feature representation. Due to the absence of
+ground-truth multi-modal annotations, we generate these
+annotations using pre-trained models, ensuring consis-
+tency and scalability in the distillation process.
+2. We propose two approaches for incorporating caption
+features into dataset distillation: (i) Caption Concatena-
+tion: Caption features are concatenated with visual fea-
+tures before the classification stage, enriching semantic
+representations. (ii) Caption Matching: Caption features
+for synthetic images are generated during training, and
+a caption matching loss is applied to align synthetic im-
+ages with real samples.
+3. We develop two methods that utilize segmentation masks
+to enhance dataset distillation. We introduce mask-based
+gradient matching and distribution matching to optimize
+the learning of object-specific features while preserving
+semantic consistency between real and synthetic images.
+4. We conduct extensive experiments to validate the effec-
+tiveness and generalization ability of our proposed meth-
+ods. Our results demonstrate consistent performance im-
+provements across various dataset subsets and model ar-
+chitectures.
+2. Related work
+Dataset distillation was initially introduced together with
+model selection [18, 21]. Subsequently, matching meth-
+ods have been explored that reduce the distance between the
+training process on synthetic images and the same teacher
+model trained on the real data, such as Dataset Conden-
+sation with Gradient Matching (DC) [25, 27, 30], Distri-
+bution Matching (DM) [29, 31], Matching Training Tra-
+jectories (MTT) [1], Sequential Subset Matching [5], and
+feature alignment of convolutional networks [14, 20]. To
+improve performance, other approaches, such as factor-
+ization [10], accumulated trajectory errors [4], calibration
+techniques [32], and Frequency Domain utilization [16] are
+also proposed.
+Because of the high-frequency noise in
+pixel space, [2, 28] focus on synthesizing images in the
+latent space using pre-trained GAN-type generative mod-
+els. Other methods address different phases of dataset dis-
+tillation, such as the concept of the distillation space [9],
+the clustering process that selects real images for the fol-
+lowing matching [11], and new matching metrics with mu-
+tual information [15]. Sun et al. [19] proposed cropping
+patches from real images and concatenating high-scoring
+patches to generate synthetic images. Recently, several ap-
+proaches have been proposed that involve training a dif-
+fusion model as part of the dataset distillation process.
+Su et al. [17] trained a latent diffusion model on prototypes
+rather than using traditional matching-based optimization,
+enabling the generation of more diverse and high-quality
+synthetic datasets.
+Gu et al. [6] fine-tuned a diffusion
+model to generate realistic images while introducing a min-
+Figure 1. Annotations of a sample from flamingo class.
+imax criterion to simultaneously improve representative-
+ness and diversity, ensuring a more balanced and informa-
+tive synthetic dataset. For large-scale datasets like the full
+ImageNet-1K, While existing methods [23, 24] have pro-
+posed learning image-text similarity as an auxiliary objec-
+tive during dataset distillation for multi-modal data, we are,
+to the best of our knowledge, the first to rely on multi-modal
+data for distillation of the popular ImageNet-1K dataset,
+and demonstrate the superiority of our approach.
+3. Method
+Problem introduction.
+Dataset distillation refers to the
+process of compressing the rich information from a large
+real dataset into a significantly smaller synthetic dataset.
+The goal is to ensure that the distilled dataset retains essen-
+tial characteristics, allowing models trained on it to achieve
+performance comparable to those trained on the full dataset
+in downstream tasks such as classification.
+Formally, given a real dataset T = {(xi, yi)}N
+i=1, where
+xi ∈R3×H×W denotes an image, yi ∈{0, 1, 2, ..., C} rep-
+resents its corresponding class label, in a dataset with C
+total classes and N total samples. Our task is to synthesize
+IPC images per class and form a small synthetic dataset
+S = {(si, yi)}Ns
+i=1, where Ns = ipc × C and Ns ≪N.
+The downstream tasks trained on the distilled dataset S are
+expected to achieve strong performance, demonstrating the
+effectiveness of the distillation process in preserving essen-
+tial information while reducing data complexity.
+3.1. Multi-modal annotations generation
+One of the main challenges in integrating multi-modal
+data is the absence of ground truth annotations in large-
+scale datasets, requiring automated generation methods. To
+address this, we utilize state-of-the-art pretrained models
+to generate captions, bounding boxes, and segmentation
+masks, following the approach introduced in InstanceDiffu-
+sion [22], a recent text-based image generation framework.
+Figure 1 provides an example of the generated annotations.
+As a preliminary step, we generate all labels for each
+image to establish a broad semantic understanding.
+To
+achieve this, we employ the Recognize Anything Model
+(RAM) [26], a strong image-tagging model capable of de-
+tecting and assigning multiple labels to an image. RAM
+is trained on diverse datasets and optimized for zero-shot
+recognition, making it well-suited for large-scale image la-
+beling without requiring manual annotations. By leveraging
+RAM, we obtain a rich set of class labels that accurately de-
+scribe the objects and scenes within each image.
+To generate bounding boxes for individual objects
+within an image, we apply Grounded Segment Anything
+(Grounded-SAM) [13], a model that integrates object
+grounding with segmentation.
+Grounded-SAM is partic-
+ularly useful for detecting and localizing multiple objects
+within an image, even in cases where predefined class labels
+are unavailable. Once the bounding boxes are obtained, we
+refine the segmentation by utilizing the Segment Anything
+Model (SAM) [7] to generate pixel-wise masks for each de-
+tected object.
+To generate descriptive captions, we employ BLIP-
+V2 [8], a state-of-the-art Vision-Language Model (VLM)
+designed for multi-modal understanding.
+BLIP-V2 is
+trained on large-scale vision-language datasets and is capa-
+ble of generating coherent and contextually relevant textual
+descriptions for visual inputs. By feeding the cropped ob-
+ject instances into BLIP-V2, we obtain instance-level cap-
+tions that describe each detected object. These captions are
+then processed using CLIP [12] to generate corresponding
+caption features.
+3.2. Caption combination
+Caption information introduces additional semantic context
+that enhances the quality of the distilled dataset. Captions
+offer a higher-level understanding of object attributes, re-
+lationships, and contextual relevance. Integrating such in-
+formation can lead to more meaningful and generalizable
+representations in the distilled dataset. A fundamental chal-
+lenge, however, is determining how to effectively integrate
+caption features into the distillation process without disrupt-
+ing the optimization dynamics. To address this challenge,
+we propose two distinct strategies for incorporating cap-
+tion features into dataset distillation. The first method intro-
+duces caption features at the classification stage by concate-
+nating them with visual features before making final pre-
+dictions. The second method generates caption features for
+synthetic images during the training distillation process and
+computes a caption matching loss between real and syn-
+thetic caption features to reinforce semantic consistency.
+Additionally, gradient matching is applied to further align
+the synthetic dataset with real data representations.
+Caption feature concatenation.
+One intuitive way to in-
+troduce caption features is by incorporating them into the
+classification pipeline. In this approach, we extract caption
+embeddings and concatenate them with the feature repre-
+sentations obtained from the penultimate layer of the con-
+”
+“
+Figure 2. Overview of the Caption Combination Framework. (a) Caption Concatenation: The caption feature is integrated with the image
+feature before being passed through the linear layer for probability prediction, enriching the visual representation with semantic context.
+(b) Caption Matching: In each iteration, caption features are extracted from synthetic images and aligned with those from real images,
+enforcing consistency between the generated and original data representations.
+volutional network. This fused feature vector is then passed
+to the classifier, which predicts class probabilities based on
+both visual and textual information. The overall process
+is illustrated in Figure 2 a) Caption Concatenation. This
+method allows the model to integrate linguistic and visual
+representations before the final classification stage, poten-
+tially improving the discriminability of similar classes. By
+providing additional contextual information, caption fea-
+tures may help resolve ambiguities that arise when visually
+similar classes share overlapping features but have distinct
+semantic meanings.
+To
+ensure
+that
+our
+method
+aligns
+with
+existing
+dataset distillation strategies, we adopt the framework of
+GLAD [2]. In GLAD, the distilled dataset is optimized by
+matching gradients between the synthetic and real datasets.
+Our modification extends this framework by introducing
+caption features at the classification stage while keeping the
+core distillation process unchanged. This ensures that the
+distilled dataset remains effective for training downstream
+models without requiring major modifications to the opti-
+mization pipeline. A key advantage of this approach is its
+computational efficiency. Since captions are generated in
+advance and introduced only at the classification stage, the
+distillation process itself remains largely unaffected. This
+makes the method easy to integrate into existing frame-
+works while still allowing models to benefit from additional
+textual context.
+Caption matching
+While the feature concatenation ap-
+proach introduces textual information at the classification
+stage, it does not influence the underlying distilled dataset
+during training. To address this limitation, we propose an
+alternative method in which caption features are generated
+for synthetic images at each iteration and incorporated into
+the distillation process.
+In this approach, as illustrated in Figure 2 b) Caption
+Matching, we apply pretrained BLIP-V2 [8] to generate
+caption features for synthetic images, and a caption match-
+ing loss is introduced as an additional optimization objec-
+tive. This loss ensures that the generated images maintain
+semantic consistency with real images by aligning real and
+synthetic representations throughout the distillation pro-
+cess. The caption matching loss is jointly optimized with
+the standard gradient matching loss used in dataset distilla-
+tion. Specifically, the optimization objective is formulated
+as follows:
+L = λ1Lgrad + λ2Lcaption
+(1)
+where Lgrad represents the traditional gradient matching
+loss, Lcaption enforces similarity between real and synthetic
+captions, and λ1, λ2 are weighting factors that balance the
+two losses. By integrating textual supervision directly into
+the distillation process, this approach ensures that the dis-
+tilled dataset preserves both visual and linguistic charac-
+teristics. Unlike the feature concatenation method, where
+captions are introduced only at the classification stage, this
+method influences the dataset itself, potentially leading to
+more semantically meaningful synthetic samples.
+3.3. Object-centric alignment with masks
+In conventional dataset distillation, both real and syn-
+thetic images contain a mixture of foreground objects and
+background elements.
+However, backgrounds often in-
+troduce noise and redundancy, making it difficult for dis-
+tilled datasets to focus on the most informative regions.
+Since dataset distillation aims to generate a compact yet
+highly representative dataset, leveraging object-centric in-
+formation can lead to better feature alignment and improved
+model generalization. To address this challenge, we pro-
+pose utilizing segmentation masks to extract object regions
+Figure 3. Overview of the Mask Matching Framework. (a) Masked Distribution Matching: The background is removed, retaining only
+the target object, which is then processed by a ConvNet. Distribution matching is applied to align the feature representations of real and
+synthetic images. (b) Masked Gradient Matching: gradient matching is applied, ensuring that the synthetic dataset preserves the underlying
+learning dynamics of the real dataset.
+from both real and synthetic images. By isolating target
+objects from the background, we refine the distillation pro-
+cess and enforce stronger alignment between synthetic and
+real representations. Our approach consists of two different
+strategies: gradient matching loss and feature-based mean
+squared error (MSE) loss, both applied to background-
+masked images.
+Masked gradient matching.
+We extend the idea of gra-
+dient matching to background-masked images. Traditional
+dataset distillation techniques optimize synthetic images by
+matching their gradient updates with those computed from
+real images.
+However, these methods do not explicitly
+account for object-centric differences, leading to potential
+mismatches when real and synthetic images contain varying
+background elements. To mitigate this issue, we compute
+masked gradient matching loss using only the foreground
+objects. Given a model parameterized by θ, let ∇θL(x, y)
+represent the gradient of the loss function with respect to
+the input image x and its label y. Our modified gradient
+matching objective is defined as:
+Lgrad = ||∇θL(ˆxreal, y) −∇θL(ˆxsyn, y)||2
+(2)
+where both the ˆxreal and ˆxsyn are masked images contain-
+ing only the target objects. This loss ensures that the opti-
+mization process focuses on aligning gradients derived from
+object features rather than being influenced by background
+variations. By incorporating gradient matching into the dis-
+tillation process with background-masked images, we rein-
+force the alignment between synthetic and real data repre-
+sentations at a deeper level. This approach helps the model
+learn from the most relevant aspects of the data, leading to
+improved downstream performance.
+Masked distribution matching.
+To enforce similarity
+between real and synthetic representations, we compute the
+Mean Squared Error (MSE) loss between their extracted
+features. Specifically, we pass the masked real and synthetic
+images through the distillation network. Let fθ(x) repre-
+sent the feature vector obtained from an image x, where θ
+denotes the network parameters. The MSE loss is computed
+as follows:
+LMSE =
+1
+NB
+NB
+X
+i=1
+IPC
+X
+j=1
+||fθ(ˆxreal,i) −fθ(ˆxsyn,j)||2
+(3)
+where ˆxreal,i and ˆxsyn,j represent the real and synthetic im-
+ages after background masking, respectively, and NB is the
+number of images in the batch. By applying MSE loss at
+the feature level, we ensure that the synthetic images cap-
+ture the essential object-specific representations present in
+the real dataset. This encourages the distilled dataset to pre-
+serve the most informative aspects of the original data while
+discarding irrelevant background information.
+4. Experiments
+Datasets.
+We evaluate our distillation network on
+ImageNet-1K [3]. Specifically, we test our approach on 10
+subsets of images at a resolution of 128 × 128, with each
+subset containing 10 classes. Additionally, we assess per-
+formance on 5 subsets at a higher resolution of 256×256 to
+further analyze the effectiveness of our method across dif-
+ferent image scales.
+Metrics. To be able to compare to the state-of-the-art, we
+report the classification test accuracy in all experiments.
+Implementation Details. The backbone model for all ex-
+periments is GLAD [2]. The distillation process trains a
+ConvNet for 3000 epochs. To comprehensively evaluate
+the generalization capability of the distilled dataset, we as-
+sess its performance across a diverse model pool compris-
+ing 5 classifiers: ConvNet, ResNet18, VGG11, ViT, and
+AlexNet. This evaluation strategy allows us to analyze the
+effectiveness of the distilled data across different network
+architectures, ranging from convolution-based models to
+transformer-based vision models. To ensure statistical ro-
+bustness, each distillation and classification experiment is
+ImNet-A
+ImNet-B
+ImNet-C
+ImNet-D
+ImNet-E
+ImNette
+ImWoof
+ImNet-Birds
+ImNet-Fruits
+ImNet-Cats
+MTT [1]
+51.7±0.2
+53.3±1.0
+48.0±0.7
+43.0±0.6
+39.5±0.9
+41.8±0.6
+22.6±0.6
+37.3±0.8
+22.4±1.1
+26.6±0.4
+GLAD(MTT) [2]
+50.7±0.4
+51.9±1.3
+44.9±0.4
+39.9±1.7
+37.6±0.7
+38.7±1.6
+23.4±1.1
+35.8±1.4
+23.1±0.4
+26.0±1.1
+DM [29]
+39.4±1.8
+40.9±1.7
+39.0±1.3
+30.8±0.9
+27.0±0.8
+30.4±2.7
+20.7±1.0
+26.6±2.6
+20.4±1.9
+20.1±1.2
+GLAD(DM) [2]
+41.0±1.5
+42.9±1.9
+39.4±0.7
+33.2±1.4
+30.3±1.3
+32.2±1.7
+21.2±1.5
+27.6±1.9
+21.8±1.8
+22.3±1.6
+DC [30]
+43.2±0.6
+47.2±0.7
+41.3±0.7
+34.3±1.5
+34.9±1.5
+34.2±1.7
+22.5±1.0
+32.0±1.5
+21.0±0.9
+22.0±0.6
+GLAD (DC) [2]
+44.1±2.4
+49.2±1.1
+42.0±0.6
+35.6±0.9
+35.8±0.9
+35.4±1.2
+22.3±1.1
+33.8±0.9
+20.7±1.1
+22.6±0.8
+Cap Cat (DC)
+46.5±1.1
+49.0±0.8
+44.3±1.0
+36.9±1.2
+36.0±0.9
+36.5±1.9
+23.0±0.9
+34.2±1.6
+22.6±1.3
+23.5±1.4
+Cap Match (DC)
+46.4±0.8
+48.7±0.4
+42.8±1.0
+35.0±1.7
+34.5±1.1
+36.1±1.2
+23.4±0.7
+33.9±1.2
+21.4±1.5
+22.7±1.0
+Masked DM (DC)
+45.9±2.0
+50.0±1.7
+43.7±1.7
+35.7±1.4
+35.2±0.9
+35.6±0.7
+22.6±1.1
+34.1±1.3
+22.0±1.1
+23.5±0.9
+Masked DC (DC)
+46.5±1.4
+48.6±1.6
+43.2±0.2
+35.1±2.0
+35.0±1.2
+36.2±1.6
+23.5±1.0
+33.4±1.8
+21.8±1.7
+22.3±0.7
+Table 1. Results for IPC= 1 on subsets of ImageNet-1K at a resolution 128 × 128. Both distillation and classification are trained using the
+ConvNet. DC denotes Dataset Condensation, DM denotes distribution matching, MTT denotes Matching Training Trajectories.
+ImNet-A
+ImNet-B
+ImNet-C
+ImNet-D
+ImNet-E
+ImNette
+ImWoof
+ImNet-Birds
+ImNet-Fruits
+ImNet-Cats
+DM [29]
+27.2±1.2
+24.4±1.1
+23.0±1.4
+18.4±1.7
+17.7±0.9
+20.6±0.7
+14.5±0.9
+17.8±0.8
+14.5±1.1
+14.0±1.1
+GLAD(DM) [2]
+31.6±1.4
+31.3±3.9
+26.9±1.2
+21.5±1.0
+20.4±0.8
+21.9±1.1
+15.2±0.9
+18.2±1.0
+20.4±1.6
+16.1±0.7
+DC [30]
+38.7±4.2
+38.7±1.0
+33.3±1.9
+26.4±1.1
+27.4±0.9
+28.2±1.4
+17.4±1.2
+28.5±1.4
+20.4±1.5
+19.8±0.9
+GLAD(DC) [2]
+41.8±1.7
+42.1±1.2
+35.8±1.4
+28.0±0.8
+29.3±1.3
+31.0±1.6
+17.8±1.1
+29.1±1.0
+22.3±1.6
+21.2±1.4
+Cap Cat (DC)
+43.4±1.3
+43.0±1.4
+37.0±1.1
+29.4±1.3
+30.3±1.4
+32.8±1.8
+19.3±1.0
+30.1±1.0
+23.5±1.1
+20.8±1.1
+Cap Match (DC)
+42.9±1.1
+43.3±1.1
+37.8±1.1
+29.0±1.3
+30.7±1.5
+32.9±1.0
+19.4±0.6
+29.7±1.1
+23.1±1.3
+21.4±1.0
+Masked DM (DC)
+42.7±1.8
+43.5±1.5
+37.3±1.3
+30.1±1.0
+31.0±1.3
+33.0±1.3
+19.3±1.4
+30.5±1.2
+23.3±1.0
+21.2±0.8
+Masked DC (DC)
+42.4±1.4
+42.6±1.1
+37.8±0.2
+29.4±1.2
+31.7±1.2
+32.8±1.0
+19.5±1.4
+30.3±1.0
+22.8±1.7
+21.6±0.8
+Table 2. Cross Architecture Results for IPC= 1 on subsets of ImageNet-1K at a resolution 128 × 128.
+repeated 5 times, and we report both the mean and standard
+deviation of the results.
+4.1. Comparison with state-of-the-art
+We evaluate our proposed method on 10 subsets of the
+ImageNet-1K dataset and compare our results from both
+caption-based and mask-based methods to the state-of-the-
+art in Table 1.
+Comparison of quantitative results.
+To thoroughly eval-
+uate the effectiveness of our proposed techniques, we as-
+sess two methods that integrate caption information and two
+methods that utilize mask-based feature learning in Table 1.
+The caption concatenation (Cap Cat (DC)) approach inte-
+grates caption features by concatenating them with visual
+features before the classification stage. This simple yet ef-
+fective method improves performance by up to 9% (22.6 vs.
+20.7 on ImNet-Fruits) across all subsets, demonstrating the
+benefits of leveraging semantic information from text de-
+scriptions. The caption matching (Cap Match (DC)) aligns
+captions features between real and synthetic images and
+achieves up to 5% improvement across all subsets, indicat-
+ing the effectiveness of multi-modal feature alignment. The
+masked distribution matching (Masked DM (DC)) masks
+out specific regions of both real and synthetic images, en-
+forcing dataset distillation on object-centric features while
+reducing background noise. The results show an increase in
+performance of up to 6% (22.0 vs. 20.7 on ImNet-Fruits)
+across all subsets, highlighting the effectiveness of masking
+in improving feature generalization. The masked gradient
+matching (Masked DC (DC)) enhances dataset distillation
+by applying gradient matching between masked real and
+synthetic images. The method yields a performance gain
+of up to 5% across all subsets, demonstrating that targeted
+gradient updates improve model learning without unneces-
+sary computation.
+Our experimental results indicate that leveraging ad-
+ditional multi-modal information significantly enhances
+dataset distillation performance. Both caption-based meth-
+ods and mask-based methods contribute to improvements,
+but in different ways: Caption-based methods improve se-
+mantic understanding by aligning high-level textual de-
+scriptions with visual representations, ensuring that the dis-
+tilled dataset preserves rich species-level features. Mask-
+based methods enhance object discrimination by filtering
+out background noise and focusing on the most informative
+regions. These results validate the effectiveness of incor-
+porating multi-modal data into dataset distillation, setting a
+new standard for improving scalability, efficiency, and per-
+formance in large-scale dataset distillation.
+(a) Caption concatenation
+(b) Caption matching
+(c) Caption concatenation
+(d) Masked distribution matching
+(e) Masked gradient matching
+Figure 4. Qualitative results of different methods. (a) Macaw from ImNet-Birds, generated using caption concatenation. (b) The same
+Macaw class, generated using caption matching. (c), (d), and (e) show Parachute from ImNette, where mask-based methods effectively
+reduce background elements.
+Comparison of qualitative results.
+Figure 4 shows the
+qualitative results of two caption-based and two mask-based
+methods at a resolution of 128×128. Figure 4 (a), generated
+using the caption concatenation method, effectively pre-
+serves class-specific characteristics, such as distinct shapes,
+color patterns, feather arrangements, and complex textures.
+The spatial positioning of key anatomical features, such as
+heads, wings, and tails, appears more natural. To highlight
+this, we zoom in on the head of the Macaw, showcasing
+finer details. Figure 4 (b), produced by the caption match-
+ing method, demonstrates structural coherence as well, par-
+ticularly evident in areas such as the beak of the Macaw.
+Figure 4 (c) serves as a baseline for comparison with mask-
+based methods, using caption concatenation. Figure 4 (d),
+generated using masked distribution matching, enhances
+object boundaries while suppressing background artifacts,
+especially in the bottom regions highlighted by the red box.
+The stronger separation between the foreground and back-
+ground indicates that masking helps isolate and refine ob-
+ject representations. Figure 4 (e), generated with masked
+gradient matching, effectively preserves foreground objects
+while minimizing background distractions as well. The en-
+hanced contrast between objects and their backgrounds sug-
+gests that the masking mechanism effectively suppresses ir-
+relevant gradients, directing the model to focus on more dis-
+criminative object features.
+4.2. Cross architecture results
+To assess the generalization ability of our dataset distilla-
+tion approach, we conduct cross-architecture evaluations.
+The distillation phase is trained on a ConvNet, while the
+classification phase is evaluated on four different architec-
+tures: ResNet18, VGG11, ViT, and AlexNet. We report the
+average classification accuracy across these models to mea-
+sure the transferability of our synthetic dataset across di-
+verse network structures. Our experiments demonstrate that
+incorporating multi-modal information, including captions
+and masks, significantly enhances the quality of the distilled
+dataset and leads to improved performance in downstream
+classification tasks.
+In Table 2, we observe: Caption feature concatenation
+(Cap Cat) achieves up to 8% improvement (19.3 vs. 17.8
+on ImWoof), showing that enriching visual representations
+with semantic information improves classification perfor-
+mance across architectures. Caption matching (Cap Match)
+achieves up to 9% improvement (19.4 vs. 17.8 on ImWoof),
+highlighting the effectiveness of aligning caption seman-
+tics with real images during distillation. Masked distribu-
+tion matching (Masked DM) enhances performance by 8%
+(30.1 vs. 28.0 on ImNet-D), demonstrating that masking
+out background regions and focusing on object-centric fea-
+tures improves dataset quality. Masked gradient matching
+(Masked DC) achieves up to 10% improvement (19.5 vs.
+17.8 on ImWoof), reinforcing that restricting gradient up-
+dates to salient object regions improves feature learning.
+The effectiveness of masked methods (Masked DM and
+Masked DC) suggests that excluding irrelevant background
+features leads to a more discriminative feature space, en-
+hancing downstream classification.
+(a) Caption matching
+(b) Masked gradient matching
+Figure 5. Qualitative results at different resolutions. (a) Rapeseed from ImNet-A, with the left image at 128 × 128 resolution and the right
+image at 256 × 256. (b) Ruddy Turnstone from ImNet-B at thet same setting.
+ImNet-A
+ImNet-B
+ImNet-C
+ImNet-D
+ImNet-E
+DC [30]
+38.3±4.7
+32.8±4.1
+27.6±3.3
+25.5±1.2
+23.5±2.4
+GLaD [2]
+37.4±5.5
+41.5±1.2
+35.7±4.0
+27.9±1.0
+29.3±1.2
+Cap Match (DC)
+44.1±1.2
+43.1±1.4
+36.9±1.4
+29.4±1.5
+30.0±1.5
+Masked DC (DC)
+43.5±1.5
+42.0±1.1
+37.4±1.3
+29.7±0.9
+31.3±1.1
+Cap ConvNet
+44.0±1.0
+47.4±0.7
+41.1±0.7
+33.2±0.9
+33.7±1.1
+Masked ConvNet
+45.2±2.1
+48.1±1.1
+41.5±0.9
+33.0±1.7
+33.0±1.5
+Table 3. Results for IPC= 1 on subsets of ImageNet-1K at a res-
+olution 256 × 256. Cap Match and Mask DC represent the cross-
+architecture evaluation results. Cap ConvNet and Mask ConvNet
+correspond to the results where both the distillation and classifica-
+tion phases are conducted using the ConvNet model.
+4.3. Ablation study
+We extend our evaluation to higher-resolution images
+(256 × 256), with results presented in Table 3. Increasing
+image resolution introduces additional challenges, such as
+greater computational complexity, more fine-grained details
+to capture, and increased variance in object appearances.
+Our approach consistently improves performance across all
+subsets in cross-architecture evaluations, demonstrating its
+effectiveness in handling high-resolution data. The caption
+matching method (Cap Match) demonstrates a notable im-
+provement of 17.9% (44.1 vs. 37.4) on the ImNet-A subset,
+indicating its effectiveness in enhancing classification per-
+formance. Similarly, the masked gradient matching method
+(Masked DC) achieves an improvement of 6.8% (31.3 vs.
+29.3) on the ImNet-E subset, demonstrating its effectiveness
+in preserving essential object features while reducing the in-
+fluence of background noise. This improvement implicates
+that our approach has better generalization to complex im-
+ages and the methods enhance the ability of the model to
+extract robust and transferable features.
+Figure 5 shows a qualitative comparison between two
+resolutions: 128×128 and 256×256. The higher-resolution
+images exhibit enhanced spatial coherence and finer ob-
+ject details compared to their lower-resolution counterparts.
+This improvement is particularly evident in the refined tex-
+tures, such as the increased number of clouds in the sky and
+the more clearly defined body parts of the Ruddy Turnstone.
+These enhancements contribute to greater interpretability,
+making the synthesized images more structurally coherent.
+5. Conclusion
+In this work, we integrate caption-based supervision and
+leverage object-centric masking matching in dataset distilla-
+tion. Captions provide rich semantic context that can com-
+plement visual features, and we propose two distinct ap-
+proaches, caption feature combination and caption match-
+ing for incorporating them into the distillation process.
+Moreover, we propose two object-centric methods, masked
+distribution matching and masked gradient matching, for
+dataset distillation by leveraging images with masked back-
+grounds to enhance focus on target objects.
+By elimi-
+nating irrelevant background details, our approach ensures
+that models focus on critical object features, leading to
+more effective and robust dataset distillation. These meth-
+ods enable more compact and highly informative synthetic
+datasets that retain key semantic and structural properties
+of real data, ultimately leading to improved performance in
+downstream tasks.
+Acknowledgments
+This work was supported by the State of Bavaria, the
+High-Tech Agenda (HTA) Bavaria and HPC resources pro-
+vided by the Erlangen National High Performance Com-
+puting Center (NHR@FAU) of the Friedrich-Alexander-
+Universit¨at Erlangen-N¨urnberg (FAU) under the NHR
+project b180dc. NHR@FAU hardware is partially funded
+by the German Research Foundation (DFG) - 440719683.
+Support was also received from the ERC - project MIA-
+NORMAL 101083647.
+H. Reynaud is supported by
+the UKRI Centre for Doctoral Training AI4Health (EP /
+S023283/1) and Ultromics Ldt.
+References
+[1] George Cazenavette, Tongzhou Wang, Antonio Torralba,
+Alexei A Efros, and Jun-Yan Zhu.
+Dataset distillation
+by matching training trajectories.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 4750–4759, 2022. 1, 2, 6
+[2] George Cazenavette, Tongzhou Wang, Antonio Torralba,
+Alexei A Efros, and Jun-Yan Zhu.
+Generalizing dataset
+distillation via deep generative prior.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 3739–3748, 2023. 1, 2, 4, 5, 6,
+8
+[3] Jia Deng, Wei Dong, Richard Socher, Li-Jia Li, Kai Li,
+and Li Fei-Fei. Imagenet: A large-scale hierarchical image
+database. In 2009 IEEE conference on computer vision and
+pattern recognition, pages 248–255. Ieee, 2009. 5
+[4] Jiawei Du, Yidi Jiang, Vincent YF Tan, Joey Tianyi Zhou,
+and Haizhou Li.
+Minimizing the accumulated trajectory
+error to improve dataset distillation.
+In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 3749–3758, 2023. 2
+[5] Jiawei Du, Qin Shi, and Joey Tianyi Zhou. Sequential subset
+matching for dataset distillation. Advances in Neural Infor-
+mation Processing Systems, 36:67487–67504, 2023. 2
+[6] Jianyang Gu, Saeed Vahidian, Vyacheslav Kungurtsev, Hao-
+nan Wang, Wei Jiang, Yang You, and Yiran Chen. Efficient
+dataset distillation via minimax diffusion. In Proceedings of
+the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, pages 15793–15803, 2024. 2
+[7] Alexander Kirillov, Eric Mintun, Nikhila Ravi, Hanzi Mao,
+Chloe Rolland, Laura Gustafson, Tete Xiao, Spencer White-
+head, Alexander C Berg, Wan-Yen Lo, et al. Segment any-
+thing. In Proceedings of the IEEE/CVF international confer-
+ence on computer vision, pages 4015–4026, 2023. 2, 3
+[8] Junnan Li, Dongxu Li, Silvio Savarese, and Steven Hoi.
+Blip-2:
+Bootstrapping language-image pre-training with
+frozen image encoders and large language models. In In-
+ternational conference on machine learning, pages 19730–
+19742. PMLR, 2023. 2, 3, 4
+[9] Songhua Liu and Xinchao Wang.
+Few-shot dataset dis-
+tillation via translative pre-training.
+In Proceedings of
+the IEEE/CVF international conference on computer vision
+(ICCV), 2023. 2
+[10] Songhua Liu, Kai Wang, Xingyi Yang, Jingwen Ye, and Xin-
+chao Wang. Dataset distillation via factorization. Advances
+in Neural Information Processing Systems (NeurIPS), 35:
+1100–1113, 2022. 2
+[11] Yanqing Liu, Jianyang Gu, Kai Wang, Zheng Zhu, Wei Jiang,
+and Yang You. Dream: Efficient dataset distillation by repre-
+sentative matching. In Proceedings of the IEEE/CVF inter-
+national conference on computer vision (ICCV), 2023. 2
+[12] Alec Radford, Jong Wook Kim, Chris Hallacy, Aditya
+Ramesh, Gabriel Goh, Sandhini Agarwal, Girish Sastry,
+Amanda Askell, Pamela Mishkin, Jack Clark, et al. Learning
+transferable visual models from natural language supervi-
+sion. In International conference on machine learning, pages
+8748–8763. PmLR, 2021. 3
+[13] Tianhe Ren, Shilong Liu, Ailing Zeng, Jing Lin, Kunchang
+Li, He Cao, Jiayu Chen, Xinyu Huang, Yukang Chen, Feng
+Yan, et al. Grounded sam: Assembling open-world models
+for diverse visual tasks. arXiv preprint arXiv:2401.14159,
+2024. 2, 3
+[14] Ahmad Sajedi,
+Samir Khaki,
+Ehsan Amjadian,
+Lucy
+Z. Liu, Yuri A. Lawryshyn, and Konstantinos N. Plataniotis.
+Datadam: Efficient dataset distillation with attention match-
+ing. In Proceedings of the IEEE/CVF international confer-
+ence on computer vision (ICCV), 2023. 2
+[15] Yuzhang Shang, Zhihang Yuan, and Yan Yan. Mim4dd: Mu-
+tual information maximization for dataset distillation. Ad-
+vances in Neural Information Processing Systems (NeurIPS),
+36, 2024. 2
+[16] Donghyeok Shin, Seungjae Shin, and Il-Chul Moon. Fre-
+quency domain-based dataset distillation. Advances in Neu-
+ral Information Processing Systems, 36:70033–70044, 2023.
+2
+[17] Duo Su, Junjie Hou, Weizhi Gao, Yingjie Tian, and Bowen
+Tang.
+Dˆ 4: Dataset distillation via disentangled diffu-
+sion model. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 5809–
+5818, 2024. 1, 2
+[18] Felipe Petroski Such, Aditya Rawal, Joel Lehman, Kenneth
+Stanley, and Jeffrey Clune. Generative teaching networks:
+Accelerating neural architecture search by learning to gener-
+ate synthetic training data. In International Conference on
+Machine Learning, pages 9206–9216. PMLR, 2020. 2
+[19] Peng Sun, Bei Shi, Daiwei Yu, and Tao Lin. On the diversity
+and realism of distilled dataset: An efficient dataset distilla-
+tion paradigm. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 9390–
+9399, 2024. 2
+[20] Kai Wang, Bo Zhao, Xiangyu Peng, Zheng Zhu, Shuo Yang,
+Shuo Wang, Guan Huang, Hakan Bilen, Xinchao Wang, and
+Yang You.
+Cafe: Learning to condense dataset by align-
+ing features. In Proceedings of the IEEE/CVF Conference
+on Computer Vision and Pattern Recognition, pages 12196–
+12205, 2022. 2
+[21] Tongzhou Wang, Jun-Yan Zhu, Antonio Torralba, and
+Alexei A Efros.
+Dataset distillation.
+arXiv preprint
+arXiv:1811.10959, 2018. 2
+[22] Xudong Wang, Trevor Darrell, Sai Saketh Rambhatla, Ro-
+hit Girdhar, and Ishan Misra. Instancediffusion: Instance-
+level control for image generation.
+In Proceedings of the
+IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR), pages 6232–6242, 2024. 2, 3
+[23] Xindi Wu, Byron Zhang, Zhiwei Deng, and Olga Rus-
+sakovsky.
+Vision-language dataset distillation.
+arXiv
+preprint arXiv:2308.07545, 2023. 3
+[24] Yue Xu, Zhilin Lin, Yusong Qiu, Cewu Lu, and Yong-Lu Li.
+Low-rank similarity mining for multimodal dataset distilla-
+tion. arXiv preprint arXiv:2406.03793, 2024. 3
+[25] Lei Zhang, Jie Zhang, Bowen Lei, Subhabrata Mukherjee,
+Xiang Pan, Bo Zhao, Caiwen Ding, Yao Li, and Dongkuan
+Xu. Accelerating dataset distillation via model augmenta-
+tion. In Proceedings of the IEEE/CVF Conference on Com-
+puter Vision and Pattern Recognition (CVPR), pages 11950–
+11959, 2023. 2
+[26] Youcai Zhang, Xinyu Huang, Jinyu Ma, Zhaoyang Li,
+Zhaochuan Luo, Yanchun Xie, Yuzhuo Qin, Tong Luo,
+Yaqian Li, Shilong Liu, et al. Recognize anything: A strong
+image tagging model. In Proceedings of the IEEE/CVF Con-
+ference on Computer Vision and Pattern Recognition, pages
+1724–1732, 2024. 2, 3
+[27] Bo Zhao and Hakan Bilen. Dataset condensation with differ-
+entiable siamese augmentation. In International Conference
+on Machine Learning (ICML), pages 12674–12685. PMLR,
+2021. 1, 2
+[28] Bo Zhao and Hakan Bilen. Synthesizing informative train-
+ing samples with gan. NeurIPS 2022 Workshop on Synthetic
+Data for Empowering ML Research, 2022. 2
+[29] Bo Zhao and Hakan Bilen. Dataset condensation with distri-
+bution matching. Proceedings of the IEEE/CVF Winter Con-
+ference on Applications of Computer Vision (WACV), 2023.
+1, 2, 6
+[30] Bo Zhao, Konda Reddy Mopuri, and Hakan Bilen. Dataset
+condensation with gradient matching. International Confer-
+ence on Learning Representations (ICLR), 2020. 1, 2, 6, 8
+[31] Ganlong Zhao, Guanbin Li, Yipeng Qin, and Yizhou Yu. Im-
+proved distribution matching for dataset condensation.
+In
+Proceedings of the IEEE/CVF Conference on Computer Vi-
+sion and Pattern Recognition (CVPR), pages 7856–7865,
+2023. 2
+[32] Dongyao Zhu, Bowen Lei, Jie Zhang, Yanbo Fang, Ruqi
+Zhang, Yiqun Xie, and Dongkuan Xu. Rethinking data dis-
+tillation: Do not overlook calibration.
+In Proceedings of
+the IEEE/CVF international conference on computer vision
+(ICCV), 2023. 2

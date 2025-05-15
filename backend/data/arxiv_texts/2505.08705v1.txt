@@ -1,0 +1,1414 @@
+1
+Controllable Image Colorization with Instance-aware Texts and Masks
+Yanru An1, Ling Gui1, Qiang Hu1, Chunlei Cai2, Tianxiao Ye2, Xiaoyun Zhang1, and Guangtao Zhai1
+1Shanghai Jiao Tong University, China 2Bilibili Inc.
+Fig. 1: Precise and flexible instance-aware colorization. MT-Color can respect: a) generate pleasing unconditional colorization
+results automatically, b) colorize grayscale images in an instance-aware manner with user-provided instance masks and instance
+texts. The generation process of MT-Color preserves pixel information and achieve strong color-text binding.
+Abstract—Recently, the application of deep learning in image
+colorization has received widespread attention. The maturation
+of diffusion models has further advanced the development of
+image colorization models. However, current mainstream image
+colorization models still face issues such as color bleeding and
+color binding errors, and cannot colorize images at the instance
+level. In this paper, we propose a diffusion-based colorization
+method MT-Color to achieve precise instance-aware colorization
+with use-provided guidance. To tackle color bleeding issue, we
+design a pixel-level mask attention mechanism that integrates
+latent features and conditional gray image features through
+cross-attention. We use segmentation masks to construct cross-
+attention masks, preventing pixel information from exchanging
+between different instances. We also introduce an instance mask
+and text guidance module that extracts instance masks and text
+representations of each instance, which are then fused with latent
+features through self-attention, utilizing instance masks to form
+self-attention masks to prevent instance texts from guiding the
+colorization of other areas, thus mitigating color binding errors.
+Furthermore, we apply a multi-instance sampling strategy, which
+involves sampling each instance region separately and then fusing
+the results. Additionally, we have created a specialized dataset for
+instance-level colorization tasks, GPT-color, by leveraging large
+visual language models on existing image datasets. Qualitative
+and quantitative experiments show that our model and dataset
+outperform previous methods and datasets.
+Index Terms—Image colorization, diffusion models, instance
+level, segmentation masks, textual descriptions, dataset.
+I. INTRODUCTION
+I
+MAGE colorization refers to the process of mapping
+grayscale images to colorful images. By adding color to
+grayscale images, image colorization can enhance the infor-
+mation in them and improve visual quality.
+In recent years, diffusion probabilistic models [1], [2] have
+become one of the most popular research spots. By modeling
+the reverse process of data structure perturbation through noise
+and learning from large-scale datasets, diffusion models have
+achieved powerful and flexible image generation capabilities.
+Recent works [3], [4] have shown that utilizing pre-trained
+diffusion model like Stable Diffusion(SD) [5]’s prior informa-
+tion and ControlNet [6]’s control ability is a viable solution
+for image colorization.
+However, when applied to image colorization tasks, diffu-
+sion probabilistic models face the following issues:
+• Color bleeding. Pretrained Stable Diffusion (SD) models
+are widely adopted for image colorization tasks due to
+their strong text-to-image generation priors. However,
+since the diffusion process in SD is performed in the
+latent space, it tends to weaken structural and boundary
+details, often leading to inaccurate pixel reconstruction.
+Furthermore, the self-attention mechanism in SD com-
+putes correlations across all pixel locations, promoting
+arXiv:2505.08705v1  [cs.CV]  13 May 2025
+2
+color information exchange between unrelated regions.
+These limitations frequently result in color bleeding,
+where the color of one object is influenced by adjacent
+or unrelated objects.
+• Inaccurate text binding. The text-guided module of
+SD uses the CLIP [7] text encoder to encode text
+into text embeddings, which are then fused with latent
+features through cross-attention mechanisms. However,
+the attention mechanism struggles to effectively identify
+the correspondence between objects and attributes (e.g.,
+colors) in the text. As a result, when faced with complex
+textual descriptions, SD may confuse colors between
+different objects, failing to faithfully restore the text and
+leading to color binding errors.
+• Sparse color data. The training datasets for pre-trained
+diffusion models are often not specifically designed for
+colorization tasks and lack detailed color information for
+objects. This results in pre-trained diffusion models being
+insensitive to the binding relationships between objects
+and colors in the text, causing mismatches between the
+colors of objects in the output image and the colors
+described in the text.
+• Low Resolution. Diffusion-based image colorization
+models often struggle to produce high-resolution outputs
+due to the stochastic nature of the diffusion process and
+the latent-space denoising used in pre-trained latent dif-
+fusion models (LDMs). Although ControlNet introduces
+additional conditioning from grayscale images, it fails
+to precisely preserve fine-grained, pixel-level details. As
+the target resolution increases, colorization results tend to
+deviate more from the structure of the original grayscale
+input.
+In this paper, we propose a novel diffusion-based coloriza-
+tion framework, namely MT-Color. Our method aims to use
+user-provided instance masks and instance texts to achieve
+precise, instance-aware colorization. MT-Color integrates the
+powerful generative capability of pre-trained latent diffusion
+models with the flexible control ability of ControlNet to
+produce vivid and realistic results.
+To mitigate the issue of color bleeding, we propose a
+pixel-level masked attention module between ControlNet
+and the U-Net backbone of Stable Diffusion. Specifically,
+the conditional image features generated by ControlNet are
+resized and aligned with the U-Net’s latent features via a cross-
+attention mechanism at the pixel level. To further constrain the
+attention mechanism, user-provided segmentation masks are
+employed to restrict the attention regions. This design helps
+the diffusion model preserve fine-grained spatial details during
+the generation process. Additionally, by maintaining pixel-
+level structure, the proposed method enables higher-resolution
+image generation compared to conventional diffusion-based
+approaches.
+To achieve accurate instance-level colorization and resolve
+the problem of incorrect color binding, it is crucial to process
+each instance independently to prevent undesired information
+exchange. We propose the instance mask and text guidance
+module, which adds a trainable branch to the self-attention
+module of U-Net. This branch jointly encodes instance masks
+and textual descriptions into instance-specific features, which
+are then integrated with the latent features via self-attention.
+The use of instance masks explicitly restricts information
+flow between different instance regions, alleviating color mis-
+binding. Additionally, we adopt a multi-instance sampling
+strategy, where the denoising process is performed separately
+for each instance, further enhancing the instance-awareness of
+the colorization results.
+Additionally, we construct a new dataset, termed GPT-
+Color, to support the training of our proposed model. We
+utilize the strong multi-modal reasoning capabilities of pre-
+trained vision-language model GPT-4 [8] and BLIP-2 [9] to
+automatically generate high-quality annotations for GPT-color.
+This dataset provides fine-grained textual descriptions and
+corresponding segmentation masks for each instance within
+an image, making it well-suited for the instance-aware col-
+orization task.
+We conduct qualitative and quantitative experiments, along
+with ablation studies to evaluate the effectiveness of our
+proposed MT-Color and GPT-color. The results demonstrate
+that MT-Color produces images that are more perceptually
+aligned with human expectations compared to existing meth-
+ods. Moreover, GPT-Color proves to be more effective for the
+image colorization task than existing datasets.
+II. RELATED WORK
+A. Automatic Colorization
+Automatic colorization aims to colorize grayscale images
+without requiring additional user input. With the advancement
+of deep learning, data-driven approaches have significantly
+improved performance. [10] first formulate colorization as a
+regression task using deep networks, while [11] cast it as a
+classification problem. [12] adopt a variational autoencoder
+(VAE) to generate diverse results. To tackle context confu-
+sion and edge bleeding, later methods [13], [14] incorpo-
+rate semantic segmentation. GAN-based approaches such as
+ChromaGAN [15], PalGAN [16], GCP-Colorization [17], and
+BigColor [18] exploit adversarial training to generate vivid im-
+ages. Recent transformer-based models, including Colorization
+Transformer [19], ColorFormer [20], AnchorTransformer [21],
+and DDColor [22], predict color tokens to produce visually
+pleasing outputs.
+B. Text-based Colorization
+Text-based colorization generates plausible colors guided
+by user-provided textual descriptions. L-CoDeR [23] intro-
+duces a transformer-based framework that unifies image and
+text modalities and conditions colorization in a coarse-to-
+fine manner. L-CoIns [24] enhances instance awareness by
+incorporating luminance augmentation and a counter-color loss
+to reduce the correlation between brightness and color words.
+L-CAD [25] utilizes a pre-trained cross-modal generative
+model, aligning spatial structures and semantic conditions to
+achieve instance-aware, text-driven colorization.
+3
+Fig. 2: The left shows the overall architecture of our proposed MT-Color, and the right details each module. The instance mask
+and text guidance module concatenates the feature of instance masks and texts and is connected to the attention module of
+U-Net. ControlNet is used to extract grayscale image feature, which is integrated with U-Net’s latent feature via pixel-level
+mask attention mechanism.
+C. Diffusion-based Colorization
+Diffusion models have shown strong capabilities in im-
+age generation [1], [2], [26]. Stable Diffusion [5] performs
+diffusion in latent space, improving efficiency. Works such
+as GLIDE [27] and Imagen [28] leverage pre-trained vision-
+language models [7], [29] for text-guided generation. Control-
+Net [6] enables spatial condition control (e.g., edges, depth,
+segmentation) on pre-trained diffusion models. PASD [30] in-
+troduces pixel-aware modules to preserve local structure, ben-
+efiting both super-resolution and colorization. Several works
+[25], [31], [32] leverage pre-trained text-to-image diffusion
+models to achieve text-based colorization. More recently,
+ControlColor [3] addresses color overflow and accuracy issues
+using self-attention, a deformable autoencoder, and stroke-
+based color control. GoloColor [4] extracts global and local
+embeddings to guide ControlNet-enhanced Stable Diffusion
+with dense semantic information for precise textual control.
+III. METHODOLOGY
+A. Pixel-level mask attention mechanism
+As shown in Figure 2, we use pre-trained Latent Diffusion
+Model(i.e.,SD [5]) as the backbone, and ControlNet [6] as the
+conditional grayscale image feature extraction module, which
+is responsible for integrating the grayscale image feature into
+the intermediate latent feature of the diffusion backbone. This
+process transfers the pre-trained diffusion model from the
+image generation task to the image colorization task.
+Although ControlNet supports various types of conditional
+generation, it cannot utilize grayscale conditional images to
+achieve precise pixel-level control over the output image,
+which causes color bleeding issue. To address this issue, we
+introduce a pixel-level mask attention module between Con-
+trolNet and Stable Diffusion’s U-Net. One intuitive method
+is to adjust the size of the conditional image feature output
+by ControlNet and use a cross-attention mechanism to align
+it with the latent feature of U-Net at the pixel level, which
+ensures that the diffusion model faithfully preserves pixel-
+level details during the diffusion process. However, the direct
+cross-attention mechanism calculates the correlations between
+all pixels of the conditional image feature and the latent
+feature. This implies that pixels of different instances exchange
+information, which can lead to information leakage between
+objects, thereby causing color bleeding issues. To address this
+kind of issue, we introduce instance segmentation masks into
+the pixel-level attention mechanism, constructing a pixel-level
+mask attention mechanism.
+Specifically, given a latent representation fx ∈Rh×w×c
+of diffusion model and its corresponding conditional image
+representation fy ∈Rh×w×c, where h, w and c respec-
+tively represents the height, width and number of channels
+of feature maps. And given a set of instance masks Mn =
+{mk}n
+k=1 ∈{0, 1}n×H×W , where n, H and W respectively
+represents the number of instances, height and width of each
+instance mask. In pixel-level mask attention mechanism, we
+first adjust the size of fx and fy to fx
+′ ∈Rh∗w×c and
+fy
+′ ∈Rh∗w×c, respectively, and then resize the instance mask
+set to match the dimensions of the two feature maps, denoted
+as M ′
+n = {m′
+k}n
+k=1 ∈{0, 1}n×h×w. For a pixel at position
+(i, j), ∀i ∈{1, ...w}, ∀j ∈{1, ..., h} in the feature maps, we
+search within M ′
+n to find the mask that contains this pixel and
+then select it as the cross-attention mask for that pixel. After
+performing this operation to all pixels, we obtain the global
+cross-attention mask M:
+M(i, j) = {m′
+k|m′
+k(i, j) = 1, k ∈{1, ..., n}}
+(1)
+After copying M to match the number of channels in the
+feature maps, we compute the output feature map using the
+4
+cross-attention mechanism and the global mask as follows:
+ˆf ′x = M ◦Softmax(Q′K′T
+√
+d
+) · V ′
+(2)
+where Q′ = W ′
+Q · f ′
+x, K′ = W ′
+K · f ′
+x, V ′ = W ′
+V · f ′
+y, and ◦
+denotes element-wise multiplication of matrices. W ′
+Q W ′
+K and
+W ′
+V represent learnable projection matrices. Since f ′
+y is output
+by ControlNet without undergoing perceptual compression
+like the autoencoder in Stable Diffusion, it retains the pixel-
+level details of the conditional grayscale image. By aligning
+f ′
+y with the latent feature of U-Net through the pixel-level
+mask attention mechanism, the diffusion model can acquire the
+boundary information of the conditional image, and prevents
+pixels of different objects from exchanging information, thus
+alleviating the issue of color bleeding.
+B. Instance mask and text guidance module
+Many image colorization models do not consider the issue
+of color binding errors. The few colorization models do
+address this problem focus their research on cross-attention
+modules connected to the CLIP [7] text encoder, and only
+use instance masks to influence the results. For example, L-
+CAD [25] uses SAM [33] to segment the mask of every
+color-described noun in the global text , and uses it as
+the cross-attention mask for the corresponding color word.
+GoLoColor [4] fuses the global embedding extracted by BLIP-
+2 [9] and the local embedding extracted by RAM [34] to
+augment textual control. However, these method does not
+notice information leakage between instances in self-attention
+modules. Therefore, we must pay attention to self-attention
+masks in addition to cross-attention.
+We propose the instance mask and text guidance module,
+adding a trainable branch to the self-attention module of U-
+Net. The branch simultaneously uses instance masks and text
+to influence the results. It encodes them into instance features,
+which are then imposed with latent features to perform self-
+attention. Then, by applying instance masks to self-attention
+layers, it prevent information exchange between pixels in
+different instance regions, thus addressing the issue of color
+binding errors.
+Given a latent representation fx ∈Rh×w×c, a set of instance
+masks Mn = {mk}n
+k=1 ∈{0, 1}n×H×W and a set of instance
+texts Tn = {τk}n
+k=1 ∈Rn×lt, where lt represents the max-
+imum possible length of each instance text, we first convert
+the instance masks and texts into instance representations that
+can be input to the instance mask and text guidance module.
+For instance texts, we use the pre-trained CLIP text encoder
+to transform Tn. For instance masks, we use a multi-layer
+perceptron (MLP) to extract their features. The MLP consists
+of 3 convolutional layers. We concatenate the corresponding
+feature of each instance and pass it through a MLP composed
+of three fully connected layers. As 3 shows, this process yields
+the instance feature set Γn = {γk}n
+k=1 ∈Rn×lγ, where lγis
+the length of the instance representation.
+Γn = MLP 2(concat(CLIP(Tn), (MLP 1(Mn))))
+(3)
+Then, we use a masked self-attention mechanism to fuse
+instance features with latent features from U-Net. We first
+flatten the latent representation fx, where the flattened feature
+length is lx = h ∗w. Next, we concatenate this flattened
+feature with the instance feature set Γn, yielding a new feature
+p ∈Rlp×lγ, where the new feature length lp = lx + n. We
+then apply a self-attention mechanism to this feature map
+self map = Softmax(QpKT
+p
+√
+d
+)
+(4)
+to obtain a self-attention map, denoted as self map, where
+Qp = WQp · p,Kp = WKp · p,Vp = WVp · p. The size of
+self map is (lx + n) × (lx + n).
+We construct self-attention masks with instance mask set.
+For latent feature’s self-attention map
+self map[1 : lx, 1 : lx], we construct its mask at position
+(i, j)
+Mself(i, j) =
+
+
+
+
+
+mk,
+∃k ∈{1, . . . , n},
+mk(wi, hi) = mk(wj, hj) = 1
+0,
+otherwise
+(5)
+where (wi, hi) and (wj, hj) are positions in the latent rep-
+resentation corresponding to positions i and j in the self-
+attention map. If an instance mask includes both (wi, hi) and
+(wj, hj), it indicates that the pixels at these two positions
+belong to the same object, allowing them to exchange informa-
+tion. Conversely, information exchange is prohibited to prevent
+information leakage.
+For the attention map between latent features and instance
+features self map[1 : lx, lx + 1 : lx + n], we similarly
+construct its mask at the pixel position (i, j),
+Mcross(i, j) =
+(
+mj,
+mj(wi, hi) = 1
+0,
+otherwise
+(6)
+where, (wi, hi) is the position in the latent feature correspond-
+ing to position i in the self-attention map. If the instance mask
+mj includes (wi, hi), it indicates that the pixel at position
+(wi, hi) in the latent feature is also part of instance j. In this
+case, the pixel at this position can exchange information with
+the instance; otherwise, it cannot.
+We concatenate the self-attention map mask Mself of the
+latent feature with the cross-attention map mask Mcross of
+the instance features along the first dimension, resulting in the
+complete self-attention map mask Mself map, and use it in
+the self-attention map to implement the instance mask self-
+attention mechanism.
+ˆfx = (Mself map ◦self map · Vp)[1 : lx, 1 : lx]
+(7)
+Here, we only take the results from the latent feature part,
+specifically the portion [1 : lx, 1 : lx], as the output of the
+instance mask and text guidance module.
+C. Multi-instance sampling for inference
+Previous work [35] found that the color information of
+images generated by diffusion models is determined in the
+early stage of sampling process. Based on this finding and
+inspired by the effectiveness of [36], we adopt the multi-
+instance sampling strategy during model inference to achieve
+5
+Fig. 3: Multi-instance sampling strategy. Instance noises are
+sampled during the first αT steps, and are cropped and fused
+together with global noise and then sampled globally in the
+rest steps.
+instance-aware colorization. As is illustrated in Figure 3, each
+instance is sampled individually at the beginning of sampling
+process, taking instance masks and texts as conditions, to ob-
+tain instance-specific noisy intermediate images. These images
+are then weighted and fused with the global noisy intermediate
+image to serve as input for subsequent sampling steps.
+Specifically, given a series of diffusion steps {1, ..., T}
+and an initial Gaussian noise zT for the global sampling
+process, we initialize the initial noise for each instance as
+zi
+T
+= zT , ∀i ∈{1, ..., n}, where n denotes the number
+of instances. After colorizing each instance individually, we
+obtain the set of instance-specific noisy intermediate images
+{zi
+αT }n
+i=1, where α is a hyperparameter that represents the
+proportion of individual sampling steps to the total sampling
+steps. Meanwhile, we denoise the global image to obtain the
+global noisy intermediate image zg
+αT .
+At the end of the individual sampling phase, we per-
+form a weighted fusion of zg
+αT and {zi
+αT }n
+i=1. We first
+obtain the global mask through the instance mask set Mn:
+mg = ¬ Wn
+i=1 mi, where W denotes the logical OR operation,
+meaning that all instance masks are combined element-wise
+into a new mask, and ¬ denotes the logical NOT operation,
+meaning that the resulting mask is inverted element-wise to
+obtain the global mask. Given a hyperparameter β, which is
+the weight of the global noisy intermediate image, we obtain
+the fused noisy intermediate image.
+zαT = βmg ◦zg
+αT +
+n
+X
+i=1
+mi ◦zi
+αT
+(8)
+Here, we apply the instance masks to the instance-specific
+noisy intermediate images to extract information from the
+corresponding instance regions and paste it onto the weighted
+global noisy intermediate image, which isolates the informa-
+tion of different instances. After obtaining the fused noisy
+intermediate image, we proceed to the global sampling phase,
+∀t ∈{αT, ..., 1},
+zt−1 = Diffusion(zt, t, τg, Tn, Mn)
+(9)
+where Diffusion represents our model and τg is the global text.
+Fig. 4: Dataset construction pipeline.
+D. Dataset construction pipeline
+Currently, mainstream text-based image colorization models
+are trained using large-scale image datasets like COCO-Stuff
+[37] and ImageNet [38]. However, these datasets generally
+have the following issues:
+• The image description texts are overly verbose, contain-
+ing too much information unrelated to image colorization,
+such as the spatial relationships between objects and the
+reasons for the scene depicted.
+• The image description texts do not comprehensively cover
+the objects and their colors, failing to describe the colors
+of all objects in the image thoroughly.
+• There is a lack of individual object descriptions, and the
+present ones rarely describe the instances’ colors.
+To address these issues, we want to leverage pre-trained
+vision-language models designed for image description tasks
+to generate color-specific texts for both the global image and
+each instance. For colorization, we only need texts that provide
+objects and their corresponding colors. Therefore, we believe
+that an appropriate image colorization dataset should meet the
+following criteria:
+• Provide comprehensive descriptive texts that include an
+global description of the image’s color scheme as well as
+descriptions of the colors of each object in the image.
+• Provide segmentation information and texts for each
+instance in the image, describing each instance in the
+form of ”object + color” phrases, such as ”a red apple”.
+First, we utilize the open-source image annotation model
+RAM [34] to detect objects in the image and generate their
+masks and annotations. Next, we selected two leading vision-
+language models, BLIP-2 and GPT-4, and compared their
+abilities in generating image texts. When generating instance
+texts, we use the instance masks to crop out instance images
+from the global image. We found that the quality of BLIP-2’s
+descriptions is sometimes inconsistent and includes rare color
+information, occasionally resulting in failed text generation.
+We also found that GPT-4 can generally describe objects and
+their colors well in the format of ”object+color.” However,
+6
+Input
+CT2
+DDColor
+DeOldify
+L-CAD
+Ours
+GT
+Fig. 5: Qualitative comparison results for unconditional colorization. All examples are from GPT-color dataset. Our model
+generates more human perception-friendly colors and details.
+some images or instances may not pass GPT-4’s safety checks.
+Additionally, when the input image is blurry or of low
+resolution, GPT-4 may not generate high-quality descriptions
+and instead provide invalid text like ”Unable to provide color
+description, image is too blurred and unclear.” Therefore, we
+decided to jointly use GPT-4 and BLIP-2 to construct the
+dataset, as illustrated in Figure 4. Based on this pipeline,
+we construct a dataset specifically for instance-level image
+colorization tasks, named GPT-color, on a subset of COCO-
+Stuff. The dataset comprises approximately 12,000 training
+images and 3,000 test images. For each image, we provide
+detailed instance masks and descriptions for an average of 8
+instances.
+IV. EXPERIMENTS
+A. Model Training
+1) Training Strategy: Due to the large number of model
+parameters, direct end-to-end training leads to slow conver-
+gence and suboptimal performance. To address this, we adopt
+a two-stage training strategy.
+In the first stage, we train the instance mask and text
+guidance module independently, as the pixel-level masked
+attention module in each modified Transformer block relies
+on its output. In the second stage, we freeze the parameters of
+the pretrained instance mask and text guidance module, and
+then introduce ControlNet and the pixel-level masked attention
+module into the model. Only the parameters of these newly
+introduced components are updated during this stage.
+In both stages, the model is optimized using an L2 loss
+function defined as:
+L2 = ∥ϵ −ϵΘ(zt, t, τg, c, Mn, Tn)∥2
+2
+(10)
+where zt denotes the noisy latent representation after t steps
+of noise addition, τg is the global textual description, c is
+the conditional grayscale input, and Θ denotes all trainable
+parameters.
+2) Training Settings: We train our model on the GPT-Color
+dataset using the AdamW [39] optimizer. The learning rate is
+linearly warmed up to 5×10−5 over the first 500 iterations. We
+use the pretrained Stable Diffusion v1.5 [5] as the backbone.
+To improve model robustness and support both conditional
+and unconditional colorization, we randomly set the input
+mask and text to null tokens with a probability of 50%. For
+multi-instance sampling, we set α = 0.2 and β = 0.2.
+All training is performed on 4 NVIDIA A40 GPUs. The
+first stage is trained for 25,000 iterations, followed by 20,000
+iterations in the second stage.
+B. Comparison with prior work
+In this section, we qualitatively and quantitatively compare
+the results generated by our method with those of other state-
+of-the-art image coloring models. We choose DeOldify [40],
+DDColor [22], CT2 [41] and L-CAD [25] for unconditional
+colorization comparison. For fairness, we provided empty text
+descriptions when testing our model and L-CAD. For all
+previous methods, we conducted tests using their official codes
+and weights.
+1) Quantitative Comparison: We benchmark our method
+against previous methods on GPT-color and report quantitative
+results in Table I. It is worth noting that the metrics widely
+used in previous works like PSNR, SSIM and FID [42] mainly
+focus on the structural similarity between images. However,
+since images with a high structural similarity to the original
+7
+TABLE I: Quantitative comparison for unconditional colorization on GPT-color. ↑(↓)indicates higher(lower) is better. Best
+performances are highlighted in bold and second best performances are highlighted in underline. Our model performs well on
+non-reference human perceptual-level metrics.
+GPT-Color
+Pixel-level metrics
+Perceptual-level metrics
+Resolution
+Metrics
+Colorfulness↑
+PSNR↑
+SSIM↑
+FID↓
+NIQE↓
+MUSIQ↑
+MANIQA↑
+TOPIQ NR↑
+Deoldify [40]
+25.2940
+24.0951
+0.9418
+16.0829
+3.6085
+70.1309
+0.5018
+0.5973
+512 × 512
+DDColor [22]
+35.3415
+23.7479
+0.9334
+11.0731
+3.5569
+69.7063
+0.4918
+0.6000
+512 × 512
+L-CAD [25]
+26.8151
+23.0788
+0.8837
+19.8648
+4.9629
+56.6726
+0.4031
+0.6191
+256 × 256
+CT2 [41]
+40.8147
+23.0743
+0.8339
+12.2452
+4.6926
+54.5806
+0.4347
+0.5266
+256 × 256
+Ours
+37.1039
+23.1224
+0.8714
+11.3891
+3.5131
+70.5013
+0.4670
+0.6234
+512 × 512
+TABLE II: Summary of advantages of MT-Color over existing diffusion-based methods.
+Method
+Resolution
+Pixel-level control
+Instance-level control
+Strict color binding
+Diffusing Colors [31]
+256×256
+×
+×
+×
+Piggybacked [32]
+256×256
+×
+×
+×
+L-CAD [25]
+256×256
+✓
+✓
+×
+Ours
+512×512
+✓
+✓
+✓
+image may not necessarily conform to the natural image distri-
+bution and human perception, we believe that using perceptual-
+level metrics is necessary in the task of image colorization.
+Thus, we introduce 4 perceptual-level non-reference image
+quality assessment (NR IQA) metrics, NIQE [43], MANIQA
+[44], MUSIQ [45] and TOPIQ NR [46] to assess our method.
+We found that our model did not achieve state-of-the-art per-
+formance on metrics that reflect the structural similarity since
+these metrics do not focus on whether the generated images
+are colorful or realistic. Moreover, MT-Color’s output is of
+higher resolution than other diffusion-based methods’ output,
+which leads to worse pixel-level metric results. In terms of
+Colorfulness [47], our model performs well, which indicates
+that our model is able to produce colorful results. On human
+perceptual-level metrics, our model performs better than other
+models, indicating that the colorful images generated by our
+model are more in line with natural distribution patterns and
+human visual perception.
+2) Qualitative Comparison: The qualitative comparison
+results are shown in Figure 5. We observed that DeOldify,
+as a GAN-based model, suffers from large areas of muted
+colors and a lack of color variety, resulting in poor visual
+quality. CT2 and DDcolor, as Transformer-based colorization
+models, produce more vivid and varied colors but exhibit
+color bleeding issues. Additionally, these models often apply
+different colors to the same object, such as the sign in the
+second row, leading to unrealistic results. Both L-CAD and
+our model are diffusion-based, whose results exhibit almost
+no color bleeding, with overall vibrant and natural colors in
+the images. Our model provides a more diverse color palette,
+such as the colorful sugar needles on the bread in the first
+row. Moreover, the resolution of MT-Color’s results are fixed
+to 512×512, which is clearer than the 256×256 resolution of
+L-CAD and CT2.More results and analysis are shown in the
+supplementary material.
+3) Comparison with Other Diffusion-Based Methods: Sev-
+eral recent works leverage the generative power of pre-trained
+diffusion models for image colorization. However, due to
+the lack of open-source implementations for many of these
+TABLE III: Quantitative results of ablation study for PMAM.
+Method
+FID↓
+Colorfulness↑
+PSNR↑
+SSIM↑
+w/o PMAM
+11.88
+25.69
+22.71
+0.8663
+w/ PMAM
+11.39
+37.10
+23.12
+0.8714
+methods, we are unable to conduct direct qualitative and
+quantitative comparisons. Instead, Table II provides a summary
+comparison between these approaches and our proposed MT-
+Color.
+A common limitation of diffusion-based colorization models
+is their inability to preserve fine-grained pixel details, largely
+due to the inherent stochasticity of the diffusion process. This
+limitation often restricts the output resolution to 256×256. In
+contrast, MT-Color incorporates a pixel-level mask attention
+mechanism, enabling effective pixel-level control and signifi-
+cantly boosting the output resolution to 512 × 512.
+While our method introduces additional computational over-
+head which is owing to pixel-space attention, multi-instance
+sampling, and higher image resolution—these trade-offs are
+justified by the improvement in precision, instance awareness,
+and visual fidelity. Moreover, the computational cost can
+be flexibly reduced by scaling down the resolution when
+necessary.
+C. Ablation Study
+1) Pixel-Level Masked Attention Mechanism: We conduct
+an ablation study to evaluate the effectiveness of the pro-
+posed Pixel-Level Masked Attention Mechanism (PMAM).
+The quantitative results are summarized in Table III, and visual
+comparisons are presented in Figure 6.
+By integrating PMAM between ControlNet and the U-
+Net backbone, MT-Color is able to fully leverage instance-
+level mask information and enforce precise spatial alignment
+between conditional features and latent representations. This
+design effectively prevents color spilling beyond object
+boundaries, leading to improved visual fidelity. In contrast,
+removing PMAM results in significant color bleeding and
+8
+Fig. 6: Visual comparison of ablation study for PMAM.
+Fig. 7: Visual comparison of ablation study on the instance
+mask and text guidance module.
+degraded color accuracy, as reflected in both the visual and
+quantitative results.
+2) Instance Mask and Text Guidance Module: We evaluate
+the effectiveness of the instance mask and text guidance mod-
+ule through ablation experiments by comparing the following
+three model variants:
+• Ours: The complete model with the full instance mask
+and text guidance module.
+• Ours w/o mask: The module is used, but the instance
+mask is not utilized to construct the attention mask.
+• Ours w/o instance: The instance mask and text guidance
+module is entirely removed.
+Qualitative results are shown in Figure 7. The instance
+text format is fixed as “A {color} stop sign”, where {color}
+represents the target color. We observe that the model without
+the instance module (Ours w/o instance) fails to correctly
+apply the specified colors to the stop signs. Although Ours
+w/o mask can apply the correct color, the absence of attention
+mask causes color leakage into unrelated regions (e.g., red
+leaves or purple tints in the background). In contrast, the full
+model (Ours) accurately binds colors to corresponding objects
+and confines them strictly within the masked regions, resulting
+in cleaner and more faithful colorization.
+TABLE IV: Quantitative results of ablation study on instance
+mask and text guidance module.
+Method
+CLIP-score↑
+Colorfulness↑
+FID↓
+MUSIQ↑
+Ours w/o instance
+0.1944
+36.28
+11.24
+70.43
+Ours w/o mask
+0.2230
+36.63
+11.66
+69.83
+Ours
+0.2273
+37.10
+11.39
+70.50
+Fig. 8: Visual comparison of ablation study on the multi-
+instance sampling strategy.
+We further conduct quantitative evaluations by computing
+the CLIP-score [7] on the GPT-Color test set. Each instance
+is cropped using its mask, and the CLIP-score is calculated
+between the cropped region and its corresponding text. As
+shown in Table IV, the complete model achieves the highest
+score, indicating stronger alignment between generated colors
+and textual descriptions.
+3) Multi-Instance Sampling Strategy: We also evaluate the
+effectiveness of the proposed multi-instance sampling strategy
+using the following variants:
+• Ours: The full model using multi-instance sampling.
+• Ours w/o crop: Multi-instance sampling is applied, but
+the results for each instance are averaged and added to
+the global result without cropping by instance masks.
+• DDIM: No multi-instance sampling; instead, standard
+DDIM is used for denoising.
+Figure 8 shows qualitative comparisons. The baseline DDIM
+fails to apply the correct colors according to the textual
+descriptions. The Ours w/o crop variant partially improves
+results but still suffers from interference between instances.
+Only the complete method (Ours) correctly assigns the spec-
+ified colors to corresponding objects while preserving region
+integrity.
+Quantitative results in Table V show that the complete
+multi-instance sampling method achieves the highest CLIP-
+score and MUSIQ, indicating improved semantic alignment
+and perceptual quality. These results validate the necessity
+of separately sampling and fusing instance-level results with
+region-aware cropping.
+4) GPT-Color Comparison: In this section, we compare
+the proposed GPT-Color dataset with other publicly available
+image colorization datasets that include textual descriptions,
+to demonstrate its superiority in supporting high-quality col-
+orization models.
+9
+TABLE V: Quantitative results of ablation study on the multi-
+instance sampling strategy.
+Method
+CLIP-score↑
+Colorfulness↑
+FID↓
+MUSIQ↑
+DDIM
+0.2162
+36.14
+11.41
+68.54
+Ours w/o crop
+0.2198
+37.25
+12.23
+70.16
+Ours
+0.2273
+37.10
+11.39
+70.50
+TABLE VI: Comparison between GPT-Color and other
+datasets.
+Dataset
+Automatic text
+Enhanced color
+Instance
+generation
+information
+text
+COCO-Stuff
+×
+×
+√
+Multi-instance
+√
+√
+×
+GPT-Color
+√
+√
+√
+Currently, two mainstream COCO-based datasets are used
+for image colorization: COCO-Stuff and Multi-instance.
+COCO-Stuff is primarily designed for instance segmentation,
+where the global text annotations are manually written, and
+the instance-level annotations are limited to category labels,
+lacking detailed color information. Multi-instance is tailored
+for colorization tasks, where global text is generated by BLIP,
+but it does not provide instance-level textual descriptions. As
+summarized in Table VI, GPT-Color combines the strengths of
+both datasets—it supports automatic text generation, includes
+rich color information, and provides fine-grained instance-level
+descriptions.
+TABLE VII: Quantitative comparison of textual descriptions
+among datasets using CLIP-Score.
+Metric
+CLIP-Score ↑
+COCO-Stuff (Global)
+0.3019
+Multi-instance (Global)
+0.2728
+GPT-Color (Global)
+0.3059
+COCO-Stuff (Instance)
+0.2115
+GPT-Color (Instance)
+0.2455
+We demonstrate several visual samples for qualitatively
+comparison in the supplemental material. To quantitatively
+assess the quality of textual annotations, we compute the
+CLIP-Score between global text and images across the three
+datasets. For instance-level evaluation, we apply instance
+masks from COCO-Stuff and GPT-Color to extract individual
+instance regions and then compute the CLIP-Score between
+the cropped image patches and their corresponding instance
+descriptions. Results are shown in Table VII.
+We observe that Multi-instance yields the lowest global
+CLIP-Score, likely due to the presence of non-descriptive or
+irrelevant text such as questions. COCO-Stuff performs better
+in this regard, but GPT-Color achieves the highest global
+CLIP-Score, indicating the best overall text-image alignment.
+For instance-level comparison, GPT-Color also outperforms
+COCO-Stuff, thanks to its detailed and color-aware instance
+annotations, which are better recognized by the CLIP text
+encoder.
+We further evaluate the training capability of each dataset
+by training the same model on COCO-Stuff, Multi-instance,
+TABLE VIII: Performance comparison of models trained on
+different datasets.
+Metric
+FID ↓
+Colorfulness ↑
+PSNR ↑
+SSIM ↑
+COCO-Stuff
+13.43
+34.07
+23.41
+0.8735
+Multi-instance
+23.63
+25.79
+22.20
+0.8685
+GPT-Color
+11.40
+37.10
+23.12
+0.8714
+and GPT-Color, and testing on the GPT-Color test set. Since
+Multi-instance does not provide instance-level text, we supply
+empty instance texts during training for fair. The results are
+shown in Table VIII.
+The model trained on COCO-Stuff performs slightly better
+in PSNR and SSIM, likely due to its larger scale and broader
+category diversity. However, the model trained on GPT-Color
+achieves the best performance in terms of FID and color-
+fulness, highlighting its superior ability to guide vivid and
+realistic color generation. These results demonstrate that GPT-
+Color is better suited for text-guided image colorization tasks.
+V. CONCLUSION
+In this work, we propose MT-Color, a novel framework
+designed to address the challenges of color bleeding and inac-
+curate color binding in pre-trained diffusion-based colorization
+models. To alleviate color leakage, we introduce a pixel-level
+masked attention mechanism by integrating Stable Diffusion
+with ControlNet. To enhance instance-level color fidelity, we
+propose an instance mask and text guidance module that fuses
+instance masks and textual descriptions with latent features,
+alongside a multi-instance sampling strategy to prevent cross-
+instance information leakage. Furthermore, we construct a new
+dataset, GPT-Color, using GPT-4 and BLIP-2 to generate fine-
+grained textual color descriptions and corresponding instance
+masks. Extensive experiments demonstrate that both the pro-
+posed method and dataset significantly improve color accuracy
+and perceptual quality in text-guided image colorization tasks.
+REFERENCES
+[1] J. Ho, A. Jain, and P. Abbeel, “Denoising diffusion probabilistic models,”
+Advances in neural information processing systems, vol. 33, pp. 6840–
+6851, 2020.
+[2] J. Song, C. Meng, and S. Ermon, “Denoising diffusion implicit models,”
+arXiv preprint arXiv:2010.02502, 2020.
+[3] Z. Liang, Z. Li, S. Zhou, C. Li, and C. C. Loy, “Control color:
+Multimodal
+diffusion-based
+interactive
+image
+colorization,”
+2024.
+[Online]. Available: https://arxiv.org/abs/2402.10855
+[4] T. Yue, X. Du, J. Liu, and Z. Fang, “Golocolor: Towards global-local
+semantic aware image colorization,” in ICASSP 2025 - 2025 IEEE
+International Conference on Acoustics, Speech and Signal Processing
+(ICASSP), 2025, pp. 1–5.
+[5] R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer, “High-
+resolution image synthesis with latent diffusion models,” in Proceedings
+of the IEEE/CVF conference on computer vision and pattern recognition,
+2022, pp. 10 684–10 695.
+[6] L. Zhang, A. Rao, and M. Agrawala, “Adding conditional control
+to text-to-image diffusion models,” in Proceedings of the IEEE/CVF
+international conference on computer vision, 2023, pp. 3836–3847.
+[7] A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal,
+G. Sastry, A. Askell, P. Mishkin, J. Clark et al., “Learning transferable
+visual models from natural language supervision,” in International
+conference on machine learning.
+PmLR, 2021, pp. 8748–8763.
+[8] OpenAI et al., “Gpt-4 technical report,” 2024. [Online]. Available:
+https://arxiv.org/abs/2303.08774
+10
+[9] J. Li, D. Li, S. Savarese, and S. Hoi, “Blip-2: Bootstrapping language-
+image pre-training with frozen image encoders and large language
+models,” in International conference on machine learning.
+PMLR,
+2023, pp. 19 730–19 742.
+[10] Z. Cheng, Q. Yang, and B. Sheng, “Deep colorization,” in Proceedings
+of the IEEE international conference on computer vision, 2015, pp. 415–
+423.
+[11] R. Zhang, P. Isola, and A. A. Efros, “Colorful image colorization,”
+in Computer Vision–ECCV 2016: 14th European Conference, Amster-
+dam, The Netherlands, October 11-14, 2016, Proceedings, Part III 14.
+Springer, 2016, pp. 649–666.
+[12] A. Deshpande, J. Lu, M.-C. Yeh, M. Jin Chong, and D. Forsyth,
+“Learning diverse image colorization,” in Proceedings of the IEEE
+conference on computer vision and pattern recognition, 2017, pp. 6837–
+6845.
+[13] J. Zhao, L. Liu, C. G. M. Snoek, J. Han, and L. Shao, “Pixel-level
+semantics guided image colorization,” 2018. [Online]. Available:
+https://arxiv.org/abs/1808.01597
+[14] J. Zhao, J. Han, L. Shao, and C. G. Snoek, “Pixelated semantic
+colorization,” International Journal of Computer Vision, vol. 128, pp.
+818–834, 2020.
+[15] P. Vitoria, L. Raad, and C. Ballester, “Chromagan: Adversarial picture
+colorization with semantic class distribution,” in Proceedings of the
+IEEE/CVF winter conference on applications of computer vision, 2020,
+pp. 2445–2454.
+[16] Y. Wang, M. Xia, L. Qi, J. Shao, and Y. Qiao, “Palgan: Image
+colorization with palette generative adversarial networks,” in European
+Conference on Computer Vision.
+Springer, 2022, pp. 271–288.
+[17] Y. Wu, X. Wang, Y. Li, H. Zhang, X. Zhao, and Y. Shan, “Towards
+vivid and diverse image colorization with generative color prior,” in
+Proceedings of the IEEE/CVF international conference on computer
+vision, 2021, pp. 14 377–14 386.
+[18] G. Kim, K. Kang, S. Kim, H. Lee, S. Kim, J. Kim, S.-H. Baek, and
+S. Cho, “Bigcolor: Colorization using a generative color prior for natural
+images,” in European Conference on Computer Vision.
+Springer, 2022,
+pp. 350–366.
+[19] M. Kumar, D. Weissenborn, and N. Kalchbrenner, “Colorization trans-
+former,” arXiv preprint arXiv:2102.04432, 2021.
+[20] X. Ji, B. Jiang, D. Luo, G. Tao, W. Chu, Z. Xie, C. Wang, and Y. Tai,
+“Colorformer: Image colorization via color memory assisted hybrid-
+attention transformer,” in Computer Vision – ECCV 2022, S. Avidan,
+G. Brostow, M. Ciss´e, G. M. Farinella, and T. Hassner, Eds.
+Cham:
+Springer Nature Switzerland, 2022, pp. 20–36.
+[21] M. Xia, W. Hu, T.-T. Wong, and J. Wang, “Disentangled image
+colorization via global anchors,” ACM Trans. Graph., vol. 41, no. 6, nov
+2022. [Online]. Available: https://doi.org/10.1145/3550454.3555432
+[22] X. Kang, T. Yang, W. Ouyang, P. Ren, L. Li, and X. Xie, “Ddcolor:
+Towards photo-realistic image colorization via dual decoders,” in Pro-
+ceedings of the IEEE/CVF International Conference on Computer Vision
+(ICCV), October 2023, pp. 328–338.
+[23] Z. Chang, S. Weng, Y. Li, S. Li, and B. Shi, “L-coder: Language-based
+colorization with color-object decoupling transformer,” in Computer
+Vision – ECCV 2022, S. Avidan, G. Brostow, M. Ciss´e, G. M. Farinella,
+and T. Hassner, Eds.
+Cham: Springer Nature Switzerland, 2022, pp.
+360–375.
+[24] Z. Chang, S. Weng, P. Zhang, Y. Li, S. Li, and B. Shi, “L-
+coins: Language-based colorization with instance awareness,” in 2023
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+(CVPR), 2023, pp. 19 221–19 230.
+[25] S. Weng, P. Zhang, Y. Li, S. Li, B. Shi et al., “L-cad: Language-based
+colorization with any-level descriptions using diffusion priors,” Advances
+in Neural Information Processing Systems, vol. 36, pp. 77 174–77 186,
+2023.
+[26] P. Dhariwal and A. Nichol, “Diffusion models beat gans on image
+synthesis,” Advances in neural information processing systems, vol. 34,
+pp. 8780–8794, 2021.
+[27] A. Nichol, P. Dhariwal, A. Ramesh, P. Shyam, P. Mishkin, B. McGrew,
+I. Sutskever, and M. Chen, “Glide: Towards photorealistic image
+generation and editing with text-guided diffusion models,” 2022.
+[Online]. Available: https://arxiv.org/abs/2112.10741
+[28] C. Saharia, W. Chan, S. Saxena, L. Li, J. Whang, E. L. Denton,
+K. Ghasemipour, R. Gontijo Lopes, B. Karagol Ayan, T. Salimans
+et al., “Photorealistic text-to-image diffusion models with deep language
+understanding,” Advances in neural information processing systems,
+vol. 35, pp. 36 479–36 494, 2022.
+[29] C. Raffel, N. Shazeer, A. Roberts, K. Lee, S. Narang, M. Matena,
+Y. Zhou, W. Li, and P. J. Liu, “Exploring the limits of transfer learning
+with a unified text-to-text transformer,” Journal of machine learning
+research, vol. 21, no. 140, pp. 1–67, 2020.
+[30] T. Yang, R. Wu, P. Ren, X. Xie, and L. Zhang, “Pixel-aware stable diffu-
+sion for realistic image super-resolution and personalized stylization,” in
+European Conference on Computer Vision.
+Springer, 2024, pp. 74–91.
+[31] N. Zabari, A. Azulay, A. Gorkor, T. Halperin, and O. Fried, “Diffusing
+colors: Image colorization with text guided diffusion,” in SIGGRAPH
+Asia 2023 Conference Papers, 2023, pp. 1–11.
+[32] H. Liu, J. Xing, M. Xie, C. Li, and T.-T. Wong, “Improved diffusion-
+based image colorization via piggybacked models,” arXiv preprint
+arXiv:2304.11105, 2023.
+[33] A. Kirillov, E. Mintun, N. Ravi, H. Mao, C. Rolland, L. Gustafson,
+T. Xiao, S. Whitehead, A. C. Berg, W.-Y. Lo et al., “Segment anything,”
+in Proceedings of the IEEE/CVF international conference on computer
+vision, 2023, pp. 4015–4026.
+[34] Y. Zhang, X. Huang, J. Ma, Z. Li, Z. Luo, Y. Xie, Y. Qin, T. Luo, Y. Li,
+S. Liu et al., “Recognize anything: A strong image tagging model,”
+in Proceedings of the IEEE/CVF Conference on Computer Vision and
+Pattern Recognition, 2024, pp. 1724–1732.
+[35] X. Hu, R. Wang, Y. Fang, B. Fu, P. Cheng, and G. Yu, “Ella: Equip
+diffusion models with llm for enhanced semantic alignment,” 2024.
+[Online]. Available: https://arxiv.org/abs/2403.05135
+[36] X. Wang, T. Darrell, S. S. Rambhatla, R. Girdhar, and I. Misra,
+“Instancediffusion: Instance-level control for image generation,” in Pro-
+ceedings of the IEEE/CVF Conference on Computer Vision and Pattern
+Recognition, 2024, pp. 6232–6242.
+[37] H. Caesar, J. Uijlings, and V. Ferrari, “Coco-stuff: Thing and stuff classes
+in context,” in Proceedings of the IEEE conference on computer vision
+and pattern recognition, 2018, pp. 1209–1218.
+[38] A. Krizhevsky, I. Sutskever, and G. E. Hinton, “Imagenet classification
+with deep convolutional neural networks,” Commun. ACM, vol. 60,
+no. 6, p. 84–90, may 2017. [Online]. Available: https://doi.org/10.1145/
+3065386
+[39] I. Loshchilov and F. Hutter, “Decoupled weight decay regularization,”
+arXiv preprint arXiv:1711.05101, 2017.
+[40] A.
+Salmona,
+L.
+Bouza,
+and
+J.
+Delon,
+“Deoldify:
+A
+review
+and implementation of an automatic colorization method,” Image
+Process. Line, vol. 12, pp. 347–368, 2022. [Online]. Available:
+https://api.semanticscholar.org/CorpusID:252095336
+[41] S. Weng, J. Sun, Y. Li, S. Li, and B. Shi, “Ct2: Colorization transformer
+via color tokens,” in Proceedings of the European Conference on
+Computer Vision.
+Berlin, Heidelberg: Springer-Verlag, 2022, p. 1–16.
+[Online]. Available: https://doi.org/10.1007/978-3-031-20071-7 1
+[42] D. Dowson and B. Landau, “The fr´echet distance between multivariate
+normal distributions,” Journal of Multivariate Analysis, vol. 12, no. 3,
+pp. 450–455, 1982. [Online]. Available: https://www.sciencedirect.com/
+science/article/pii/0047259X8290077X
+[43] A. Mittal, R. Soundararajan, and A. C. Bovik, “Making a “completely
+blind” image quality analyzer,” IEEE Signal Processing Letters, vol. 20,
+no. 3, pp. 209–212, 2013.
+[44] S. Yang, T. Wu, S. Shi, S. Lao, Y. Gong, M. Cao, J. Wang, and Y. Yang,
+“Maniqa: Multi-dimension attention network for no-reference image
+quality assessment,” in Proceedings of the IEEE/CVF conference on
+computer vision and pattern recognition, 2022, pp. 1191–1200.
+[45] J. Ke, Q. Wang, Y. Wang, P. Milanfar, and F. Yang, “Musiq: Multi-
+scale image quality transformer,” in Proceedings of the IEEE/CVF
+international conference on computer vision, 2021, pp. 5148–5157.
+[46] C. Chen, J. Mo, J. Hou, H. Wu, L. Liao, W. Sun, Q. Yan, and W. Lin,
+“Topiq: A top-down approach from semantics to distortions for image
+quality assessment,” IEEE Transactions on Image Processing, 2024.
+[47] D. Hasler and S. Suesstrunk, “Measuring colourfulness in natural
+images,” Proceedings of SPIE - The International Society for Optical
+Engineering, vol. 5007, pp. 87–95, 06 2003.
+1
+Controllable Image Colorization with Instance-aware Texts and Masks
+Supplementary Material
+I. PRELIMINARY
+A. Diffusion Model
+Diffusion models consist of a forward noising process and
+a reverse denoising process. In the forward process, Gaussian
+noise ϵ is gradually added to the clean data sample x0 over
+T time steps, resulting in a sequence of progressively noised
+samples x1, . . . , xT . The reverse process aims to recover x0
+from a noisy input xt by learning a denoising model ϵθ that
+predicts the noise added at each time step t.
+To reduce the computational cost of diffusion models in
+pixel space, the Latent Diffusion Model (LDM) performs
+the diffusion process in a compressed latent space. Given an
+optional condition c, the training objective of LDM is defined
+as:
+LLDM = Ex0,ϵ,t,c
+h
+∥ϵ −ϵθ(zt, t, c)∥2
+2
+i
+,
+(1)
+where zt denotes the latent representation at time step t, and
+ϵθ is the denoising network.
+B. ControlNet
+ControlNet is a neural network architecture designed to
+introduce explicit conditional control into pretrained text-to-
+image diffusion models. It constructs a deep and expressive
+encoder by creating a trainable copy of selected layers from
+the base LDM. This copy learns to encode additional control
+signals, while the original model remains mostly fixed.
+The trainable branch and the original model are linked
+through ”zero convolution” layers, which help suppress the
+propagation of harmful noise during training. The training
+objective of ControlNet-augmented LDM can be formulated
+as:
+L = Ex0,ϵ,t,c,y
+h
+∥ϵ −ϵθ(zt, t, c, y)∥2
+2
+i
+,
+(2)
+where c denotes the textual condition, and y represents the
+additional structural condition provided by ControlNet.
+II. GPT-COLOR DATASET
+To further demonstrate the advantages of GPT-Color in
+generating textual descriptions, we randomly selected several
+images from the COCO dataset and compared the correspond-
+ing global text descriptions from GPT-Color, COCO-Stuff, and
+Multi-Instance datasets, as shown in Figure 1.
+We observe that the global text in COCO-Stuff is notably
+brief, focusing primarily on the general scene and covering
+only a limited subset of the objects present in the image.
+Moreover, it lacks detailed color information, which is es-
+sential for image colorization tasks. In contrast, the Multi-
+Instance dataset provides longer descriptions that mention
+more objects than COCO-Stuff. However, the descriptions
+often contain irrelevant or non-informative sentences, such as
+rhetorical questions or repetitive mentions of the same object
+(e.g., “side of a floater,” “part of a floater,” and “edge of a
+boat” in the third image). Additionally, despite being tailored
+for image colorization, Multi-Instance does not consistently
+provide color details for every mentioned object.
+In comparison, GPT-Color begins with a description of the
+overall color tone of the image, followed by a comprehensive
+enumeration of objects within the scene, each annotated with
+specific color information. This structure ensures both com-
+pleteness and relevance in the text.
+From a qualitative perspective, the textual annotations in
+GPT-Color are more informative, coherent, and better suited
+for guiding colorization tasks than those in COCO-Stuff and
+Multi-Instance.
+III. MORE VISUAL RESULTS OF CONDITIONAL
+COLORIZATION
+In this section, we present several examples from the GPT-
+Color validation set to further demonstrate the conditional
+colorization capabilities of our proposed MT-Color model,
+which leverages global text descriptions, instance segmenta-
+tion masks, and instance-level textual annotations.
+As shown in Figure 2, MT-Color is capable of producing
+precise and diverse instance-aware image colorization guided
+by user-provided global descriptions, instance masks, and
+instance texts. The colorization results not only adhere closely
+to the color constraints specified by the instance-level inputs,
+but also align well with human visual perception. Furthermore,
+the output resolution is fixed at 512×512, offering clearer and
+more visually appealing results.
+Benefiting from the multi-instance sampling strategy, the
+color of each object is influenced not only by the corre-
+sponding instance text, but also by the global description. For
+instance, in the case where the towel held by a girl is not
+annotated with an instance mask or description, its color is
+still correctly inferred based on the global text input.
+However, due to the inherent stochasticity of diffusion mod-
+els, MT-Color may occasionally fail to preserve fine pixel-level
+details from the grayscale input or even generate suboptimal
+results. Addressing this limitation remains an open direction
+for future work.
+IV. MORE COMPARISONS OF AUTOMATIC COLORIZATION
+As shown in Figure 3 and 4, we provide more unconditional
+colorization visual results of our model and the comparison
+with previous methods on COCO-Stuff dataset and ImageNet
+dataset, respectively. Meanwhile, we test our model and pre-
+vious methods on these two datasets and report quantitative
+results in Table I and II.
+arXiv:2505.08705v1  [cs.CV]  13 May 2025
+2
+TABLE I
+QUANTITATIVE COMPARISON FOR UNCONDITIONAL COLORIZATION ON COCO-STUFF DATASET. ↑(↓) INDICATES HIGHER(LOWER) IS BETTER. BEST
+PERFORMANCES ARE HIGHLIGHTED IN BOLD AND SECOND BEST PERFORMANCES ARE HIGHLIGHTED IN UNDERLINE.
+COCO-Stuff
+Pixel-level
+Perceptual-level
+Metrics
+Colorfulness↑
+PSNR↑
+SSIM↑
+FID↓
+NIQE↓
+MUSIQ↑
+MANIQA↑
+TOPIQ NR↑
+Deoldify
+25.7857
+23.2442
+0.8677
+15.3988
+3.6135
+69.9131
+0.5004
+0.5961
+DDColor
+35.4759
+22.9509
+0.8614
+9.7483
+3.5588
+69.5143
+0.4910
+0.5981
+L-CAD
+28.8897
+24.2191
+0.8728
+11.3773
+4.9759
+54.5308
+0.4021
+0.6283
+CT2
+40.4601
+23.0503
+0.8692
+12.5434
+4.7118
+56.3082
+0.4361
+0.5278
+Ours
+33.0894
+23.0729
+0.8704
+11.9967
+4.1312
+70.4190
+0.5113
+0.6358
+TABLE II
+QUANTITATIVE COMPARISON FOR UNCONDITIONAL COLORIZATION ON IMAGENET DATASET. ↑(↓) INDICATES HIGHER(LOWER) IS BETTER. BEST
+PERFORMANCES ARE HIGHLIGHTED IN BOLD AND SECOND BEST PERFORMANCES ARE HIGHLIGHTED IN UNDERLINE
+ImageNet
+Pixel-level
+Perceptual-level
+Metrics
+Colorfulness↑
+PSNR↑
+SSIM↑
+FID↓
+NIQE↓
+MUSIQ↑
+MANIQA↑
+TOPIQ NR↑
+Deoldify
+25.6872
+23.6722
+0.9107
+7.8766
+4.5813
+68.7172
+0.5314
+0.6512
+DDColor
+40.7589
+22.6318
+0.8911
+5.136
+4.5918
+68.7083
+0.5258
+0.6520
+L-CAD
+25.2565
+22.4030
+0.8690
+11.0019
+5.4117
+58.6934
+0.4512
+0.6497
+CT2
+40.1252
+23.2567
+0.8760
+11.8491
+5.3477
+60.4682
+0.4769
+0.6006
+Ours
+35.3771
+22.7644
+0.8779
+10.7835
+3.9466
+69.2562
+0.5255
+0.6556
+Since the generated images of CT2 are cropped and resized,
+in quantitative experiments we crop and resize the ground
+truth images to match the generated images. As is shown,
+the results of DeOldify suffer from dull tones and uninspiring
+colors. Although CT2 and L-CAD could generate colorful
+and visual appealing images, the resolution of their outputs
+is limited to 256 × 256, which is too low for human visual
+perception. Since DDColor is based on Transformer architec-
+ture and is proposed solely for automatic colorization, it could
+generate good colorization results while preserving details of
+the grayscale images and the original resolution. However,
+DDColor sometimes generate uneven colors due to lack of
+semantic information. Our proposed MT-Color could not only
+generate natural and colorful images that better match human
+visual perception, but also preserve some semantic information
+learned from the specific-designed dataset and fix the resolu-
+tion to 512 × 512, which is clearer for human perception.
+Nonetheless, MT-Color sometimes could not preserve pixel
+details due to the stochasticity of diffusion models.
+3
+Fig. 1. Qualitative comparison of global textual descriptions across GPT-Color, COCO-Stuff, and Multi-Instance datasets.
+4
+Fig. 2. Visual examples of conditional colorization with global texts, instance masks and instance texts on GPT-color.
+5
+Fig. 3. Qualitative comparison results for unconditional colorization. All examples are from COCO-Stuff.
+6
+Fig. 4. Qualitative comparison results for unconditional colorization. All examples are from ImageNet-5k.

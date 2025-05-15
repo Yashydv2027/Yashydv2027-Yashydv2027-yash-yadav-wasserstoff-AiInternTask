@@ -1,0 +1,818 @@
+Rejoining fragmented ancient bamboo slips with physics-driven
+deep learning
+Jinchi Zhu1, Zhou Zhao5, Hailong Lei2, Xiaoguang Wang3, Jialiang Lu2, Jing Li2,
+Qianqian Tang1, Jiachen Shen1, Gui-Song Xia4, Bo Du1, and Yongchao Xu1
+1School of Computer Science, Wuhan University
+2Center of Bamboo and Silk Manuscripts, Wuhan University
+3School of Information Management, Wuhan University
+4School of Artificial Intelligence, Wuhan University
+5School of Computer Science, Central China Normal University
+Abstract
+Bamboo slips are a crucial medium for recording ancient civilizations in East Asia, and offers
+invaluable archaeological insights for reconstructing the Silk Road, studying material culture ex-
+changes, and global history.
+However, many excavated bamboo slips have been fragmented into
+thousands of irregular pieces, making their rejoining a vital yet challenging step for understanding
+their content. Here we introduce WisePanda, a physics-driven deep learning framework designed
+to rejoin fragmented bamboo slips.
+Based on the physics of fracture and material deterioration,
+WisePanda automatically generates synthetic training data that captures the physical properties of
+bamboo fragmentations. This approach enables the training of a matching network without requiring
+manually paired samples, providing ranked suggestions to facilitate the rejoining process. Compared
+to the leading curve matching method, WisePanda increases Top-50 matching accuracy from 36% to
+52%. Archaeologists using WisePanda have experienced substantial efficiency improvements (approx-
+imately 20 times faster) when rejoining fragmented bamboo slips. This research demonstrates that
+incorporating physical principles into deep learning models can significantly enhance their perfor-
+mance, transforming how archaeologists restore and study fragmented artifacts. WisePanda provides
+a new paradigm for addressing data scarcity in ancient artifact restoration through physics-driven
+machine learning.
+Main
+Bamboo slips, serving as a fundamental medium for documenting ancient East Asian civilizations, con-
+tain invaluable historical records spanning philosophy, law, and social life period [1, 2, 3, 4, 5]. Their
+durability has enabled these artifacts to survive millennia underground while retaining legible content [6],
+offering scholars unprecedented insights into historical societies. However, the excavation of these deli-
+cate artifacts presents a critical challenge [7] - many bamboo slips have been fragmented into thousands
+of pieces (Figure 1), significantly complicating efforts to reconstruct and interpret their content. This
+fragmentation creates a fundamental obstacle in accessing the wealth of historical knowledge contained
+in these artifacts.
+The rejoining of fragmented bamboo slips represents one of the most challenging problems in archaeo-
+logical preservation and cultural heritage studies [8]. The difficulty stems from multiple factors: First, the
+enormous number of potential fragment combinations makes manual matching extremely time-consuming
+- for instance, The Qin bamboo slips from the Shuihudi site comprise fragments numbering in the tens
+of thousands, with each piece potentially matching any of the others [9]. Second, environmental factors
+like moisture and pressure have caused extensive physical deterioration [10, 11], distorting the original
+shapes and surfaces. Third, the unique fiber structure of bamboo creates complex fracture patterns that
+traditional curve-matching approaches struggle to analyze effectively. These challenges have made the
+restoration process highly labor-intensive, with experts sometimes requiring weeks to successfully match
+a single pair of fragments [12].
+1
+arXiv:2505.08601v1  [cs.CV]  13 May 2025
+Figure 1: The challenge of bamboo slip rejoining in archaeological research. The excavated
+bamboo slip fragments from the Qin dynasty (221–206 BCE) arranged in a spiral pattern (left) illustrate
+the overwhelming scale of the rejoining challenge faced by archaeologists—with thousands of fragments
+at single excavation sites, each potentially matching with any other piece. A magnified view of a repre-
+sentative fragment (upper right) reveals the characteristic irregular breakage pattern along the fracture
+edge, while an example of a reconstructed complete slip (lower right) demonstrates how proper rejoining
+establishes textual content continuity, which is essential for the interpretation of ancient texts. The
+complex morphology of the fractures, coupled with deterioration from millennia underground, creates a
+matching problem of extraordinary complexity that has traditionally required intensive manual effort,
+with experts sometimes spending weeks to successfully match a single pair of fragments.
+Deep learning for ancient artifact repair
+Here we overcome the challenges of fragmented bamboo slip rejoining through physics-driven deep learn-
+ing. Our approach integrates principles from the physics of fracture with deep neural networks, enabling
+automated matching of fragmented pieces without relying on manually labeled training data. Deep learn-
+ing has been successfully used in restoring and attributing ancient texts [13] empowered by large labeled
+dataset. While recent years have also seen significant progress in fragmented cultural relic restoration [14]
+with labeled data - from oracle bone reconstruction [15, 16, 15, 17] to manuscript fragment matching [6]
+- most existing approaches rely on traditional computer vision techniques and struggle with complex
+degradation patterns [18]. Some works have attempted to use generative models for cultural heritage
+restoration [17]. While achieving promising results, these methods are constrained by the scarcity of
+training data and often fail to capture the intricate physical properties of ancient materials [19, 20].
+To address these fundamental challenges, we propose WisePanda, a deep learning framework that
+leverages physical principles to overcome the data scarcity problem inherent in fragmented bamboo slip
+rejoining tasks. Training such a system presents a unique paradox: while manual fragment rejoining is
+prohibitively time-consuming - the very problem we aim to solve - this same process would traditionally
+be required to generate training data for the model. We resolve this dilemma by resorting to the physics
+of fracture [21, 22]. By modeling the physical properties of bamboo and the process that govern its
+degradation [23, 10], we generate extensive synthetic training data that captures the essential charac-
+teristics of real paired fragment slips (Figure 2). This physics-driven approach enables us to produce
+large-scale, realistic training data without requiring manual matching efforts, while ensuring the model
+learns meaningful patterns based on actual material properties rather than superficial features.
+2
+Fibers
+c
+The real fracture curves
+Generated fracture curves
+d
+e
+Simulation of corrosion
+a
+Breakage of bamboo slips
+b Stress field
+Stress field
+x
+y
+Fibers
+Stress field
+Figure 2: Physics-driven modeling of bamboo slip fracture and deterioration. a, The breakage
+process of bamboo slips showing how fracture propagates across the bamboo’s fiber structure, with the
+resulting irregular curve (black line) and the corresponding stress field distribution (blue gradient). b,
+Detailed stress field model illustrating the mathematical relationship between the fracture angles (θi−1,
+θi) and the stress propagation in the x-y coordinate system, where the blue dotted circles represent the
+stress field emanating from the fracture endpoint, showing how stress radiates outward and concentrates
+at fiber boundaries.
+c, Time-sequential simulation of the corrosion process, demonstrating how the
+original fracture pattern (left) changes through environmental exposure (middle) to produce the final
+deteriorated edge morphology (right), with protruding areas experiencing accelerated degradation. d,
+Collection of real bamboo slip fracture curves extracted from archaeological samples, exhibiting diverse
+breakage patterns that serve as reference for model validation. e, Synthetically generated fracture curves
+produced by our physics-driven model, displaying morphological characteristics highly similar to the
+real samples in panel d. This approach enables the generation of extensive paired training data that
+captures both the physical properties of bamboo fragmentation and the effects of long-term degradation,
+effectively addressing the data scarcity challenge inherent in ancient artifact restoration.
+3
+Data synthesis with physics of fracture
+The generation of training data for bamboo slip rejoining requires a comprehensive understanding of
+both fracture formation and degradation processes [24]. Our physical model builds on two key observa-
+tions: First, bamboo slips exhibit distinct “transverse” and “longitudinal” fracture modes due to their
+unique fiber structure [24], as illustrated in Extended Figure E1, with transverse fractures accounting
+for approximately 70% of cases. Second, these fractures undergo complex corrosion processes over time,
+significantly altering their original patterns [25, 10, 2]. Building on these insights, we develop a system-
+atic approach to generate synthetic fragment pairs for transverse fractures, which represent the majority
+of rejoining challenges.
+The physics of fracture in bamboo slips is governed by their distinctive vertical fiber arrangement [26,
+27, 28, 29], as detailed in Extended Figure E2.
+When stress extends horizontally across the slip, it
+creates characteristic fracture patterns as it propagates through consecutive fiber bundles [30, 27, 29].
+We model this process through a probabilistic framework where the fracture angle of each fiber bundle
+is influenced by the stress field generated at the fracture endpoint of the preceding fiber bundle. This
+physical relationship can be expressed through a probability density function that determines likely
+fracture paths based on stress distribution and geometric configurations. The corrosion process is then
+simulated by analyzing geometric exposure - protruding areas and exposed surfaces are more susceptible
+to degradation through moisture absorption and microorganism activity [31]. To elegantly calculate the
+exposure area of each fiber, we ingeniously employ ReLU functions that compare the height differences
+between adjacent fibers, effectively capturing only the protruding portions that are more vulnerable to
+environmental deterioration. This computational approach allows us to precisely model the progressive
+and differential deterioration patterns observed in archaeological samples.
+To ensure the generated data accurately reflects real bamboo slip characteristics, we optimize model
+parameters using a genetic algorithm [32, 33]. The algorithm evaluates parameter sets by comparing the
+distribution of generated fragments against a reference set of 200 real fragment edges through dimension-
+ality reduction and Silhouette analysis [34]. Our analysis shows high similarity between the synthetic
+and real data distributions. The resulting pipeline enables us to generate extensive training data that
+captures both the physical properties of fracture formation and the effects of long-term degradation,
+effectively addressing the data scarcity challenge in rejoining fragmented bamboo slips.
+WisePanda is a ranking system
+WisePanda’s architecture features an interpretable pipeline for fragmented bamboo slip rejoining task
+(Figure 3), using synthesized data with physics of fracture for model training and providing top-k candi-
+dates to assist archaeologists. At its core lies a TripletNet-based deep learning network [35], designed to
+learn effective feature representation that can distinguish between matching and non-matching fragments.
+The network processes each input as a 64-dimensional vector that captures the detailed features of the
+fracture edge curves [36, 37, 38]. By leveraging a triplet loss function [39, 40, 41], the network learns
+to minimize the distance between matching pairs while maximizing the distance between non-matching
+ones.
+In practical deployment, WisePanda operates by predicting matching probabilities between fragments
+and offers archaeologists a ranked list of the top potential matches for each fragment. This significantly
+reduces the search space from thousands of candidates to a manageable set [42, 43, 44], thereby stream-
+lining the rejoining process. The network’s output is a value between 0 and 1, indicating the model’s
+confidence in a match between the input fragments, where a value closer to 1 signifies a higher likeli-
+hood of a correct match. Moreover, this ranking approach effectively mitigates the overwhelming task
+of manually matching fragments by narrowing down the possibilities to the most probable matches [45].
+WisePanda as an archaeologist adjunct
+To bridge the gap between computational methods and archaeological research practices, we have de-
+veloped an intuitive computer-assisted tool that implements WisePanda’s capabilities in a practical
+workflow (Extended Figure E5). When working with this tool, archaeologists first select a target frag-
+ment from their collection. The system then automatically generates a ranked list of potential matching
+candidates [43, 42, 46], significantly narrowing down the search space from thousands to dozens of frag-
+ments. Each suggested match is accompanied by a confidence score derived from WisePanda’s matching
+network, allowing archaeologists to prioritize their examination of the most promising candidates.
+4
+Physical model
+Trainning data
+1
+...
+...
+Inputs
+Outputs
+...
+2
+7
+3
+4
+5
+6
+8
+9
+10
+11
+12
+14
+15
+50
+Matching neural network
+Rank system
+Optimizing
+Training
+Inference
+Physics-driven fracture engine
+Corrosion simulation modifier
+Dimensionally
+reduction
+Parameter
+optimization
+Training pair
+synthesizer
+Figure 3: Framework of WisePanda integrating physics-driven deep learning for bamboo slip
+rejoining. The workflow diagram illustrates the complete pipeline of our system. The process begins
+with input bamboo slip fragments (top row), where the target fragment is highlighted in pink. In the
+physical model stage, we implement two key components: a physics-driven fracture engine that gener-
+ates initial breakage patterns, and a corrosion simulation modifier that replicates long-term degradation
+effects. The dimensionality reduction module (center) enables comparison between real and synthetic
+fragments through statistical visualization techniques, facilitating parameter optimization to ensure re-
+alistic fracture simulation. The optimized physical model feeds into the training pair synthesizer, which
+generates matching fragment pairs for training the matching network. This matching network learns to
+effectively represent and compare fragment features through a multi-layer architecture with specialized
+embedding capabilities. During inference (red arrows), the system compares the target fragment against
+all candidates, producing a ranked list of potential matches (bottom row).
+The ranking transforms
+thousands of possible matches into a manageable set, with the system highlighting the most probable
+candidates (position 5 shown in pink represents a correct match). This approach enables archaeologists
+to focus their verification efforts on the most promising candidates, significantly accelerating the tradi-
+tionally time-consuming rejoining process.
+The tool provides a dedicated workspace where archaeologists can visually manipulate and compare
+fragments through intuitive operations such as dragging, rotating, and fine-tuning alignments. To facil-
+itate detailed examination, the system offers specialized visualization features like layer swapping and
+edge enhancement, enabling careful inspection of ink traces and fracture patterns All successful matches
+are saved and documented in a centralized database, creating a growing repository of verified rejoining
+that contributes to the broader restoration effort. This computer-assisted tool has significantly accel-
+erated the traditional rejoining workflow [47, 44], ensuring archaeologists maintain full control over the
+final verification of matches while benefiting from AI-powered suggestions.
+Experimental evaluation
+Datasets.
+For evaluating WisePanda’s effectiveness, we compiled several datasets of bamboo and
+wooden slip fragments. Our primary test set (Bamboo236) consists of 118 pairs of matched bamboo
+slip fragments, carefully verified and provided by archaeological experts who successfully rejoined these
+fragments through meticulous manual work. These bamboo slip artifacts are part of an ongoing ar-
+chaeological research project, with the cultural relics yet to be formally published. To simulate more
+5
+challenging real-world scenarios, we created an extended dataset (Bamboo1350) by introducing 1114 ad-
+ditional interference fragments, expanding the candidate pool to 1,232 total fragments while maintaining
+the original test pairs. To assess generalization capabilities across different materials, we also compiled
+wooden slip datasets. The base wooden slip test set (Wood670) contains 335 expert-verified pairs, while
+its extended version (Wood3833) includes 3163 additional interference fragments. These diverse datasets
+enable comprehensive evaluation of fragment matching methods under varying conditions and material
+types.
+Evaluation methodology. The evaluation process involved computing similarity scores between each
+fragment’s fracture edge and all potential matching candidates from the complementary group. Frag-
+ments were pre-classified as upper or lower parts, with matching only performed between these distinct
+groups. We extracted features from both fracture edges of each fragment, ranked the computed simi-
+larity scores, and measured the probability of finding the correct match within the Top-k predictions.
+We conducted comprehensive experiments comparing our approach with several existing methods, in-
+cluding Manual Random Search, curve matching techniques (using Cosine Similarity and Dynamic Time
+Warping (DTW)) [48], Fast Matching Method (FMM) [49, 50], and Scale Invariant Signature (SIS) [51].
+This comparative framework allows us to assess the relative performance of our physics-driven approach
+against established techniques in the field of fragment matching.
+Results and analysis. The performance variations among different methods reveal insights about the
+nature of the bamboo slip matching problem. In our original test set (Bamboo118), WisePanda demon-
+strated superior performance across all metrics, achieving a top-1 accuracy of 12.29%, top-5 accuracy
+of 35.17%, top-10 accuracy of 52.54%, top-20 accuracy of 69.07%, and a top-50 accuracy of 94.07%.
+Among traditional methods, SIS achieved the second-best performance with a top-1 accuracy of 10.59%
+and top-50 accuracy of 72.88%, followed by DTW with a top-50 accuracy of 75.42%. FMM and Cosine
+Similarity performed less effectively, with top-50 accuracies of 65.25% and 17.80% respectively.
+To simulate real-world archaeological scenarios where numerous unrelated fragments exist, we ex-
+panded our test dataset by introducing additional interference fragments. As shown in Extended Fig-
+ure E4, when the candidate pool was increased by a factor of approximately 10, WisePanda maintained
+a top-50 accuracy of 52.54% compared to the original 94.07%, demonstrating robust performance even
+with significantly increased search space.
+Method
+Top1(%)
+Top5(%)
+Top10(%)
+Top20(%)
+Top50(%)
+Top100(%)
+Bamboo236
+Manual Random Search
+0.80
+4.22
+8.40
+17.00
+42.30
+-
+DTW [48]
+7.20
+22.46
+30.93
+49.58
+75.42
+-
+FMM [50]
+8.90
+18.64
+26.27
+38.14
+65.25
+-
+SIS [52]
+10.59
+22.03
+30.93
+47.03
+72.88
+-
+WisePanda
+12.29
+35.17
+52.54
+69.07
+94.07
+-
+Bamboo1350
+Manual Random Search
+0.08
+0.44
+0.89
+1.79
+4.48
+8.97
+DTW
+3.81
+12.29
+14.41
+20.34
+32.20
+37.71
+FMM
+6.36
+11.44
+13.14
+16.10
+25.00
+33.47
+SIS
+7.20
+15.25
+19.07
+24.15
+36.02
+48.73
+WisePanda
+5.93
+18.22
+24.58
+37.29
+52.54
+66.10
+Wood
+WisePanda[Wood670]
+5.38
+15.37
+26.42
+38.36
+64.18
+86.27
+WisePanda[Wood3833]
+2.69
+9.55
+13.88
+21.64
+34.78
+48.36
+Table 1: Comparison of fragment matching methods across different test scenarios. Results
+show Top-k matching accuracy (percentage of correctly identified matches within the top k candidates)
+across bamboo and wooden slip datasets.
+The original bamboo test set (Bamboo118) contains 118
+paired fragments, while the extended version (Bamboo1114) includes 1,114 fragments with additional
+interference fragments to create a more challenging matching environment. Similarly, for wooden slips,
+we compare performance on the original test set (Wood335) and an extended version (Wood3163). As
+demonstrated in Extended Figure E4, WisePanda consistently outperforms traditional curve matching
+approaches in both material types and across varying complexity levels, demonstrating the effectiveness
+of our physics-driven approach in handling diverse archaeological fragments.
+6
+Interpretability of WisePanda
+The fundamental challenge in generating training data for bamboo slip matching lies in the irreversible
+nature of the physical degradation process [10, 18]. When archaeologists uncover bamboo slip fragments,
+they observe only the final degraded edges [7]. The original fracture patterns, which are crucial for
+accurate matching, are permanently altered by centuries of degradation and cannot be directly inferred
+from the preserved fragments [8, 53]. This irreversibility poses a significant limitation for conventional
+data-driven approaches [54, 19, 20, 17], which typically require paired samples of ”before-degradation”
+and ”after-degradation” states for effective training, data that is inherently unavailable in archaeological
+contexts.
+Even generative models like GANs suffer from distribution bias when learning only from
+successfully matched fragments, failing to incorporate the underlying physical principles that govern
+fracture formation and degradation.
+Our physics-driven model addresses this challenge by modeling the forward process of fragmentation
+and degradation. We first simulate the initial fracture patterns based on the physics of bamboo fiber
+structures [24, 55, 56, 23], then apply physical degradation processes to these patterns. This sequen-
+tial modeling captures both the immediate fracture characteristics and their subsequent transformation
+through environmental exposure. The physical processes governing bamboo deterioration follow specific
+geometric principles, where protruding areas and exposed surfaces are more susceptible to degrada-
+tion [10, 18]. By incorporating these physical constraints, WisePanda generates realistic degradation
+patterns that closely mirror natural deterioration processes, effectively bridging the gap between the
+unknown original fracture patterns and the observed degraded edges.
+These physical principles not only enhance the quality of synthetic training data but also provide
+interpretability to our WisePanda’s behavior.
+The combination of authentic fracture patterns and
+physically-based degradation enables WisePanda to capture fundamental characteristics of bamboo slip
+fragmentation, generating abundant realistic training data and leading to more robust and generalizable
+performance.
+Unlike pure data-driven approaches that may overfit to superficial patterns in limited
+training samples, our physics-driven model learns meaningful features grounded in the actual physical
+processes of fracture and degradation, allowing it to generalize effectively to unseen fragments with
+diverse deterioration patterns.
+Rejoin fragmented ancient wooden slips
+To examine WisePanda’s generalization capability, we applied our approach to wooden slips - another
+important medium for ancient text preservation that shares similar characteristics with bamboo slips
+but exhibits distinct material properties. While wooden slips served similar documentary purposes, their
+different fiber arrangement and material structure present unique challenges for fragment matching [57,
+58]. We evaluated our method on a dataset of 335 pairs of wooden slip fragments, following the same
+experimental protocol as with bamboo slips.
+As shown in Table 1, WisePanda demonstrated promising cross-material generalization with 64.18%
+top-50 accuracy on wooden slips. When tested with extended interference fragments in both materials,
+performance predictably decreased to 52.54% for bamboo slips (Bamboo1350) and 34.78% for wooden
+slips (Wood3833).
+This performance difference can be attributed to two key factors. First, the fiber structure of wooden
+slips differs substantially from bamboo slips, leading to distinct fracture patterns that deviate from our
+physics-driven model’s assumptions [59, 60, 26]. Second, the degradation process varies significantly due
+to diverse preservation conditions - factors such as burial duration, soil moisture levels, microbial activity,
+and regional soil composition all affect how materials deteriorate over time [61, 62, 63]. Even artifacts
+of the same material excavated from different sites or time periods may exhibit varying degradation
+patterns, requiring different physical parameters for accurate modeling. These variations are particularly
+pronounced when comparing wooden and bamboo materials, as their distinct physical properties interact
+differently with environmental factors, leading to material-specific degradation processes that need to be
+carefully considered in the modeling approach.
+Discussion
+In this work, we present WisePanda, the first physics-driven deep learning framework designed for rejoin-
+ing fragmented ancient bamboo slips. By incorporating principles from the physics of fracture [64, 65, 27]
+into the generation of synthetic training data, our approach overcomes the fundamental challenge of data
+scarcity in cultural heritage preservation. The effectiveness of this approach is demonstrated through
+7
+superior matching accuracy and the development of practical tools that are now assisting archaeologists
+in their reconstruction work. Our framework’s success in handling both fracture pattern generation and
+material degradation simulation highlights the advantage of combining physical principles with deep
+learning, particularly in scenarios where traditional data-driven approaches are constrained by limited
+training samples.
+Beyond its current implementation, this research opens new horizons in bamboo slip reconstruction
+and broader cultural heritage preservation [66]. For bamboo slips specifically, our framework can be ex-
+tended to handle more complex scenarios by incorporating additional physical parameters that account
+for regional variations and different preservation conditions [67, 68]. Furthermore, our approach estab-
+lishes a new paradigm for fragment matching where training data is scarce. The methodology can be
+adapted to other archaeological materials such as wooden slips, ceramics, metals, and pottery [69, 70, 71],
+by modeling their specific physics of fracture and degradation processes. This adaptability stems from
+the fundamental nature of our approach while artifacts may vary, the underlying physical principles
+governing their fragmentation and degradation remain consistent and modelable [64, 72].
+In conclusion, WisePanda represents not merely a technical advancement in bamboo slip rejoining,
+but rather a transformative approach to preserving and studying cultural heritage [73]. By combining
+physical principles with artificial intelligence, our method provides a robust solution when paired training
+data is limited but physical principles are well understood. This synergy of physics and deep learning
+opens new possibilities for archaeological fragment matching, potentially revolutionizing how we recover
+and interpret artifacts from our past [74, 75].
+Code availability
+The source code for WisePanda framework is publicly available on GitHub at https://github.com/
+zhujinchi/wisepanda. The repository contains the implementation of our physics-driven deep learning
+model for bamboo slip fragment matching, including the fracture modeling algorithms, corrosion simula-
+tion processes, neural network architecture and user interface. Users can install the required dependencies
+by following the installation instructions provided in the repository. The codebase is designed to be ac-
+cessible to researchers, featuring an intuitive graphical user interface for fragment selection, comparison,
+and verification with integrated AI assistance. Additionally, we have established a project website at
+https://wisepanda.tech/ that provides demonstration videos, visual examples, and detailed documen-
+tation of the fragment rejoining and visualization tools discussed in this paper. This open-source release
+aims to facilitate further research in digital archaeology and enable the application of our methods to
+other types of archaeological fragment matching challenges.
+8
+Extended Figure
+a
+b
+Figure E1: Typical fracture patterns of ancient bamboo slips. (a), The upper row displays bamboo
+samples with transverse fractures, the most common fracture mode (approximately 70%), characterized
+by irregular wavy breakage patterns resulting from stress propagating perpendicular to the bamboo fiber
+direction. These fractures often have limited text preservation at the fracture edges, with the fragmented
+characters providing insufficient information for reliable matching, thus making the morphological fea-
+tures of these edges the primary basis for rejoining. (b), The lower row exhibits longitudinal fractures, a
+less common but significant fracture mode, characterized by relatively smooth fracture edges that occur
+along the bamboo fiber direction. With these smoother fracture patterns, text matching becomes the
+primary criterion for correct rejoining, as the physical interlocking features are less pronounced. This
+diversity of fracture patterns and preservation states highlights the intrinsic complexity inherent in an-
+cient bamboo slip rejoining.
+9
+x
+y
+Fibers
+b
+Stress field
+x
+y
+a
+Bamboo fracture modelling
+Bamboo  microstructure and fracture propagation
+fi-1
+fi
+Fibers
+σ∞Z+
+σ∞Z-
+P2
+P1
+P3
+fi+1
+Figure E2: Physics-driven model of bamboo fracture propagation. a, Bamboo microstructure
+showing vertical fiber bundles (red blocks) and a typical fracture path (dotted black line) traversing
+across fibers. The black arrows indicate shear forces (σ∞Z+) inducing Mode III fracture. b, Bamboo
+fracture modeling with stress field propagation between fibers. Points P1, P2, and P3 represent positions
+on consecutive fibers fi−1, fi and fi+1, with angles θi−1 and θi showing fracture directions of fibers
+fi−1and fi.
+Blue dotted circles illustrate the stress field emanating from point P2, determining the
+probability distribution of potential fracture paths.
+10
+Synthetic data
+Real data
+Synthetic data
+Real data
+Synthetic data
+Real data
+Synthetic data
+Real data
+a t-SNE distributions of fragment features
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+1.0
+0.8
+0.6
+0.4
+0.2
+0.0
+b Fracture matching quality matrices
+Figure E3: Data distribution analysis and matching performance. a, t-SNE distributions of
+fragment features showing the relationship between synthetic data (blue) and real bamboo fragments
+(green) across four parameter configurations. Progressive convergence indicates effective parameter op-
+timization in our model. b, Fracture matching quality matrices for 118 real fragment pairs. Deeper blue
+indicates higher similarity, with diagonal elements representing correct matches. The lower-right matrix
+shows optimal discriminative performance with clear contrast between prominent diagonal (blue) and
+off-diagonal elements (white), corresponding to the most effective parameter setting (lower-left t-SNE
+plot). This confirms that generating more realistic synthetic data directly improves fragment matching
+accuracy.
+11
+Top-k Distribution 
+Extend Number
+Top20
+Top50
+Top100
+Top1
+Top5
+Top10
+Accuracy
+0
+200
+500
+700
+1000
+0
+200
+500
+700
+1000
+0
+200
+500
+700
+1000
+1.00
+0.75
+0.50
+0.25
+0.00
+1.00
+0.75
+0.50
+0.25
+0.00
+Method
+Wisepanda
+DTW
+SIS
+FMM
+Cosine Similarity
+Manual Random Search
+Figure E4: Robustness analysis of fragment matching algorithms with increasing interference
+fragments. Performance comparison across six accuracy levels (Top-1 to Top-100) as candidate pool
+expands from 0 to 1114 fragments. WisePanda (orange bars) maintains relatively stable performance
+despite increasing interference, while Manual Random Search (dotted purple line) shows rapid accuracy
+decline. Other methods (DTW, SIS, FMM, and Cosine Similarity) also exhibit significant performance
+drops. At maximum interference, WisePanda maintains 50-65% accuracy at Top-50 and Top-100 levels,
+while competing methods fall below 35%, demonstrating physics-driven approach’s advantage in real
+archaeological scenarios with thousands of potential matches.
+12
+Target Fragment
+Result Fragment
+rank
+Software Search Time Manual Rejoining Time
+8.66s
+1
+129.90s
+16.95s
+4
+322.05s
+13.5s
+6
+337.50s
+5.25s
+1
+278.25s
+13.25s
+1
+265.00s
+a
+b
+Figure E5: Practical application of WisePanda.
+a, WisePanda software interface showing two
+successful matching cases: target bamboo slip fragments (left) with their corresponding matching re-
+sults (right), demonstrating the system’s verification capabilities.
+b, Efficiency comparison between
+WisePanda-assisted and traditional manual matching across five test cases. The table records target and
+result fragments, system recommendation rank, and time measurements for both methods. WisePanda
+reduces average matching time from 266.54 to 11.52 seconds—approximately a 20-fold efficiency improve-
+ment. In three of five cases, the correct match received top ranking (rank 1), confirming the algorithm’s
+accuracy. These results validate the physics-driven approach’s practical value for large-scale bamboo slip
+fragment rejoining.
+References
+[1] Allan, S. Buried ideas: Legends of abdication and ideal government in early Chinese bamboo-slip
+manuscripts (State University of New York Press, 2015).
+[2] Liu, G. Approaching the Tsinghua Bamboo Slips (Taylor & Francis, 2024).
+[3] Xiaogan, L. From bamboo slips to received versions: Common features in the transformation of
+the” laozi”. Harvard Journal of Asiatic Studies 63, 337–382 (2003).
+[4] Ling, L. Formulaic structure of chu divinatory bamboo slips. Early China 15, 71–86 (1990).
+[5] Zheng, W. A brief explanation of the chu bamboo slips hengxian. Frontiers of Philosophy in China
+1, 418–431 (2006).
+[6] Zheng, Y., Li, X. & Weng, Y. Reunion helper: an edge matcher for sibling fragment identification
+of the dunhuang manuscript. Heritage Science 12, 52 (2024).
+[7] Johnson, M. Archaeological theory: an introduction (John Wiley & Sons, 2019).
+[8] Zhou, J. et al. Identifying designs from incomplete, fragmented cultural heritage objects by curve-
+pattern matching. Journal of Electronic Imaging 26, 011022–011022 (2017).
+[9] Group, S. Q. T. B. S. C. (ed.) Shuihudi Qin Mu Zhujian (Shui hu di qin mu zhu jian) (Wenwu
+Chubanshe (Cultural Relics Publishing House), Beijing, 1990). Title translates to: Bamboo Slips
+from the Qin Tomb at Shuihudi. [in Chinese].
+[10] Cha, M. Y., Lee, K. H. & Kim, Y. S. Micromorphological and chemical aspects of archaeological
+bamboos under long-term waterlogged condition. International Biodeterioration & Biodegradation
+86, 115–121 (2014).
+13
+[11] Kaifu, Y., Kuo, T.-H., Kubota, Y. & Jan, S. Palaeolithic voyage for invisible islands beyond the
+horizon. Scientific Reports 10, 19785 (2020).
+[12] Kumar, S., Shukla, K., Dev, T., Dobriyal, P. et al.
+Bamboo preservation techniques: a review
+(INBAR and ICFRE Dehra Dun, India, 1994).
+[13] Assael, Y. et al. Restoring and attributing ancient texts using deep neural networks. Nature 603,
+280–283 (2022).
+[14] Bickler, S. H.
+Machine learning arrives in archaeology.
+Advances in Archaeological Practice 9,
+186–191 (2021).
+[15] Meng, L., Kamitoku, N. & Yamazaki, K. Recognition of oracle bone inscriptions using deep learning
+based on data augmentation. In 2018 metrology for archaeology and cultural heritage (MetroAr-
+chaeo), 33–38 (IEEE, 2018).
+[16] Zhang, Z., Wang, Y.-T., Li, B., Guo, A. & Liu, C.-L. Deep rejoining model for oracle bone fragment
+image. In Asian Conference on Pattern Recognition, 3–15 (Springer, 2021).
+[17] Zhang, C. et al. Data-driven oracle bone rejoining: A dataset and practical self-supervised learning
+scheme. In Proceedings of the 28th ACM SIGKDD conference on knowledge discovery and data
+mining, 4482–4492 (2022).
+[18] Li, M.-Y. et al. Investigation into the deterioration process of archaeological bamboo strips of china
+from four different periods by chemical and anatomical analysis. Polymer degradation and stability
+109, 71–78 (2014).
+[19] Eslami, D., Di Angelo, L., Di Stefano, P. & Pane, C.
+Review of computer-based methods for
+archaeological ceramic sherds reconstruction. Virtual Archaeology Review 11, 34–49 (2020).
+[20] Hou, M. et al.
+Novel method for virtual restoration of cultural relics with complex geometric
+structure based on multiscale spatial geometry. ISPRS International Journal of Geo-Information
+7, 353 (2018).
+[21] Anderson, T. L. & Anderson, T. L. Fracture mechanics: fundamentals and applications (CRC press,
+2005).
+[22] Gdoutos, E. E. Fracture mechanics: an introduction, vol. 263 (Springer Nature, 2020).
+[23] Tan, T. et al. Mechanical properties of functionally graded hierarchical bamboo structures. Acta
+biomaterialia 7, 3796–3803 (2011).
+[24] Behera, D. et al. A review on bamboo fiber reinforced composites and their potential applications.
+Emergent Materials 8, 157–172 (2025).
+[25] Chen, Z., Ma, R., Du, Y. & Wang, X. State-of-the-art review on research and application of original
+bamboo-based composite components in structural engineering. In Structures, vol. 35, 1010–1029
+(Elsevier, 2022).
+[26] Dixon, P. G. & Gibson, L. J. The structure and mechanics of moso bamboo material. Journal of
+the Royal Society Interface 11, 20140321 (2014).
+[27] Habibi, M. K. & Lu, Y. Crack propagation in bamboo’s hierarchical cellular structure. Scientific
+reports 4, 5598 (2014).
+[28] Ramful, R. & Sakuma, A. Investigation of the effect of inhomogeneous material on the fracture
+mechanisms of bamboo by finite element method. Materials 13, 5039 (2020).
+[29] Chen, M. et al. Fracture modes of bamboo fiber bundles in three-point bending. Cellulose 26,
+8101–8108 (2019).
+[30] Ramful, R. Investigation of the transverse fracture mechanisms of bamboo by the finite element
+method. Journal of Materials Science 57, 6233–6248 (2022).
+14
+[31] Blanchette, R. A., Haight, J. E., Koestler, R. J., Hatchfield, P. B. & Arnold, D. Assessment of
+deterioration in archaeological wood from ancient egypt.
+Journal of the American Institute for
+Conservation 33, 55–70 (1994).
+[32] Goldberg, D. E. Genetic Algorithms in Search, Optimization, and Machine Learning (Addison-
+Wesley, Reading, MA, 1989).
+[33] Holland, J. H. Genetic algorithms. Scientific american 267, 66–73 (1992).
+[34] Van der Maaten, L. & Hinton, G. Visualizing data using t-sne. Journal of machine learning research
+9 (2008).
+[35] Hoffer, E. & Ailon, N.
+Deep metric learning using triplet network.
+In Similarity-based pattern
+recognition: third international workshop, SIMBAD 2015, Copenhagen, Denmark, October 12-14,
+2015. Proceedings 3, 84–92 (Springer, 2015).
+[36] Shen, X. et al.
+Spatially-consistent feature matching and learning for heritage image analysis.
+International Journal of Computer Vision 130, 1325–1339 (2022).
+[37] Liu, X. & Aldrich, C. Deep learning approaches to image texture analysis in material processing.
+Metals 12, 355 (2022).
+[38] Yu, Q., Wei, H. & Yang, C. Local part chamfer matching for shape-based object detection. Pattern
+Recognition 65, 82–96 (2017).
+[39] Yan, C. et al. Beyond triplet loss: person re-identification with fine-grained difference-aware pairwise
+loss. IEEE Transactions on Multimedia 24, 1665–1677 (2021).
+[40] Yuan, Y., Chen, W., Yang, Y. & Wang, Z. In defense of the triplet loss again: Learning robust
+person re-identification with fast approximated triplet loss and label distillation. In Proceedings
+of the IEEE/CVF Conference on Computer Vision and Pattern Recognition Workshops, 354–355
+(2020).
+[41] Tian, Y., Barroso Laguna, A., Ng, T., Balntas, V. & Mikolajczyk, K.
+Hynet: Learning local
+descriptor with hybrid similarity measure and triplet loss. Advances in neural information processing
+systems 33, 7401–7412 (2020).
+[42] Funkhouser, T. et al. Learning how to match fresco fragments. Journal on Computing and Cultural
+Heritage (JOCCH) 4, 1–13 (2011).
+[43] Jim´enez-Badillo, D., Mendoza-Montoya, O. & Ruiz-Correa, S.
+Application of computer vision
+techniques for 3d matching and retrieval of archaeological objects. F1000Research 12, 182 (2024).
+[44] Brown, B. et al. Tools for virtual reassembly of fresco fragments. International journal of heritage
+in the digital era 1, 313–329 (2012).
+[45] Sch¨utze, H., Manning, C. D. & Raghavan, P. Introduction to information retrieval, vol. 39 (Cam-
+bridge University Press Cambridge, 2008).
+[46] Willis, A. R. & Cooper, D. B. Bayesian assembly of 3d axially symmetric shapes from fragments.
+In Proceedings of the 2004 IEEE Computer Society Conference on Computer Vision and Pattern
+Recognition, 2004. CVPR 2004., vol. 1, I–I (IEEE, 2004).
+[47] Eslami, D., Di Angelo, L., Di Stefano, P. & Guardiani, E. A semi-automatic reconstruction of
+archaeological pottery fragments from 2d images using wavelet transformation. Heritage 4, 76–90
+(2021).
+[48] Berndt, D. J. & Clifford, J.
+Using dynamic time warping to find patterns in time series.
+In
+Proceedings of the 3rd international conference on knowledge discovery and data mining, 359–370
+(1994).
+[49] Huang, Y., Gao, J., Zhang, L., Deng, H. & Chen, X. Fast template matching method in white-light
+scanning interferometry for 3d micro-profile measurement. Applied optics 59, 1082–1091 (2020).
+15
+[50] Frenkel, M. & Basri, R. Curve matching using the fast marching method. In International Workshop
+on Energy Minimization Methods in Computer Vision and Pattern Recognition, 35–51 (Springer,
+2003).
+[51] Cui, M., Femiani, J., Hu, J., Wonka, P. & Razdan, A. Curve matching for open 2d curves. Pattern
+Recognition Letters 30, 1–10 (2009).
+[52] Calabi, E., Olver, P. J., Shakiban, C., Tannenbaum, A. & Haker, S. Differential and numerically
+invariant signature curves applied to object recognition. International Journal of Computer Vision
+26, 107–135 (1998).
+[53] Kampel, M. & Sablatnig, R. An automated pottery archival and reconstruction system. The journal
+of visualization and computer animation 14, 111–120 (2003).
+[54] Laurer, M., Van Atteveldt, W., Casas, A. & Welbers, K. Less annotating, more classifying: Address-
+ing the data scarcity issue of supervised machine learning with deep transfer learning and bert-nli.
+Political Analysis 32, 84–100 (2024).
+[55] Amada, S., Ichikawa, Y., Munekata, T., Nagase, Y. & Shimizu, H. Fiber texture and mechanical
+graded structure of bamboo. Composites Part B: Engineering 28, 13–20 (1997).
+[56] Low, I., Che, Z. & Latella, B. Mapping the structure, composition and mechanical properties of
+bamboo. Journal of materials research 21, 1969–1976 (2006).
+[57] Stromer, D. et al. Virtual cleaning and unwrapping of non-invasively digitized soiled bamboo scrolls.
+Scientific reports 9, 2311 (2019).
+[58] Staack, T. Reconstruction of early chinese bamboo and wood manuscripts: A review (1900–2010).
+Centre for the Study of Manuscript Cultures Occasional Paper 5 (2016).
+[59] Huang, Y. & Fei, B. Comparison of the mechanical characteristics of fibers and cell walls from moso
+bamboo and wood. BioResources 12, 8230–8239 (2017).
+[60] Haiyan, T. Damage of bamboo and wooden materials based on linear elastic fracture mechanics in
+garden design. Fracture and Structural Integrity 10, 472–480 (2016).
+[61] Huisman, D., Manders, M., Kretschmar, E. I., Klaassen, R. & Lamersdorf, N. Burial conditions
+and wood degradation at archaeological sites in the netherlands. International Biodeterioration &
+Biodegradation 61, 33–44 (2008).
+[62] Nord, A. G., Tronner, K., Mattsson, E., Borg, G. C. & Ull´en, I. Environmental threats to buried
+archaeological remains. AMBIO: A Journal of the Human Environment 34, 256–262 (2005).
+[63] Singh, A. P., Kim, J. S., M¨oller, R., Chavan, R. R. & Kim, Y. S. The pivotal role of microscopy in
+unravelling the nature of microbial deterioration of waterlogged wood: A review. Forests 15, 889
+(2024).
+[64] Knott, J. F. Fundamentals of fracture mechanics (Gruppo Italiano Frattura, 1973).
+[65] Ashby, M. F., Easterling, K. E., Harrysson, R. & Maiti, S. The fracture and toughness of woods.
+Proceedings of the Royal Society of London. A. Mathematical and Physical Sciences 398, 261–280
+(1985).
+[66] Yan, Y. How technology facilitates culture heritage restoration and preservation. AMT Lab@ CMU
+(2022).
+[67] Long, K., Chen, K., Lin, L., Fu, F. & Zhong, Y. Deterioration of microstructures and properties in
+ancient architectural wood from yingxian wooden pagoda (1056 ad) during natural aging. Forests
+14, 393 (2023).
+[68] Matthiesen, H.
+Detecting and quantifying ongoing decay of organic archaeological remains: A
+discussion of different approaches. Quaternary International 368, 43–50 (2015).
+[69] Leit˜ao, H. C. G. & Stolfi, J. Digital reconstruction of fragmented artifacts. Archives & Museum
+Informatics 2 (2004).
+16
+[70] Cardarelli, L. Pypotterylens: An open-source deep learning framework for automated digitisation
+of archaeological pottery documentation. arXiv preprint arXiv:2412.11574 (2024).
+[71] Giannini, E. & Makri, E.
+Cultural heritage protection and artificial intelligence; the future of
+our historical past. In International Conference on Transdisciplinary Multispectral Modeling and
+Cooperation for the Preservation of Cultural Heritage, 375–400 (Springer, 2023).
+[72] LeSar, R. Introduction to computational materials science: fundamentals to applications (Cambridge
+University Press, 2013).
+[73] Mantovan, L. & Nanni, L. The computerization of archaeology: Survey on artificial intelligence
+techniques. SN Computer Science 1, 267 (2020).
+[74] Yu, R. & Wang, R. Learning dynamical systems from data: An introduction to physics-guided deep
+learning. Proceedings of the National Academy of Sciences 121, e2311808121 (2024).
+[75] Das, B. R., Maringanti, H. B. & Dash, N. S. Role of artificial intelligence in preservation of culture
+and heritage. In Digitalization Of Culture through Technology, 92–97 (Routledge, 2022).
+17

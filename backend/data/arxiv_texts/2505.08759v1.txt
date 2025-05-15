@@ -1,0 +1,1092 @@
+Regularizing quantum loss landscapes by noise injection
+Daniil S. Bagaev,1, 2, ∗Maxim A. Gavreev,1 Alena S. Mastiukova,1 Aleksey K. Fedorov,1, † and Nikita A. Nemkov1, ‡
+1National University of Science and Technology “MISIS”, Moscow 119049, Russia
+2Lomonosov Moscow State University, Leninskie Gory 1 building 35, Moscow 119991, Russia
+The difficulty of training variational quantum algorithms and quantum machine learning models is
+well established. In particular, quantum loss landscapes are often highly non-convex and dominated
+by poor local minima. While this renders their training NP-hard in general, efficient heuristics that
+work well for typical instances may still exist. Here, we propose a protocol that uses a targeted noise
+injection to smooth and regularize quantum loss landscapes. It works by exponentially suppressing
+the high-frequency components in the Fourier expansion of the quantum loss function. The protocol
+can be efficiently implemented both in hardware and in simulations. We observe significant and
+robust improvements of solution quality across various problem types. Our method can be com-
+bined with existing techniques mitigating the local minima, such as the quantum natural gradient
+optimizer, and adds to the toolbox of methods for optimizing quantum loss functions.
+I.
+INTRODUCTION AND RESULTS
+Variational quantum algorithms (VQA) [1] and quan-
+tum machine learning (QML) models [2, 3] are general-
+izations of classical optimization methods and machine
+learning (ML) with the potential to harness quantum ef-
+fects. The range of problems that can be formulated as
+VQA or QML is extremely broad.
+However, similarly
+to classical deep learning, studying VQA and QML re-
+mains largely an empirical effort, while firm theoretical
+performance guarantees are scarce.
+One of the key problems facing VQA and QML is train-
+ability.
+Two main issues here are the onset of barren
+plateaus (BPs) [4, 5] and proliferation of poor local min-
+ima. The BPs essentially manifest the curse of dimen-
+sionality, and most often arise in sufficiently deep cir-
+cuits.
+Local minima, on the other hand, are typically
+associated with shallow quantum circuits, which may be
+free of BPs [6]. (Note, however, that the absence of BPs
+is often associated with classical simulability [7].) This
+work focuses on the problem of local minima in quantum
+loss landscapes.
+On the one hand, results such as [8–10] show that the
+local minima problem in VQA and QML is intractable
+in the general case. On the other hand, there may still
+exist heuristics allowing for efficient training of typical
+instances despite the no-go results for a general worst-
+case.
+After all, training deep neural networks can be
+very efficient, even though the associated loss functions
+are typically highly non-convex [11].
+In this work, we propose a heuristic regularization pro-
+cedure that smoothes the quantum loss landscapes and
+alleviates the problem of local minima. It is based on the
+intuition that high-frequency terms in the Fourier expan-
+sion of the loss function are primarily responsible for the
+superfluous local minima, see illustration in Fig. 1a. Note
+∗bagaev_daniel@list.ru
+† akf@rqc.ru
+‡ nnemkov@gmail.com
+FIG. 1: A sketch showing how high-frequency terms
+may affect the optimization landscape. Stars mark the
+position of global minima. Both in (a) and (b) the
+high-frequency terms produce many local minima.
+However, in (a) the global minimum of the regularized
+loss function (with high frequency modes discarded) is
+close to the true global minimum, and can be efficiently
+used to warm start the optimization. In contrast, in (b)
+the global minimum of the full function is far from the
+regularized one.
+that this is merely a sketch and cannot faithfully repre-
+sent high-dimensional VQA landscapes.
+Also, Fig. 1b
+depicts an opposite situation, where the high-frequency
+modes conspire to produce a global minimum far from the
+global minimum of the regularized function. Essentially,
+our conjecture is that the latter scenario is less likely in
+typical quantum landscapes, and hence regularization of
+the high-frequency modes is beneficial for optimization.
+One analogy to this intuitive picture the use of Gaus-
+sian filtering in image processing, which effectively re-
+moves high-frequency components from a signal denois-
+ing it. Another related concept is that of graduated op-
+timization [12], where the loss landscape during the opti-
+mization is first highly smoothed, and then gradually re-
+stored to its original form. Graduated optimization have
+been related to optimization techniques such as simu-
+lated annealing [13] and also explored in the context of
+classical deep learning [14–16]. Finally, we note that the
+arXiv:2505.08759v1  [quant-ph]  13 May 2025
+2
+Fourier expansion is non-locally related to the original
+loss function, and can thus give a window into the global
+properties of the landscape.
+A.
+Results
+In general, the Fourier expansion of quantum loss func-
+tions contains exponentially many terms (both in the
+number of qubits and in the number of parameters; see
+e.g. [17]), and hence is hard to access or manipulate di-
+rectly.
+The key technical contribution of this work is a pro-
+tocol that exponentially suppresses high-frequency terms
+in the Fourier expansion of quantum loss functions. This
+regularization amounts to injecting a certain amount of
+noise for each parameterized gate in the quantum cir-
+cuit, and can be implemented efficiently both in hardware
+and in simulation. In hardware, a single extra qubit is
+in principle sufficient to implement the necessary Pauli
+noise channels, though allowing for more ancillary qubits
+can reduce the depth of the overall circuit. In software,
+to simulate our protocol it is sufficient to switch to the
+density-matrix based simulation, though there is an as-
+sociated computational cost.
+In addition, we show that the regularized and original
+loss functions are related by the heat equation, which can
+give both qualitative and quantitative insight to when
+and why our protocol should make optimization more
+efficient.
+For numerical experiments, we choose two types of
+models.
+The first is based on random Wishart fields,
+which serve as a statistical model for a large class of
+VQA with local minima [8, 9]. The second is the quan-
+tum convolutional neural network, which is a well-known
+QML model that has been shown to suffer from local
+minima already in small circuit sizes [9]. Our empirical
+results show a consistent and significant improvement in
+optimization metrics across all instances studied. For ex-
+ample, the probability to match or improve on the best
+solution found by the non-regularized optimization typi-
+cally increases several-fold.
+B.
+Related work
+The problem of local minima in VQA and QML models
+has long been recognized empirically, see e.g.
+[18–20].
+As the problem is generally NP-hard [10], all existing
+techniques attempting to solve it are heuristics.
+A number of studies systematically explored how the
+use of different gradient-based and gradient-free optimiz-
+ers affects the quality of VQA and QML solutions [21, 22].
+Notably, quantum natural gradient [23] has been claimed
+to significantly alleviate the problem of local minima
+in variational quantum eigensolver [24], though to our
+knowledge it was only tested in a very limited setting and
+furthermore incurs significant computational overhead.
+Other proposals include using classical heuristics such
+as differential evolution [25] and classical neural networks
+to warm-start the optimization [26] or regularize the loss
+landscape [27].
+Furthermore, the potential benefits of noise to opti-
+mization of quantum loss functions have been noted pre-
+viously. Refs [28, 29] argued that quantum noise can im-
+prove generalization of quantum neural networks, while
+[30] made a similar observation for quantum kernel meth-
+ods.
+In [19] it was observed that a small amount of
+noise may prevent layer-wise training saturation in quan-
+tum approximate optimization algorithms. Ref. [31] ar-
+gued that statistical sampling noise can help avoid sad-
+dle points. We also note that our protocol was inspired
+by work [32], which showed that quantum noise typi-
+cally exponentially suppresses high-frequency terms in
+the Fourier expansion of quantum loss functions.
+Importantly, our algorithm is complementary to most
+techniques mentioned above.
+The use of specific opti-
+mizers or warm-starts can be thought of as changing the
+trajectory of the basic gradient descent to help it avoid
+local minima and improve solution quality. In contrast,
+our method alters the loss landscape itself to help smooth
+or eliminate the superfluous local minima. As such, it can
+be integrated with most other mitigation methods, such
+as the quantum natural gradient optimizer.
+II.
+THEORY
+A.
+VQA and QML
+A VQA is defined by a parameterized quantum circuit
+U(ϕ) (PQC) and a Hamiltonian operator H. For sim-
+plicity, we assume the initial state to be |0⟩, so that the
+loss function is
+L(ϕ) = ⟨0|U †(ϕ)HU(ϕ)|0⟩.
+(1)
+There is a variety of techniques that use PQCs to for-
+mulate QML models. We will consider the simplest case
+of a supervised ML problem, where the data features xi
+are encoded into input vectors |xi⟩and the model pre-
+dictions are given by expectation values
+byi = ⟨xi|U †(ϕ)HU(ϕ)|xi⟩.
+(2)
+The loss function is then computed from the ground la-
+bels yi and predictions byi by standard rules, e.g.
+L(ϕ) = 1
+D
+D
+X
+i=1
+l(byi, yi) ,
+(3)
+where D is the dataset size and l is a classical loss func-
+tion (e.g. cross-entropy).
+B.
+Fourier expansion
+We will assume that the PQC U(ϕ) consists only of
+constant Clifford gates Ck and parameterized Pauli rota-
+3
+tions UP (ϕk) = ei
+ϕkPk
+2
+= cos ϕk
+2 I + i sin ϕk
+2 Pk
+U(ϕ) = Cm+1
+m
+Y
+k=1
+UPk(ϕk)Ck .
+(4)
+Virtually all common parameterized quantum circuits
+studied in modern literature have this form.
+For clarity of exposition, we will first focus on the sim-
+plest VQA model (1). This loss function admits a natural
+Fourier-series expansion
+L(ϕk) =
+X
+m=0
+Lm(cos ϕk, sin ϕk) .
+(5)
+(Note that the arguments are cos ϕk and sin ϕk, not
+cos ϕk
+2 and sin ϕk
+2 ). Here Lm represent all Fourier modes
+of order m. They are homogenous polynomials of degree
+m, meaning that if all arguments of Fm are rescaled by
+some factor λ, the function is rescaled by λm
+Lm(λ cos ϕk, λ cos ϕk) = λmLm(cos ϕk, cos ϕk) .
+(6)
+Note that while the number of terms in (5) is in general
+exponentially large, the maximal degree is always bound
+by the total number of parameters in the circuit, and thus
+the Fourier series truncates to a Fourier polynomial.
+Our main conjecture is that the highly oscillatory
+higher-order Fourier terms are responsible for the major-
+ity of poor local minima, and suppressing them should
+effectively regularize the loss landscape and increase the
+quality of solutions. Given this intuition, one approach
+is to simply discard the high-frequency terms.
+While
+straightforward conceptually, this possibility seems non-
+trivial to implement either in simulations or in hardware.
+As the number of terms in the Fourier expansion is expo-
+nentially large, directly accessing and manipulating each
+term is not possible beyond small scales.
+C.
+Regularizing Fourier expansion by noise
+injection
+Remarkably, there is a protocol that allows to expo-
+nentially suppress high-frequency modes, while admit-
+ting efficient implementation both in simulation and in
+hardware.
+The Fourier expansion of the loss function can be com-
+puted recursively, using the following simple rule (see e.g.
+[17])
+UPk(ϕk) ◦Hα =
+
+Hα,
+(+)
+Hα + i sin ϕkPkHα,
+(−)
+(7)
+Here UPk(ϕk)◦Hα = e−
+iPkϕk
+2
+Hαe
+iPkϕk
+2
+is the Heisenberg
+action of UPk(ϕk) and we assume that the Hamiltonian
+is decomposed into a sum of Pauli strings H = P cαHα,
+so that each Hα either commutes (+) or anti-commutes
+(−) with Pk. The Fourier expansion of the loss function
+for the full Hamiltonian H is then simply a sum of the
+Fourier expansions for individual Pauli terms Hα.
+Now, to a Pauli operator P let us associate a noise
+channel EP (µ) with Kraus operators {
+p
+1 −µ
+2 I,
+p µ
+2 P},
+which acts in Heisenberg picture as
+CP (µ) ◦O =
+
+1 −µ
+2
+
+O + µ
+2 POP .
+(8)
+Assuming operator O either commutes or anti-commutes
+with P leads to
+EP ◦O =
+
+O,
+OP = +PO
+(1 −µ)O,
+OP = −PO .
+(9)
+Combining (9) and (7) yields
+EPk(µ) ◦UPk(ϕk) ◦Hα =
+
+Hα,
+(+)
+(1 −µ) (cos ϕkHα + i sin ϕkPkHα) ,
+(−) .
+(10)
+Thus, adding to each Pauli rotation UP (ϕ) the associated
+noise channel EP (µ) effectively rescales cos ϕk and sin ϕk
+by 1 −µ. The homogeneity (6) then implies
+L(µ, ϕ) =
+X
+m=0
+(1 −µ)mLm(ϕ) .
+(11)
+Here L(µ, ϕ) = ⟨0|U(µ, ϕ)†HU(µ, ϕ)|0⟩is the loss func-
+tion of the quantum circuit U(µ, ϕ) with the noise chan-
+nels, see Fig. (2a).
+Therefore, this simple noise-injection protocol results
+in a loss function with exponentially suppressed high-
+frequency terms, and the regularization factor 1 −µ is
+directly controlled by the noise strength.
+D.
+Implementation
+In principle, a single ancilla qubit is sufficient to imple-
+ment our noise injection protocol in hardware. Indeed,
+the Pauli noise channel EP (µ) is equivalent to applying
+Pauli gate P, controlled by an ancilla qubit initialized in
+the state |ψ⟩= RX(θ) with µ = 2 sin2 θ/2, see Fig. 2b.
+Immediately after, the ancilla qubit can be reset and
+reused to implement the subsequent noise channel. Us-
+ing additional ancilla qubits allows applying several noise
+channels in parallel. The depth overhead of our proto-
+col depends on how many ancilla qubits are available, as
+well as how efficient the controlled Pauli gates can be
+compiled given hardware restrictions.
+Note that so far our discussion assumed that the orig-
+inal quantum circuits are noiseless, and the decoherence
+only happens due to the controlled entanglement with the
+ancilla qubits. It may be possible to use the actual quan-
+tum noise present in real hardware to achieve a similar
+effect [29, 32].
+4
+(a) A generic quantum circuit modified by injecting the
+Pauli noise channels according to our protocol.
+(b) An possible implementation of the Pauli noise channel
+E(µ). Here µ = 2 sin2 θ/2.
+In software, a density-matrix simulation allows imple-
+menting the required noise channels directly. The down-
+side is that the direct density-matrix simulation effec-
+tively doubles the system size with the associated in-
+crease in computational costs. More efficient approaches,
+e.g. based on tensor networks [33, 34] or Pauli propaga-
+tion [17, 32, 35] may be preferable.
+E.
+Heat equation
+There is an interesting physical interpretation of the
+regularized loss function (11). Introduce a “time” param-
+eter t so that 1 −µ = e−t. Then, (11) satisfies the heat
+equation
+∂tL(t, ϕ) = ∆ϕL(t, ϕ) .
+(12)
+Moreover, L(0, ϕ) = L(ϕ) is the original loss function.
+Hence, if the initial loss function is visualized as a tem-
+perature distribution, our regularization is equivalent to
+letting this temperature distribution to evolve and equi-
+librate. The stronger the noise, the longer the effective
+evolution time. In the limit of t →∞(µ = 1) only the
+constant term in the Fourier series survives, leading to
+the flat landscape.
+This picture can provide intuitive guidance to when
+our regularization prescription could be useful. For in-
+stance, if the majority of local minima are shallow, and
+are washed away by thermalization before the interest-
+ing solutions are erased, we expect our prescription to be
+effective.
+III.
+NUMERICAL EXPERIMENTS
+A.
+Hyperparameters
+Since our method implies gradient-based optimization
+over a regularized landscape it requires the usual data
+such an optimizer, learning rate, number of iterations
+etc. There is an additional important ingredient, though,
+which we refer to as the regularization schedule. While
+at the beginning the landscape is strongly regularized,
+we need to lift the regularization at some point, since ul-
+timately we are interested in the minima of the original
+loss. Removing the regularization can be performed grad-
+ually, by making the noise strength µ a function of the
+iteration number µ(i), which interpolates between some
+maximum value µmax and µ = 0.
+A schedule µ(i) should not fall off to zero too fast,
+because the optimizer needs to spend enough time in
+the regularized regime. The schedule should also allow
+enough steps for the optimizer to navigate the original
+non-regularized loss landscape, to reach better conver-
+gence and solution quality.
+Finally, the transition be-
+tween the two regimes should not be too abrupt, to allow
+the optimizer to track the position of local minima as the
+landscape is deformed. Through numerical experiments,
+we found that most schedules satisfying these basic re-
+quirements perform similarly, see details in App. A.
+For all experiments reported below, we use the ADAM
+optimizer [36] with learning rate 0.5 × 10−2. The initial
+conditions for multi-start optimization are chosen uni-
+formly at random ϕ ∈(0, 2π)m. The noise schedule is
+that of an exponential decay
+µ(i) = µmaxe−a
+i
+imax
+,
+(13)
+with µmax = 0.9 and a = 10. The total number of iter-
+ations imax varies and will be specified for each model.
+Our code is available at [37].
+B.
+Toy example
+As a warm-up example, we consider a single-layer
+QAOA [38] with a 5-qubit Hamiltonian engineered specif-
+ically to feature many local minima in its landscape.
+Since there are only two parameters in the correspond-
+ing PQC, the loss landscape can be visualized directly,
+as shown in Fig. 3(a). In comparison, Fig. 3(b) plots the
+regularized landscape (µ = 1/3), which clearly has less
+pronounced local minima, while keeping the global mini-
+mum mostly intact. Loss landscapes are plotted with the
+help of ORQVIZ [39] package. We note that the connec-
+tion between the QAOA data and the Fourier expansion
+of the loss has been studied in [40].
+Fig. 4 depicts several optimization trajectories of reg-
+ularized vs. non-regularized optimization starting from
+the same initial conditions.
+The background heatmap
+corresponds to the original loss function. We see that the
+5
+FIG. 3: A single-layer QAOA loss landscape without (a)
+and with (b) regularization.
+FIG. 4: Several optimization trajectories traced by the
+same optimizer navigating the regularized and
+non-regularized landscapes in our single-layer QAOA
+example. Only the relevant patch of the landscape is
+shown.
+trajectories traced by the gradient descent in the regular-
+ized case are clearly different, and tend to lead to better
+solutions. The total number of iterations for each trajec-
+tory is imax = 2000.
+C.
+Statistical model: random Wishart fields
+As shown in [8, 9], a large class of quantum landscapes
+can be described by Wishart hypertoroidal random fields
+(WHRFs)
+LW HRF (ϕ) = wT (ϕ)Ww(ϕ) .
+(14)
+Here w(ϕ) = ⊗m
+k=0(cos θk
+2 , sin θk
+2 ) is a vector of dimen-
+sion 2m, and W is a matrix drawn from a Wishart en-
+semble, m is the number of parameters in the PQC (see
+App. B for details). A Wishart matrix W with d degrees
+of freedom can be sampled using a Gaussian matrix X
+with 2m rows and d columns
+W = 1
+dXX† .
+(15)
+The statistical model (14) allows us to study generic
+features of quantum landscapes, without specifying ex-
+act Hamiltonian, PQC structure, or even the number of
+qubits. For our purposes, the key parameter of WHRFs
+is the overparametrization ratio
+γ = m
+2d ,
+(16)
+which controls the distribution of local minima [8, 9].
+Namely, for γ ≥1 most local minima are close in value
+to the global minimum, while the opposite is true for
+γ ≪1. Hence, small γ is the regime of interest for us
+here.
+Since the model does not rely on an explicit quan-
+tum circuit, our noise-injection protocol does not ap-
+ply directly.
+Instead, it is possible to use a different
+trick achieving the same exponential regularization of the
+high-frequency modes in the WHRF, see App. B for de-
+tails.
+To compare optimization over regularized vs non-
+regularized landscapes, at each value of γ we collect
+extensive statistics by generating 100 different Wishart
+matrices (15), then running 2000 optimizations with
+imax = 4000 iterations, starting from random initial con-
+ditions for each landscape.
+Representative histograms of the final loss values are
+shown in Fig. 5. Clearly, optimizations using regulariza-
+tion tend to converge to better solutions on average, and
+reach the best solutions more often. Note that the true
+values of the global minima are not available for WHRFs,
+and by the best solution we mean the best found for a
+given landscape.
+To quantify the performance of the regularized opti-
+mization systematically, we compare the percentiles of
+the final loss distributions in Fig. 6.
+For instance, we
+compute the first percentile of the non-regularized dis-
+tribution and see what percent of regularized loss values
+are below this value. Our show that the probability of
+finding good solutions (say from the first, or fifth per-
+centile of the non-regularized distribution) is increased
+2x to 5x on average, though there is a significant varia-
+tion across different WHRF instances. Also, we note that
+this improvement is almost constant as we vary γ. Also,
+for sufficiently large γ the effect of regularization seems
+to diminish, probably because the optimization becomes
+easier for the non-regularized landscapes as well. (Fig. 9
+from App. B shows how the quality of non-regularized
+optimization changes as we cross the γ = 1 threshold).
+D.
+Quantum convolutional neural network
+The quantum convolutional neural network (QCNN)
+[41] is a popular QML model that was shown to be free
+of BPs [6].
+Although QCNN were recently shown to
+be classically simulable [7, 42], which undermines their
+practical utility, they are still an excellent test bed for
+our optimization technique as they were shown to feature
+numerous local minima already at small qubit counts.
+Another appealing feature of QCNN is that the solu-
+tion quality can be quantified by a single number – the
+6
+FIG. 5: An example pair of histograms showing the
+distribution of final loss values achieved by regularized
+and non-regularized optimizations. All loss values
+correpond to a particular WHRF with γ ≈0.03.
+FIG. 6: Quality of the regularized optimization as a
+function of the overparameterization ratio γ, as
+measured by the value of 1%, 5% and 50% percentiles.
+Background colors correspond the baseline quality
+obtained by non-regularized optimization. Red lines
+show percentiles of the regularized value
+accuracy of classification. The training data is generated
+by the teacher network, an instance of the QCNN with
+randomly chosen parameters ϕ∗
+yi = ⟨xi|U †(ϕ∗)HU(ϕ∗)|xi⟩,
+(17)
+where the input states |xi⟩are random computational
+FIG. 7: Optimization results for QCNN. The highest
+accuracy values obtained are indicated by stars. To
+avoid cluttering, the regularized markers are slightly
+shifted up. In the four-qubit case, the regularized box
+plot has nearly zero width.
+basis states. Then, a version of the same network, the
+student network U(ϕ), is trained to replicate the teacher
+network, starting from an unrelated random parame-
+ter configuration.
+The accuracy is evaluated on the
+test set, and hence the perfect accuracy can always be
+reached at ϕ∗= ϕ.
+Therefore, the train set accuracy
+directly reflects the difficulty of optimizing the corre-
+sponding loss function, which we take to be an MSE
+l(byi, yi) = 1
+D
+P
+i(byi −yi)2 following [9].
+We perform numerical experiments for up to n = 10
+qubits, each featuring a teacher circuit and 30 student
+circuits, each optimizer over imax = 2000 iterations. Re-
+sults are shown in Fig. 7. Overall, the trend closely mir-
+rors the metrics reported for WRHFs. Both average and
+best accuracies achieved by the regularized optimization
+are consistently higher (with the only exception being the
+best solution for n = 10 qubits, which is likely an artifact
+of insufficient statistics). We also note that the results for
+the non-regularized optimization are consistent with [9].
+Our implementation is an extension of [43] supporting
+noisy quantum channels.
+IV.
+DISCUSSION
+We presented a protocol that uses targeted noise in-
+jection to suppress high-frequency Fourier modes, which
+effectively smoothes and regularizes quantum landscapes.
+Numerical experiments show that the regularization con-
+sistently and significantly improves the quality of opti-
+mization solutions. Moreover, as our approach deforms
+the landscape itself, it is complementary to most other
+local minima mitigation strategies, and hence can be
+used jointly with them. However, a number of impor-
+tant caveats need to be addressed to ensure that this
+7
+technique can be useful in practice.
+Noise
+Our procedure assumes the ability to inject variable-
+strength noise, reducing its value to zero as the opti-
+mization proceeds.
+The actual noise levels on NISQ
+devices [44, 45] may set a threshold that is too high,
+while the noise mitigation techniques may be too costly
+[46, 47]. Nevertheless, Ref. [29] suggested that the cur-
+rently achievable noise levels may already be sufficient to
+enhance optimization.
+Moreover, there are several scenarios where the quan-
+tum loss functions are free of the inherent noise.
+For
+instance, small-scale circuits which are easily simulable
+can still have extremely rough loss landscapes, which is
+a hindrance e.g.
+to variational compiling [18, 20].
+In
+fact, many large-scale VQA and QML loss functions are
+amenable to efficient classical simulation as well. Some
+proposals imply that the loss function computation and
+optimization may be performed entirely classically, while
+the role of the quantum computer is restricted to the
+initial data collection or sampling from the final states
+[48]. Also, VQA and QML are not necessarily a NISQ
+concept, and may see fault-tolerant implementations in
+the future.
+In these cases, the loss landscapes can be
+assumed noiseless, and our technique should be directly
+applicable.
+It is worth mentioning that the regularization by noise
+injection may also lead to unwanted side effects. Namely,
+the noise is known to be one of the causes of barren
+plateaus [5]. For some circuits, the noise strength that
+provides sufficient regularization of local minima may
+simultaneously induce barren plateaus.
+This potential
+problem is absent in our small-sized numerical experi-
+ments, but should be kept in mind when scaling.
+Overhead
+Though our regularization robustly improves optimiza-
+tion results, it can not guarantee reaching the desired
+solution quality every time, and requires an additional
+resource overhead to implement.
+Therefore, the extra
+cost should be compared to e.g. the cost of optimizing
+the non-regularized loss function multiple times starting
+with different initial conditions. The results will depend
+on a particular problem, simulation technique or hard-
+ware specs, and we leave a careful analysis of potential
+trade-offs for future work. We also note that this question
+is relevant for any other mitigation technique, though
+rarely discussed explicitly.
+Note that in this paper we assumed a very specific
+noise channel for each of the parameterized gates, which
+leads to an exact exponential decay of the high-frequency
+modes. However, it is known [32] that quantum noise
+leads to suppression of the high-frequency modes quite
+generally. Therefore, different noise injection protocols
+could result in similar regularization, including those that
+might be much more efficient to simulate or implement
+in hardware.
+Scaling
+The principle question is whether our mitigation strat-
+egy can successfully scale to large problem sizes. Ideally,
+this should be probed through simulations or actual ex-
+periments with practical circuits, which is currently very
+challenging.
+Though the small-scale numerical experi-
+ments reported here showed that the probability of find-
+ing good solutions can be increased several-fold, it is by
+no means clear that this is sufficient to solve useful prob-
+lems. After all, the optimization at hand is NP-hard and
+its difficulty can increase exponentially with the problem
+size.
+We note that the framework of random Wishart fields
+[8, 9] may provide a very useful testing ground.
+The
+WHRFs are much simpler to simulate at scale, yet should
+capture the universal behavior of many quantum loss
+functions. Remarkably, they might even enable some an-
+alytic progress, e.g. by studying how the distribution of
+local minima in WHRFs changes subject to the deforma-
+tion through heat equation (Sec. II E).
+Even if it is not possible to overcome the exponential
+scaling asymptotically, our and other mitigation tech-
+niques might still enable solving useful problems more
+efficiently.
+However, to the best of our knowledge, no
+well-defined targets have been established in this space
+yet; meaning no problem was shown to become feasible
+to solve if only the probability of finding good solutions
+could be increased by, say, a hundredfold. Without clear
+metrics to target, we felt that fine-tuning such as tailoring
+the learning rate schedule to the regularization schedule
+is premature. Nevertheless, we expect that the protocol
+developed in this work will be a useful addition to the
+quantum loss landscape optimization suite.
+ACKNOWLEDGMENTS
+N.A.N. thanks the Russian Science Foundation Grant
+No. 23-71-01095 (theoretical results). Numerical experi-
+ments are supported by the Priority 2030 program at the
+National University of Science and Technology “MISIS”
+under the project K1-2022-027.
+Appendix A: Schedules
+We tested several different regularization schedules,
+some examples are presented in Fig. 8a. All schedules
+seem to perform rather similarly on the instanced we
+studied, as is illustrated in Fig. 8b for the QCNN case.
+8
+(a) Regularization schedules
+(b) Effect of regularization schedule on accuracy for n = 6
+QCNN model.
+Appendix B: Wishart random fields
+Loss functions of generic VQAs are expected to be well
+approximated by Wishart ensembles [9]
+L(ϕ) =
+X
+i,j
+WIJwI(ϕϕϕ)wJ(ϕϕϕ) .
+(B1)
+Here I, J
+are multi-indices I
+=
+(i1, . . . , ip), J
+=
+(j1, . . . , jp). Vectors wI(ϕ) are defined by
+wI(ϕϕϕ) =
+Y
+ik∈I
+wik(ϕk),
+wi(ϕ) =
+(
+cos ϕ
+2 , i = 0
+sin ϕ
+2 , i = 1
+(B2)
+Exponential suppression of the high-frequency modes
+in the Fourier expansion of (B1) can be achieved as fol-
+lows. Replace
+wI(ϕϕϕ)wJ(ϕϕϕ) →wIJ(λ,ϕϕϕ) =
+Y
+k
+wikjk(λ, ϕk) ,
+(B3)
+where
+wij(λ, ϕ) =
+
+
+
+
+
+1
+2(1 + λ cos ϕ),
+i = j = 0,
+1
+2λ sin ϕ,
+i + j = 1
+1
+2(1 −λ cos ϕ),
+i = j = 1
+.
+(B4)
+Note that at λ = 1 we get back the original matrix wIwJ
+wij(λ = 1, ϕ) =
+
+
+
+
+
+cos2 ϕ
+2 ,
+i = j = 0,
+sin ϕ
+2 cos ϕ
+2 ,
+i + j = 1
+sin2 ϕ
+2 ,
+i = j = 1
+,
+(B5)
+while at generic λ the modes of order m are multiplied
+by µm = (1 −λ)m.
+[1] M. Cerezo, Andrew Arrasmith, Ryan Babbush, Simon C.
+Benjamin, Suguru Endo, Keisuke Fujii, Jarrod R. Mc-
+Clean, Kosuke Mitarai, Xiao Yuan, Lukasz Cincio, and
+Patrick J. Coles.
+“Variational quantum algorithms”.
+Nature Reviews Physics 2021 3:9 3, 625–644 (2021).
+arXiv:2012.09265.
+[2] Jacob Biamonte, Peter Wittek, Nicola Pancotti, Patrick
+Rebentrost, Nathan Wiebe, and Seth Lloyd. “Quantum
+machine learning”. Nature 549, 195–202 (2017).
+[3] Maria Schuld, Ryan Sweke, and Johannes Jakob Meyer.
+“The effect of data encoding on the expressive power of
+variational quantum machine learning models”. Physical
+Review A103 (2020). arXiv:2008.08605v2.
+[4] Jarrod R. McClean, Jonathan Romero, Ryan Babbush,
+and Alán Aspuru-Guzik.
+“The theory of variational
+hybrid quantum-classical algorithms”.
+New Journal of
+Physics 18, 1–20 (2016). arXiv:1509.04279.
+[5] Martin Larocca, Supanut Thanasilp, Samson Wang, Ku-
+nal Sharma, Jacob Biamonte, Patrick J. Coles, Lukasz
+Cincio, Jarrod R. McClean, Zoë Holmes, and M. Cerezo.
+“A Review of Barren Plateaus in Variational Quantum
+Computing” (2024). arXiv:2405.00781.
+[6] Arthur Pesah, M. Cerezo, Samson Wang, Tyler Volkoff,
+Andrew T. Sornborger, and Patrick J. Coles. “Absence
+9
+FIG. 9: Fraction of loss values in the fifth percentile as a
+function of γ computed under discretization in 100 bins.
+Past γ = 1 local minima disappear from the landscape.
+of barren plateaus in quantum convolutional neural net-
+works”. Physical Review X11 (2021).
+[7] M. Cerezo, Martin Larocca, Diego García-Martín, N. L.
+Diaz, Paolo Braccia, Enrico Fontana, Manuel S. Rudolph,
+Pablo Bermejo, Aroosa Ijaz, Supanut Thanasilp, Eric R.
+Anschuetz, and Zoë Holmes. “Does provable absence of
+barren plateaus imply classical simulability? Or, why we
+need to rethink variational quantum computing” (2023).
+arXiv:2312.09121.
+[8] Eric R. Anschuetz. “Critical Points in Quantum Gener-
+ative Models” (2021). arXiv:2109.06957.
+[9] Eric R. Anschuetz and Bobak T. Kiani. “Beyond Bar-
+ren Plateaus:
+Quantum Variational Algorithms Are
+Swamped With Traps” (2022). arXiv:2205.05786.
+[10] Lennart Bittel and Martin Kliesch. “Training variational
+quantum algorithms is NP-hard – even for logarithmi-
+cally many qubits and free fermionic systems” (2021).
+arXiv:2101.07267.
+[11] Ian
+Goodfellow,
+Yoshua
+Bengio,
+and
+Aaron
+Courville.
+“Deep learning”.
+MIT Press.
+(2016).
+url: http://www.deeplearningbook.org.
+[12] Andrew Blake and Andrew Zisserman.
+“Visual recon-
+struction”. The MIT Press. (1987).
+[13] Hossein Mobahi and John W. Fisher. “On the Link be-
+tween Gaussian Homotopy Continuation and Convex En-
+velopes”. In Lecture Notes in Computer Science (includ-
+ing subseries Lecture Notes in Artificial Intelligence and
+Lecture Notes in Bioinformatics). Volume 8932, pages
+43–56. Springer, Cham (2015).
+[14] Elad Hazan, Kfir Y. Levy, and Shai Shalev-Shwartz.
+“On Graduated Optimization for Stochastic Non-Convex
+Problems”.
+33rd International Conference on Ma-
+chine
+Learning,
+ICML
+2016
+4,
+2726–2739
+(2015).
+arXiv:1503.03712.
+[15] Da Li, Jingjing Wu, and Qingrun Zhang.
+“Stochas-
+tic
+Gradient
+Descent
+in
+the
+Viewpoint
+of
+Gradu-
+ated Optimization”.
+33rd International Conference on
+Machine Learning, ICML 2016 4, 2726–2739 (2023).
+arXiv:2308.06775.
+[16] Naoki Sato and Hideaki Iiduka.
+“Explicit and Im-
+plicit Graduated Optimization in Deep Neural Net-
+works” (2024). arXiv:2412.11501.
+[17] Nikita A. Nemkov, Evgeniy O. Kiktenko, and Aleksey K.
+Fedorov. “Fourier expansion in variational quantum al-
+gorithms”. Phys. Rev. A 108, 032406 (2023).
+[18] Bobak Toussi Kiani, Seth Lloyd, and Reevu Maity.
+“Learning
+Unitaries
+by
+Gradient
+Descent”
+(2020).
+arXiv:2001.11897.
+[19] E. Campos, D. Rabinovich, V. Akshay, and J. Biamonte.
+“Training Saturation in Layerwise Quantum Approxi-
+mate Optimisation” (2021). arXiv:2106.13814.
+[20] Nikita
+A.
+Nemkov,
+Evgeniy
+O.
+Kiktenko,
+Ilia
+A.
+Luchnikov, and Aleksey K. Fedorov.
+“Efficient vari-
+ational synthesis of quantum circuits with coherent
+multi-start optimization”.
+Quantum 7, 993 (2023).
+arXiv:2205.01121.
+[21] Owen Lockwood. “An Empirical Review of Optimization
+Techniques for Quantum Variational Circuits” (2022).
+arXiv:2202.01389.
+[22] Xavier Bonet-Monroig, Hao Wang, Diederick Vermetten,
+Bruno Senjean, Charles Moussa, Thomas Bäck, Vedran
+Dunjko, and Thomas E. O’Brien.
+“Performance com-
+parison of optimization methods on variational quantum
+algorithms”.
+Physical Review A 107, 032407 (2023).
+arXiv:2111.13454v3.
+[23] James Stokes, Josh Izaac, Nathan Killoran, and Giuseppe
+Carleo. “Quantum Natural Gradient”. Quantum4 (2020).
+arXiv:1909.02108.
+[24] David Wierichs, Christian Gogolin, and Michael Kasto-
+ryano. “Avoiding local minima in variational quantum
+eigensolvers with the natural gradient optimizer”. Phys-
+ical Review Research2 (2020). arXiv:2004.14666.
+[25] Daniel Faílde, José Daniel Viqueira, Mariamo Mussa
+Juane, and Andrés Gómez.
+“Using Differential Evolu-
+tion to avoid local minima in Variational Quantum Al-
+gorithms”. Scientific Reports 2023 13:1 13, 1–10 (2023).
+arXiv:2303.12186.
+[26] Shikun
+Zhang,
+Zheng
+Qin,
+Yongyou
+Zhang,
+Yang
+Zhou,
+Rui
+Li,
+Chunxiao
+Du,
+and
+Zhisong
+Xiao.
+“Diffusion-Enhanced Optimization of Variational Quan-
+tum
+Eigensolver
+for
+General
+Hamiltonians”
+(2025).
+arXiv:2501.05666.
+[27] Javier Rivera-Dean, Patrick Huembeli, Antonio Acín,
+and
+Joseph
+Bowles.
+“Avoiding
+local
+minima
+in
+Variational
+Quantum
+Algorithms
+with
+Neural
+Net-
+works” (2021). arXiv:2104.02955.
+[28] Nam H. Nguyen, Elizabeth C. Behrman, and James E.
+Steck. “Quantum Learning with Noise and Decoherence:
+A Robust Quantum Neural Network”. Quantum Machine
+Intelligence 2, 1 (2016). arXiv:1612.07593.
+[29] Wilfrid
+Somogyi,
+Ekaterina
+Pankovets,
+Viach-
+eslav Kuzmin, and Alexey Melnikov.
+“Method for
+noise-induced regularization in quantum neural net-
+works” (2024). arXiv:2410.19921.
+[30] Valentin Heyraud, Zejian Li, Zakari Denis, Alexandre
+Le Boité, and Cristiano Ciuti.
+“Noisy quantum ker-
+nel machines”. Physical Review A 106, 052421 (2022).
+arXiv:2204.12192.
+[31] Junyu Liu, Frederik Wilde, Antonio Anna Mele, Liang
+Jiang,
+and Jens Eisert.
+“Stochastic noise can be
+helpful for variational quantum algorithms”
+(2022).
+arXiv:2210.06723.
+[32] Enrico Fontana,
+Manuel S Rudolph,
+Ross Duncan,
+Ivan Rungger, and Cristina Cîrstoiu.
+“Classical sim-
+10
+ulations of noisy variational quantum circuits” (2023).
+arXiv:2306.05400.
+[33] Yi-Ting Chen, Collin Farquhar, and Robert M. Par-
+rish. “Low-rank density-matrix evolution for noisy quan-
+tum circuits”. npj Quantum Information 7, 61 (2021).
+arXiv:2009.06657.
+[34] Anthony P. Thompson, Arie Soeteman, Chris Cade,
+and Ido Niesen.
+“Non-zero noise extrapolation: accu-
+rately simulating noisy quantum circuits with tensor net-
+works” (2025). arXiv:2501.13237.
+[35] Tomislav Begušić, Kasra Hejazi, and Garnet Kin-Lic
+Chan. “Simulating quantum circuit expectation values by
+Clifford perturbation theory” (2023). arXiv:2306.04797.
+[36] Diederik P. Kingma and Jimmy Lei Ba.
+“Adam:
+A method for stochastic optimization”.
+3rd Interna-
+tional Conference on Learning Representations, ICLR
+2015 - Conference Track ProceedingsPages 1–15 (2015).
+arXiv:1412.6980.
+[37] D. Bagaev (2024). url: github.com/quantumoon/noise-
+induced-optimization.
+[38] Edward Farhi, Jeffrey Goldstone, and Sam Gutmann. “A
+quantum approximate optimization algorithm” (2014).
+arXiv:1411.4028.
+[39] Manuel S. Rudolph, Sukin Sim, Asad Raza, Michal
+Stechly, Jarrod R. McClean, Eric R. Anschuetz, Luis Ser-
+rano, and Alejandro Perdomo-Ortiz. “Orqviz: Visualiz-
+ing high-dimensional landscapes in variational quantum
+algorithms” (2021). arXiv:2111.04695.
+[40] Michał St¸echły, Lanruo Gao, Boniface Yogendran, Enrico
+Fontana, and Manuel Rudolph. “Connecting the Hamil-
+tonian structure to the QAOA energy and Fourier land-
+scape structure” (2023). arXiv:2305.13594.
+[41] Iris Cong, Soonwon Choi, and Mikhail D. Lukin. “Quan-
+tum convolutional neural networks”. Nature Physics 15,
+1273–1278 (2019).
+[42] Pablo Bermejo, Paolo Braccia, Manuel S. Rudolph, Zoë
+Holmes, Lukasz Cincio, and M. Cerezo. “Quantum Con-
+volutional Neural Networks are (Effectively) Classically
+Simulable” (2024). arXiv:2408.12739.
+[43] B. Kiani (2024). url: github.com/bkiani/Beyond-Barren-
+Plateaus.
+[44] John Preskill. “Quantum computing in the NISQ era and
+beyond”. Quantum 2, 1–20 (2018). arXiv:1801.00862.
+[45] A. K. Fedorov, N. Gisin, S. M. Beloussov, and A. I.
+Lvovsky.
+“Quantum computing at the quantum ad-
+vantage threshold: a down-to-business review” (2022).
+arXiv:2203.17181.
+[46] Alexey Uvarov, Daniil Rabinovich, Olga Lakhmanskaya,
+Kirill Lakhmanskiy, Jacob Biamonte, and Soumik Ad-
+hikary.
+“Mitigating Quantum Gate Errors for Vari-
+ational
+Eigensolvers
+Using
+Hardware-Inspired
+Zero-
+Noise Extrapolation”.
+Physical Review A110 (2023).
+arXiv:2307.11156v3.
+[47] Wanqi
+Sun,
+Jungang
+Xu,
+and
+Chenghua
+Duan.
+“Noise-Mitigated Variational Quantum Eigensolver with
+Pre-training
+and
+Zero-Noise
+Extrapolation”
+(2025).
+arXiv:2501.01646.
+[48] Zoltán Zimborás, Bálint Koczor, Zoë Holmes, Elsi-Mari
+Borrelli, András Gilyén, Hsin-Yuan Huang, Zhenyu Cai,
+Antonio Acín, Leandro Aolita, Leonardo Banchi, Fer-
+nando G. S. L. Brandão, Daniel Cavalcanti, Toby Cu-
+bitt, Sergey N. Filippov, Guillermo García-Pérez, John
+Goold, Orsolya Kálmán, Elica Kyoseva, Matteo A. C.
+Rossi, Boris Sokolov, Ivano Tavernelli, and Sabrina Man-
+iscalco. “Myths around quantum computation before full
+fault tolerance: What no-go theorems rule out and what
+they don’t” (2025). arXiv:2501.05694.

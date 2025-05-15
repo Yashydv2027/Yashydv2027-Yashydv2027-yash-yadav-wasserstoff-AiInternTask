@@ -1,0 +1,11 @@
+
+streamlit
+langchain
+openai
+python-dotenv
+arxiv
+pymupdf
+pdf2image
+pytesseract
+Pillow
+faiss-cpu
