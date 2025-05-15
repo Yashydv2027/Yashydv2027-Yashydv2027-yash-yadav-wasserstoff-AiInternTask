@@ -8,3 +8,4 @@ pdf2image
 pytesseract
 Pillow
 faiss-cpu
+langchain_community
