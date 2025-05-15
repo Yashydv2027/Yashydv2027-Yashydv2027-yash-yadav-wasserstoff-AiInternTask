@@ -60,7 +60,7 @@ python app/services/vector_store.py
 ### 6. Run Streamlit UI
 
 ```bash
-streamlit run demo/streamlit_app.py
+streamlit run demo/apk.py
 ```
 
 ## 📬 Contact
